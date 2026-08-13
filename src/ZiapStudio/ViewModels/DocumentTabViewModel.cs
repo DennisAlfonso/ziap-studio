@@ -11,10 +11,12 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
     private DocumentTabViewModel(
         DocumentDescriptor descriptor,
         RpgMakerDatabaseDocumentViewModel? database,
+        RemoteLocalizationDocumentViewModel? remoteLocalization = null,
         DocumentEditSession? editSession = null)
     {
         Descriptor = descriptor;
         Database = database;
+        RemoteLocalization = remoteLocalization;
         EditSession = editSession;
         if (EditSession is not null)
         {
@@ -34,7 +36,11 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
 
     public bool IsProjectOverview => Descriptor.Kind == DocumentKind.ProjectOverview;
 
+    public bool IsRemoteLocalization => RemoteLocalization is not null;
+
     public RpgMakerDatabaseDocumentViewModel? Database { get; }
+
+    public RemoteLocalizationDocumentViewModel? RemoteLocalization { get; }
 
     public DocumentEditSession? EditSession { get; }
 
@@ -54,6 +60,19 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         },
         database: null);
 
+    public static DocumentTabViewModel CreateRemoteLocalization(
+        string projectId,
+        RemoteLocalizationDocumentViewModel remoteLocalization) => new(
+        new DocumentDescriptor
+        {
+            Id = new DocumentId($"{projectId}:remote-localization"),
+            DisplayName = "Remote Localization",
+            Kind = DocumentKind.Tool,
+            ResourceId = new Uri("ziap://project/remote-localization"),
+        },
+        database: null,
+        remoteLocalization: remoteLocalization);
+
     public static DocumentTabViewModel Create(
         RpgMakerDatabaseDocument document,
         IReadOnlyDictionary<AssetPreviewKey, AssetPreviewResult> assetPreviews,
@@ -61,7 +80,7 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         new(
             document.Descriptor,
             new RpgMakerDatabaseDocumentViewModel(document, assetPreviews, editSession),
-            editSession);
+            editSession: editSession);
 
     private void EditSession_PropertyChanged(object? sender, PropertyChangedEventArgs args)
     {

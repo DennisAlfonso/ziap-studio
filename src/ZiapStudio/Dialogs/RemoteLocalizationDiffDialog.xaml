@@ -15,6 +15,7 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -23,19 +24,48 @@
             FontWeight="SemiBold"
             Text="{x:Bind SummaryText, Mode=OneTime}"
             TextWrapping="Wrap" />
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
+            <ToggleButton
+                x:Name="AllDifferencesFilter"
+                Click="DifferenceFilter_Click"
+                Content="{x:Bind AllDifferencesLabel, Mode=OneTime}"
+                IsChecked="True"
+                Tag="All" />
+            <ToggleButton
+                x:Name="ModifiedDifferencesFilter"
+                Click="DifferenceFilter_Click"
+                Content="{x:Bind ModifiedDifferencesLabel, Mode=OneTime}"
+                Tag="Modified" />
+            <ToggleButton
+                x:Name="OnlyLocalDifferencesFilter"
+                Click="DifferenceFilter_Click"
+                Content="{x:Bind OnlyLocalDifferencesLabel, Mode=OneTime}"
+                Tag="OnlyLocal" />
+            <ToggleButton
+                x:Name="OnlyPublishedDifferencesFilter"
+                Click="DifferenceFilter_Click"
+                Content="{x:Bind OnlyPublishedDifferencesLabel, Mode=OneTime}"
+                Tag="OnlyPublished" />
+            <TextBlock
+                x:Name="VisibleDifferencesCountText"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{x:Bind VisibleDifferencesText, Mode=OneTime}" />
+        </StackPanel>
         <TextBlock
-            Grid.Row="1"
+            Grid.Row="2"
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
             Text="{x:Bind DestinationText, Mode=OneTime}"
             TextWrapping="Wrap" />
         <InfoBar
-            Grid.Row="2"
+            Grid.Row="3"
             IsClosable="False"
             IsOpen="True"
             Message="{x:Bind SafetyText, Mode=OneTime}"
             Severity="Informational" />
 
-        <Grid Grid.Row="3" Margin="0,4,0,0">
+        <Grid Grid.Row="4" Margin="0,4,0,0">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
@@ -53,6 +83,7 @@
                 <TextBlock Grid.Column="3" FontWeight="SemiBold" Text="Stato" />
             </Grid>
             <ListView
+                x:Name="DifferenceList"
                 Grid.Row="1"
                 MinHeight="320"
                 MaxHeight="560"

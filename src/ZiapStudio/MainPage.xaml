@@ -7,6 +7,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:viewModels="using:ZiapStudio.ViewModels"
+    KeyboardAcceleratorPlacementMode="Hidden"
     Loaded="Page_Loaded"
     mc:Ignorable="d">
 
@@ -217,7 +218,7 @@
                         Margin="4,0,0,0"
                         FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="ZIAP Studio 0.1.5" />
+                        Text="ZIAP Studio 0.1.6" />
                 </StackPanel>
             </Grid>
 
@@ -226,6 +227,7 @@
                 Padding="8,12,8,14"
                 Visibility="Collapsed">
                 <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -238,7 +240,7 @@
                     Height="44"
                     AutomationProperties.Name="Espandi pannello Progetti"
                     Click="ToggleProjectsPane_Click"
-                    ToolTipService.ToolTip="Progetti">
+                    ToolTipService.ToolTip="Espandi Progetti e recenti">
                     <FontIcon FontSize="17" Glyph="&#xE700;" />
                 </Button>
                 <Button
@@ -256,13 +258,52 @@
                     Grid.Row="2"
                     Width="44"
                     Height="44"
+                    Padding="0"
                     AutomationProperties.Name="Project Overview"
                     Click="ProjectOverview_Click"
                     ToolTipService.ToolTip="Project Overview">
-                    <FontIcon FontSize="17" Glyph="&#xE80F;" />
+                    <Grid Width="44" Height="44">
+                        <Border
+                            x:Name="OverviewRailSelection"
+                            Width="3"
+                            Height="24"
+                            HorizontalAlignment="Left"
+                            Background="{ThemeResource AccentFillColorDefaultBrush}"
+                            CornerRadius="2"
+                            x:Load="{x:Bind ViewModel.IsProjectOverviewSelected, Mode=OneWay}" />
+                        <FontIcon
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="17"
+                            Glyph="&#xE80F;" />
+                    </Grid>
                 </Button>
                 <Button
-                    Grid.Row="4"
+                    Grid.Row="3"
+                    Width="44"
+                    Height="44"
+                    Padding="0"
+                    AutomationProperties.Name="Remote Localization"
+                    Click="OpenRemoteLocalizationDocument_Click"
+                    ToolTipService.ToolTip="Remote Localization">
+                    <Grid Width="44" Height="44">
+                        <Border
+                            x:Name="RemoteLocalizationRailSelection"
+                            Width="3"
+                            Height="24"
+                            HorizontalAlignment="Left"
+                            Background="{ThemeResource AccentFillColorDefaultBrush}"
+                            CornerRadius="2"
+                            x:Load="{x:Bind ViewModel.IsRemoteLocalizationDocumentSelected, Mode=OneWay}" />
+                        <FontIcon
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="17"
+                            Glyph="&#xE774;" />
+                    </Grid>
+                </Button>
+                <Button
+                    Grid.Row="5"
                     Width="44"
                     Height="44"
                     AutomationProperties.Name="Account myZenkai"
@@ -319,12 +360,12 @@
                     </Button.Flyout>
                 </Button>
                 <TextBlock
-                    Grid.Row="5"
+                    Grid.Row="6"
                     Margin="0,8,0,0"
                     HorizontalAlignment="Center"
                     FontSize="10"
                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                    Text="0.1.5" />
+                    Text="0.1.6" />
             </Grid>
             </Grid>
         </Border>
@@ -498,42 +539,109 @@
                         DefaultLabelPosition="Right"
                         IsDynamicOverflowEnabled="False">
                         <AppBarButton
+                            x:Name="OverviewRefreshCommand"
+                            AutomationProperties.Name="Verifica localizzazione remota"
+                            Click="RefreshRemoteLocalization_Click"
+                            IsEnabled="{x:Bind ViewModel.CanRefreshRemoteLocalization, Mode=OneWay}"
+                            Label="Verifica remoto"
+                            ToolTipService.ToolTip="Verifica le versioni pubblicate"
+                            x:Load="{x:Bind ViewModel.IsProjectOverviewSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE72C;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="OverviewOpenRemoteCommand"
+                            AutomationProperties.Name="Apri Remote Localization"
+                            Click="OpenRemoteLocalizationDocument_Click"
+                            Label="Remote Localization"
+                            ToolTipService.ToolTip="Apri il documento Remote Localization"
+                            x:Load="{x:Bind ViewModel.IsProjectOverviewSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE774;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="OverviewOpenFolderCommand"
+                            AutomationProperties.Name="Apri cartella progetto"
+                            Click="OpenFolder_Click"
+                            Label="Apri cartella"
+                            ToolTipService.ToolTip="Apri la cartella del progetto"
+                            x:Load="{x:Bind ViewModel.IsProjectOverviewSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE838;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="RemoteRefreshCommand"
+                            AutomationProperties.Name="Verifica localizzazione remota"
+                            Click="RefreshRemoteLocalization_Click"
+                            IsEnabled="{x:Bind ViewModel.CanRefreshRemoteLocalization, Mode=OneWay}"
+                            Label="Verifica ora"
+                            ToolTipService.ToolTip="Aggiorna lo stato Remote Localization"
+                            x:Load="{x:Bind ViewModel.IsRemoteLocalizationDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE72C;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="RemoteOpenConsoleCommand"
+                            AutomationProperties.Name="Apri Localization in Console"
+                            Click="OpenRemoteLocalizationAreaInConsole_Click"
+                            Label="Apri in Console"
+                            ToolTipService.ToolTip="Apri l'area Localization di ZIAP Console"
+                            x:Load="{x:Bind ViewModel.IsRemoteLocalizationDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE8A7;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="EditingUndoCommand"
                             AutomationProperties.Name="Annulla modifica"
                             Click="Undo_Click"
                             IsEnabled="{x:Bind ViewModel.CanUndo, Mode=OneWay}"
                             Label="Annulla"
-                            ToolTipService.ToolTip="Annulla (Ctrl+Z)">
+                            ToolTipService.ToolTip="Annulla (Ctrl+Z)"
+                            x:Load="{x:Bind ViewModel.IsEditingDocumentSelected, Mode=OneWay}">
                             <AppBarButton.Icon>
                                 <FontIcon FontSize="14" Glyph="&#xE7A7;" />
                             </AppBarButton.Icon>
                         </AppBarButton>
                         <AppBarButton
+                            x:Name="EditingRedoCommand"
                             AutomationProperties.Name="Ripristina modifica"
                             Click="Redo_Click"
                             IsEnabled="{x:Bind ViewModel.CanRedo, Mode=OneWay}"
                             Label="Ripristina"
-                            ToolTipService.ToolTip="Ripristina (Ctrl+Y)">
+                            ToolTipService.ToolTip="Ripristina (Ctrl+Y)"
+                            x:Load="{x:Bind ViewModel.IsEditingDocumentSelected, Mode=OneWay}">
                             <AppBarButton.Icon>
                                 <FontIcon FontSize="14" Glyph="&#xE7A6;" />
                             </AppBarButton.Icon>
                         </AppBarButton>
-                        <AppBarSeparator />
+                        <AppBarSeparator
+                            x:Name="EditingCommandSeparator"
+                            x:Load="{x:Bind ViewModel.IsEditingDocumentSelected, Mode=OneWay}" />
                         <AppBarButton
+                            x:Name="EditingSaveCommand"
                             AutomationProperties.Name="Salva documento"
                             Click="SaveDocument_Click"
                             IsEnabled="{x:Bind ViewModel.CanSaveDocument, Mode=OneWay}"
                             Label="Salva"
-                            ToolTipService.ToolTip="Salva (Ctrl+S)">
+                            ToolTipService.ToolTip="Salva (Ctrl+S)"
+                            x:Load="{x:Bind ViewModel.IsEditingDocumentSelected, Mode=OneWay}">
                             <AppBarButton.Icon>
                                 <FontIcon FontSize="14" Glyph="&#xE74E;" />
                             </AppBarButton.Icon>
                         </AppBarButton>
                         <AppBarButton
+                            x:Name="EditingSaveAllCommand"
                             AutomationProperties.Name="Salva tutti i documenti"
                             Click="SaveAll_Click"
                             IsEnabled="{x:Bind ViewModel.CanSaveAll, Mode=OneWay}"
                             Label="Salva tutto"
-                            ToolTipService.ToolTip="Salva tutto (Ctrl+Shift+S)">
+                            ToolTipService.ToolTip="Salva tutto (Ctrl+Shift+S)"
+                            x:Load="{x:Bind ViewModel.IsEditingDocumentSelected, Mode=OneWay}">
                             <AppBarButton.Icon>
                                 <FontIcon FontSize="14" Glyph="&#xEA35;" />
                             </AppBarButton.Icon>
@@ -558,7 +666,6 @@
                             <Grid Grid.Row="0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="6">
@@ -587,17 +694,6 @@
                                         Text="{x:Bind ViewModel.ProjectStateLabel, Mode=OneWay}" />
                                 </Border>
 
-                                <Button
-                                    Grid.Column="2"
-                                    Margin="24,2,0,0"
-                                    VerticalAlignment="Top"
-                                    Click="OpenFolder_Click"
-                                    IsEnabled="{x:Bind ViewModel.CanInteract, Mode=OneWay}">
-                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <FontIcon FontSize="16" Glyph="&#xE838;" />
-                                        <TextBlock Text="Apri cartella" />
-                                    </StackPanel>
-                                </Button>
                             </Grid>
 
                             <Border
@@ -658,115 +754,106 @@
                                     BorderThickness="1"
                                     CornerRadius="12"
                                     x:Load="{x:Bind ViewModel.HasRemoteLocalizationCard, Mode=OneWay}">
-                                <StackPanel Spacing="16">
-                                    <Grid ColumnSpacing="16">
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="*" />
-                                            <ColumnDefinition Width="Auto" />
-                                        </Grid.ColumnDefinitions>
-                                        <StackPanel Spacing="4">
+                                    <StackPanel Spacing="18">
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="4">
+                                                <TextBlock
+                                                    FontSize="16"
+                                                    FontWeight="SemiBold"
+                                                    Text="Localizzazione remota" />
+                                                <TextBlock
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{x:Bind ViewModel.RemoteLocalizationDocument.LastCheckedText, Mode=OneWay}" />
+                                            </StackPanel>
+                                            <ProgressRing
+                                                x:Name="RemoteLocalizationProgress"
+                                                Grid.Column="1"
+                                                Width="20"
+                                                Height="20"
+                                                VerticalAlignment="Center"
+                                                IsActive="True"
+                                                x:Load="{x:Bind ViewModel.IsRemoteLocalizationChecking, Mode=OneWay}" />
+                                        </Grid>
+
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Style="{StaticResource RemoteSummaryTileStyle}">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{x:Bind ViewModel.RemoteLocalizationDocument.AlignedCount, Mode=OneWay}" />
+                                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Allineati" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="1" Style="{StaticResource RemoteSummaryTileStyle}">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{x:Bind ViewModel.RemoteLocalizationDocument.DifferentCount, Mode=OneWay}" />
+                                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Differenti" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="2" Style="{StaticResource RemoteSummaryTileStyle}">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{x:Bind ViewModel.RemoteLocalizationDocument.OnlyLocalCount, Mode=OneWay}" />
+                                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Solo locali" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="3" Style="{StaticResource RemoteSummaryTileStyle}">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{x:Bind ViewModel.RemoteLocalizationDocument.OnlyPublishedCount, Mode=OneWay}" />
+                                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Solo remoti" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+
+                                        <StackPanel
+                                            x:Name="RemoteRecentProblemsPanel"
+                                            Spacing="8"
+                                            x:Load="{x:Bind ViewModel.HasRemoteLocalizationRecentProblems, Mode=OneWay}">
                                             <TextBlock
-                                                FontSize="16"
+                                                FontSize="12"
                                                 FontWeight="SemiBold"
-                                                Text="Localizzazione remota" />
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="PROBLEMI RECENTI" />
+                                            <ItemsControl ItemsSource="{x:Bind ViewModel.RemoteLocalizationRecentProblems, Mode=OneWay}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:RemoteLocalizationFileViewModel">
+                                                        <Grid Padding="0,6" ColumnSpacing="12">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock FontWeight="SemiBold" Text="{x:Bind DisplayName}" TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock Grid.Column="1" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{x:Bind StatusText}" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
                                             <TextBlock
+                                                VerticalAlignment="Center"
                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                 Text="{x:Bind ViewModel.RemoteLocalizationMessage, Mode=OneWay}"
                                                 TextWrapping="Wrap" />
-                                        </StackPanel>
-                                        <StackPanel
-                                            Grid.Column="1"
-                                            VerticalAlignment="Center"
-                                            Orientation="Horizontal"
-                                            Spacing="10">
-                                            <ProgressRing
-                                                x:Name="RemoteLocalizationProgress"
-                                                Width="20"
-                                                Height="20"
-                                                IsActive="True"
-                                                x:Load="{x:Bind ViewModel.IsRemoteLocalizationChecking, Mode=OneWay}" />
                                             <Button
-                                                Click="RefreshRemoteLocalization_Click"
-                                                Content="Verifica ora"
-                                                IsEnabled="{x:Bind ViewModel.CanRefreshRemoteLocalization, Mode=OneWay}" />
-                                        </StackPanel>
-                                    </Grid>
-
-                                    <ScrollViewer
-                                        x:Name="RemoteLocalizationFilesScroll"
-                                        MaxHeight="520"
-                                        HorizontalScrollBarVisibility="Disabled"
-                                        VerticalScrollBarVisibility="Auto"
-                                        x:Load="{x:Bind ViewModel.HasRemoteLocalizationFiles, Mode=OneWay}">
-                                    <ItemsControl
-                                        x:Name="RemoteLocalizationItems"
-                                        ItemsSource="{x:Bind ViewModel.RemoteLocalizationFiles, Mode=OneWay}">
-                                        <ItemsControl.ItemTemplate>
-                                            <DataTemplate x:DataType="viewModels:RemoteLocalizationFileViewModel">
-                                                <Border
-                                                    Margin="0,0,0,8"
-                                                    Padding="14,12"
-                                                    Background="{ThemeResource LayerFillColorAltBrush}"
-                                                    CornerRadius="8">
-                                                    <Grid ColumnSpacing="12">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="28" />
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <TextBlock
-                                                            HorizontalAlignment="Center"
-                                                            VerticalAlignment="Top"
-                                                            FontSize="17"
-                                                            FontWeight="SemiBold"
-                                                            Text="{x:Bind StatusGlyph}" />
-                                                        <StackPanel Grid.Column="1" Spacing="2">
-                                                            <TextBlock
-                                                                FontWeight="SemiBold"
-                                                                Text="{x:Bind DisplayName}"
-                                                                TextTrimming="CharacterEllipsis" />
-                                                            <TextBlock
-                                                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
-                                                                Text="{x:Bind StatusText}" />
-                                                            <TextBlock
-                                                                FontSize="12"
-                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                Text="{x:Bind ChecksumText}"
-                                                                TextWrapping="Wrap" />
-                                                            <TextBlock
-                                                                FontSize="11"
-                                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                                Text="{x:Bind VersionText}"
-                                                                TextTrimming="CharacterEllipsis" />
-                                                        </StackPanel>
-                                                        <StackPanel
-                                                            Grid.Column="2"
-                                                            VerticalAlignment="Center"
-                                                            Orientation="Horizontal"
-                                                            Spacing="8">
-                                                            <Button
-                                                                x:Name="ComparePublishedButton"
-                                                                Click="CompareRemoteLocalization_Click"
-                                                                Content="Confronta"
-                                                                x:Load="{x:Bind CanCompare}" />
-                                                            <Button
-                                                                x:Name="SynchronizePublishedButton"
-                                                                Click="SynchronizeRemoteLocalization_Click"
-                                                                Content="{x:Bind SynchronizeLabel}"
-                                                                Style="{StaticResource AccentButtonStyle}"
-                                                                x:Load="{x:Bind CanSynchronize}" />
-                                                            <Button
-                                                                Click="OpenRemoteLocalizationInConsole_Click"
-                                                                Content="Apri in Console ↗"
-                                                                ToolTipService.ToolTip="{x:Bind ConsoleNavigationToolTip}" />
-                                                        </StackPanel>
-                                                    </Grid>
-                                                </Border>
-                                            </DataTemplate>
-                                        </ItemsControl.ItemTemplate>
-                                    </ItemsControl>
-                                    </ScrollViewer>
-                                </StackPanel>
+                                                Grid.Column="1"
+                                                Click="OpenRemoteLocalizationDocument_Click"
+                                                Content="Mostra tutti"
+                                                Style="{StaticResource AccentButtonStyle}" />
+                                        </Grid>
+                                    </StackPanel>
                                 </Border>
 
                                 <StackPanel
@@ -816,6 +903,174 @@
                             </Grid>
                         </Grid>
                     </ScrollViewer>
+
+                    <Grid
+                        x:Name="RemoteLocalizationDocument"
+                        Grid.Row="2"
+                        Padding="32,26"
+                        DataContext="{x:Bind ViewModel.RemoteLocalizationDocument, Mode=OneWay}"
+                        x:Load="{x:Bind ViewModel.IsRemoteLocalizationDocumentSelected, Mode=OneWay}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid ColumnSpacing="18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
+                                <TextBlock FontSize="30" FontWeight="SemiBold" Text="Remote Localization" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="Confronta il workspace locale con lo stato pubblicato da ZIAP Console." />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock
+                                    HorizontalAlignment="Right"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}">
+                                    <Run Text="{Binding ProblemCount}" />
+                                    <Run Text=" problemi" />
+                                </TextBlock>
+                                <TextBlock
+                                    HorizontalAlignment="Right"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{Binding LastCheckedText}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Grid.Row="1" Margin="0,22,0,18" ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock><Run Text="✓ " /><Run Text="{Binding AlignedCount}" /><Run Text=" Allineati" /></TextBlock>
+                            <TextBlock Grid.Column="1"><Run Text="≠ " /><Run Text="{Binding DifferentCount}" /><Run Text=" Differenti" /></TextBlock>
+                            <TextBlock Grid.Column="2"><Run Text="↑ " /><Run Text="{Binding OnlyLocalCount}" /><Run Text=" Solo locali" /></TextBlock>
+                            <TextBlock Grid.Column="3"><Run Text="↓ " /><Run Text="{Binding OnlyPublishedCount}" /><Run Text=" Solo remoti" /></TextBlock>
+                        </Grid>
+
+                        <Grid Grid.Row="2" Margin="0,0,0,16" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="360" />
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox
+                                PlaceholderText="Cerca lingua, file o stato…"
+                                Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <ComboBox
+                                Grid.Column="1"
+                                HorizontalAlignment="Stretch"
+                                SelectedIndex="{Binding FilterIndex, Mode=TwoWay}">
+                                <x:String>Tutti</x:String>
+                                <x:String>Problemi</x:String>
+                                <x:String>Allineati</x:String>
+                                <x:String>Differenti</x:String>
+                                <x:String>Solo locali</x:String>
+                                <x:String>Solo remoti</x:String>
+                            </ComboBox>
+                            <TextBlock
+                                Grid.Column="3"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{Binding VisibleCountText}" />
+                        </Grid>
+
+                        <Border
+                            Grid.Row="3"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10">
+                            <Grid>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="42" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid
+                                    Padding="14,0"
+                                    Background="{ThemeResource LayerFillColorAltBrush}"
+                                    ColumnSpacing="14">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="60" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="110" />
+                                        <ColumnDefinition Width="120" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="Lingua" />
+                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" FontWeight="SemiBold" Text="File" />
+                                    <TextBlock Grid.Column="2" VerticalAlignment="Center" FontWeight="SemiBold" Text="Locale" />
+                                    <TextBlock Grid.Column="3" VerticalAlignment="Center" FontWeight="SemiBold" Text="Pubblicato" />
+                                    <TextBlock Grid.Column="4" VerticalAlignment="Center" FontWeight="SemiBold" Text="Stato" />
+                                    <TextBlock Grid.Column="5" VerticalAlignment="Center" FontWeight="SemiBold" Text="Azioni" />
+                                </Grid>
+                                <ListView
+                                    Grid.Row="1"
+                                    HorizontalContentAlignment="Stretch"
+                                    ItemsSource="{Binding VisibleFiles}"
+                                    SelectionMode="None">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="viewModels:RemoteLocalizationFileViewModel">
+                                            <Grid Padding="14,10" ColumnSpacing="14">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="60" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="110" />
+                                                    <ColumnDefinition Width="110" />
+                                                    <ColumnDefinition Width="120" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock VerticalAlignment="Center" FontWeight="SemiBold" Text="{x:Bind Locale}" />
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    VerticalAlignment="Center"
+                                                    Text="{x:Bind File}"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    ToolTipService.ToolTip="{x:Bind VersionText}" />
+                                                <TextBlock Grid.Column="2" VerticalAlignment="Center" FontFamily="Consolas" FontSize="12" Text="{x:Bind LocalChecksumText}" />
+                                                <TextBlock Grid.Column="3" VerticalAlignment="Center" FontFamily="Consolas" FontSize="12" Text="{x:Bind PublishedChecksumText}" />
+                                                <TextBlock
+                                                    Grid.Column="4"
+                                                    VerticalAlignment="Center"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                    Text="{x:Bind StatusText}" />
+                                                <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="6">
+                                                    <Button
+                                                        x:Name="RemoteDocumentCompareButton"
+                                                        Click="CompareRemoteLocalization_Click"
+                                                        Content="Confronta"
+                                                        x:Load="{x:Bind CanCompare}" />
+                                                    <Button
+                                                        x:Name="RemoteDocumentSynchronizeButton"
+                                                        Click="SynchronizeRemoteLocalization_Click"
+                                                        Content="{x:Bind DocumentSynchronizeLabel}"
+                                                        Style="{StaticResource AccentButtonStyle}"
+                                                        x:Load="{x:Bind CanSynchronize}" />
+                                                    <Button
+                                                        AutomationProperties.Name="Apri in Console"
+                                                        Click="OpenRemoteLocalizationInConsole_Click"
+                                                        ToolTipService.ToolTip="{x:Bind ConsoleNavigationToolTip}">
+                                                        <FontIcon FontSize="13" Glyph="&#xE8A7;" />
+                                                    </Button>
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </Grid>
+                        </Border>
+                    </Grid>
 
                     <Grid
                         x:Name="DatabaseDocument"
@@ -972,7 +1227,10 @@
                                                 <DataTemplate x:DataType="viewModels:RpgMakerDatabaseInspectorSectionViewModel">
                                                     <Expander
                                                         Margin="0,0,0,8"
+                                                        Padding="0"
                                                         HorizontalAlignment="Stretch"
+                                                        Background="Transparent"
+                                                        BorderThickness="0"
                                                         Header="{x:Bind DisplayName}"
                                                         IsExpanded="True">
                                                         <ItemsControl ItemsSource="{x:Bind Fields}">

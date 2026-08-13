@@ -274,6 +274,12 @@ public sealed partial class MainPage : Page
     private void ProjectOverview_Click(object sender, RoutedEventArgs e) =>
         ViewModel.ShowProjectOverview();
 
+    private void OpenRemoteLocalizationDocument_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.OpenRemoteLocalizationDocument();
+
+    private void OpenRemoteLocalizationAreaInConsole_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.OpenRemoteLocalizationAreaInConsole();
+
     private async void DocumentTabs_TabCloseRequested(
         TabView sender,
         TabViewTabCloseRequestedEventArgs args)

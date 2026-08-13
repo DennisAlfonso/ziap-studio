@@ -181,7 +181,7 @@ public sealed class HttpRemoteLocalizationClient : IRemoteLocalizationClient
     {
         var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
         request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
-        request.Headers.UserAgent.ParseAdd("ZIAP-Studio/0.1.5");
+        request.Headers.UserAgent.ParseAdd("ZIAP-Studio/0.1.6");
         string? idToken;
         try
         {

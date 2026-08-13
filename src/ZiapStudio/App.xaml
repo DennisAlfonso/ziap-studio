@@ -20,6 +20,12 @@
                 <Setter Property="VerticalAlignment" Value="Center" />
                 <Setter Property="TextWrapping" Value="Wrap" />
             </Style>
+
+            <Style x:Key="RemoteSummaryTileStyle" TargetType="Border">
+                <Setter Property="Padding" Value="12,10" />
+                <Setter Property="Background" Value="{ThemeResource LayerFillColorAltBrush}" />
+                <Setter Property="CornerRadius" Value="8" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

@@ -9,7 +9,7 @@
   <Identity
     Name="Zenkaiverse.ZiapStudio.Dev"
     Publisher="CN=Zenkaiverse"
-    Version="0.1.5.0" />
+    Version="0.1.6.0" />
 
   <mp:PhoneIdentity
     PhoneProductId="5D131BA6-E585-42F6-9C3E-B3312922AB1B"

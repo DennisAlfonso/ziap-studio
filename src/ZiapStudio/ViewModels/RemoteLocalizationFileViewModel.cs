@@ -31,12 +31,16 @@ public sealed class RemoteLocalizationFileViewModel
     public string StatusText => Status.Alignment switch
     {
         RemoteLocalizationAlignment.Aligned => "Allineato",
-        RemoteLocalizationAlignment.Different => "Differente dal pubblicato",
-        RemoteLocalizationAlignment.MissingLocal => "Mancante localmente",
-        RemoteLocalizationAlignment.MissingRemote => "Mancante nel remoto",
+        RemoteLocalizationAlignment.Different => "Differente",
+        RemoteLocalizationAlignment.MissingLocal => "Solo remoto",
+        RemoteLocalizationAlignment.MissingRemote => "Solo locale",
         RemoteLocalizationAlignment.Error => "Errore di lettura",
         _ => "Stato non determinabile",
     };
+
+    public string LocalChecksumText => ShortChecksum(Status.LocalChecksum);
+
+    public string PublishedChecksumText => ShortChecksum(Status.Remote?.Checksum);
 
     public string ChecksumText => Status.Alignment switch
     {
@@ -78,6 +82,11 @@ public sealed class RemoteLocalizationFileViewModel
     public string SynchronizeLabel => Status.Alignment == RemoteLocalizationAlignment.MissingLocal
         ? "Scarica"
         : "Aggiorna dal pubblicato";
+
+    public string DocumentSynchronizeLabel =>
+        Status.Alignment == RemoteLocalizationAlignment.MissingLocal
+            ? "Scarica"
+            : "Aggiorna";
 
     private static string ShortChecksum(string? checksum)
     {

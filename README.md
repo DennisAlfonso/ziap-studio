@@ -1,10 +1,10 @@
 # ZIAP Studio
 
 ZIAP Studio è un editor desktop Windows per i progetti Zenkaiverse. La milestone
-`0.1.5` porta la shell al livello del workspace: rail Progetti collassabile, pannelli
-ridimensionabili, Overview responsive, comandi documento separati dalle tab e surface
-di confronto Localization realmente ampia. Published Localization Sync continua a
-confrontare e aggiornare i file in modo esplicito e atomico.
+`0.1.6` rifinisce il workspace con un documento strumento Remote Localization,
+una Overview sintetica, CommandBar contestuale e navigazione rail con selezione
+esplicita. Published Localization Sync continua a confrontare e aggiornare i file
+in modo esplicito e atomico.
 
 ## Funzionalità attuali
 
@@ -27,6 +27,12 @@ confrontare e aggiornare i file in modo esplicito e atomico.
 - sezioni Inspector espandibili per ridurre lo scroll durante l'editing;
 - dialog Localization larga e form di inizializzazione più leggibile;
 - ripristino di posizione, dimensione, stato finestra e larghezze dei pannelli;
+- documento `Remote Localization` con ricerca, filtro, tabella completa e azioni per file;
+- riepilogo Localization compatto nella Overview con contatori e problemi recenti;
+- CommandBar contestuale per Overview, Localization e database;
+- indicatore accent nel rail per Overview e Remote Localization;
+- nomenclatura remota esplicita: Allineato, Differente, Solo locale e Solo remoto;
+- filtri per categoria nella surface di confronto JSON;
 - definizioni dichiarative di colonne, campi e sezioni degli inspector;
 - editor dichiarativo per Armi; Attori, Nemici e fallback generico restano read-only;
 - `NumberBox` per prezzo, Icon ID e parametri delle armi;
@@ -50,7 +56,7 @@ confrontare e aggiornare i file in modo esplicito e atomico.
 - Bearer Firebase prioritario per le ZIAP API, senza sessioni anonime;
 - manifest Localization remoto ottenuto tramite una ZIAP API read-only;
 - confronto locale/remoto per locale, percorso, versione e checksum;
-- stati `Allineato`, `Differente`, `Mancante localmente` e `Mancante nel remoto`;
+- stati `Allineato`, `Differente`, `Solo locale` e `Solo remoto`;
 - compatibilità con i checksum FNV-1a legacy della Console e SHA-256;
 - verifica automatica all'apertura del progetto e refresh manuale dalla Overview;
 - download autenticato della sola versione `current` richiesta, senza signed URL;

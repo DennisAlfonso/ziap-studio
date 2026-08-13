@@ -35,6 +35,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private readonly RemoteLocalizationService _remoteLocalizationService;
     private readonly PublishedLocalizationSyncService _publishedLocalizationSyncService;
     private readonly ZiapAuthenticationService _authenticationService;
+    private readonly RemoteLocalizationDocumentViewModel _remoteLocalizationDocument = new();
     private ZiapProject? _currentProject;
     private string? _errorMessage;
     private string _statusMessage = "Scegli una cartella per iniziare.";
@@ -89,6 +90,11 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     public ObservableCollection<DocumentTabViewModel> OpenDocuments { get; } = [];
 
     public ObservableCollection<RemoteLocalizationFileViewModel> RemoteLocalizationFiles { get; } = [];
+
+    public ObservableCollection<RemoteLocalizationFileViewModel> RemoteLocalizationRecentProblems { get; } = [];
+
+    public RemoteLocalizationDocumentViewModel RemoteLocalizationDocument =>
+        _remoteLocalizationDocument;
 
     public ProjectIdGenerator ProjectIdGenerator => _projectIdGenerator;
 
@@ -190,7 +196,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             if (SetProperty(ref _selectedDocument, value))
             {
                 OnPropertyChanged(nameof(IsProjectOverviewSelected));
+                OnPropertyChanged(nameof(IsRemoteLocalizationDocumentSelected));
                 OnPropertyChanged(nameof(IsDatabaseDocumentSelected));
+                OnPropertyChanged(nameof(IsEditingDocumentSelected));
                 OnPropertyChanged(nameof(ActiveDatabaseDocument));
                 NotifyEditingPropertiesChanged();
             }
@@ -199,7 +207,12 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public bool IsProjectOverviewSelected => SelectedDocument?.IsProjectOverview == true;
 
+    public bool IsRemoteLocalizationDocumentSelected =>
+        SelectedDocument?.IsRemoteLocalization == true;
+
     public bool IsDatabaseDocumentSelected => ActiveDatabaseDocument is not null;
+
+    public bool IsEditingDocumentSelected => IsDatabaseDocumentSelected;
 
     public RpgMakerDatabaseDocumentViewModel? ActiveDatabaseDocument => SelectedDocument?.Database;
 
@@ -511,6 +524,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                 RemoteLocalizationFiles.Add(new RemoteLocalizationFileViewModel(file));
             }
 
+            UpdateRemoteLocalizationViews(DateTimeOffset.Now);
             OnPropertyChanged(nameof(HasRemoteLocalizationFiles));
             RemoteLocalizationMessage = BuildRemoteLocalizationSummary(workspaceStatus.Files);
         }
@@ -519,6 +533,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             if (IsCurrentRemoteRequest(project, requestVersion))
             {
                 RemoteLocalizationFiles.Clear();
+                _remoteLocalizationDocument.Reset();
+                RemoteLocalizationRecentProblems.Clear();
+                OnPropertyChanged(nameof(HasRemoteLocalizationRecentProblems));
                 OnPropertyChanged(nameof(HasRemoteLocalizationFiles));
                 RemoteLocalizationMessage = exception.Message;
             }
@@ -632,6 +649,49 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                 NotSupportedException or System.ComponentModel.Win32Exception)
         {
             ErrorMessage = "Impossibile aprire la risorsa in ZIAP Console.";
+        }
+    }
+
+    public void OpenRemoteLocalizationDocument()
+    {
+        if (CurrentProject?.IsZiapInitialized != true)
+        {
+            return;
+        }
+
+        var openDocument = OpenDocuments.FirstOrDefault(document =>
+            document.IsRemoteLocalization);
+        if (openDocument is null)
+        {
+            openDocument = DocumentTabViewModel.CreateRemoteLocalization(
+                CurrentProject.Id,
+                _remoteLocalizationDocument);
+            OpenDocuments.Add(openDocument);
+        }
+
+        SelectedDocument = openDocument;
+    }
+
+    public void OpenRemoteLocalizationAreaInConsole()
+    {
+        if (CurrentProject is null)
+        {
+            return;
+        }
+
+        ClearError();
+        try
+        {
+            _consoleIntegrationService.Open(new ConsoleNavigationTarget(
+                ProjectId: CurrentProject.Id,
+                Area: ConsoleNavigationArea.Localization));
+            StatusMessage = "Aperta l'area Localization di ZIAP Console.";
+        }
+        catch (Exception exception) when (
+            exception is ArgumentException or InvalidOperationException or
+                NotSupportedException or System.ComponentModel.Win32Exception)
+        {
+            ErrorMessage = "Impossibile aprire l'area Localization in ZIAP Console.";
         }
     }
 
@@ -883,6 +943,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         }
 
         OpenDocuments.Clear();
+        _remoteLocalizationDocument.Reset();
+        RemoteLocalizationRecentProblems.Clear();
         var overview = DocumentTabViewModel.CreateProjectOverview(project.Id);
         OpenDocuments.Add(overview);
         SelectedDocument = overview;
@@ -990,6 +1052,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     {
         Interlocked.Increment(ref _remoteLocalizationRequestVersion);
         RemoteLocalizationFiles.Clear();
+        _remoteLocalizationDocument.Reset();
+        RemoteLocalizationRecentProblems.Clear();
         OnPropertyChanged(nameof(HasRemoteLocalizationFiles));
         RemoteLocalizationMessage = message;
         IsRemoteLocalizationChecking = false;
@@ -1010,15 +1074,36 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
         var aligned = files.Count(file => file.Alignment == RemoteLocalizationAlignment.Aligned);
         var different = files.Count(file => file.Alignment == RemoteLocalizationAlignment.Different);
-        var missing = files.Count(file => file.Alignment is
-            RemoteLocalizationAlignment.MissingLocal or RemoteLocalizationAlignment.MissingRemote);
-        var unresolved = files.Count - aligned - different - missing;
+        var onlyLocal = files.Count(file =>
+            file.Alignment == RemoteLocalizationAlignment.MissingRemote);
+        var onlyPublished = files.Count(file =>
+            file.Alignment == RemoteLocalizationAlignment.MissingLocal);
+        var unresolved = files.Count - aligned - different - onlyLocal - onlyPublished;
         var parts = new List<string> { $"{aligned} allineati" };
         if (different > 0) parts.Add($"{different} differenti");
-        if (missing > 0) parts.Add($"{missing} mancanti");
+        if (onlyLocal > 0) parts.Add($"{onlyLocal} solo locali");
+        if (onlyPublished > 0) parts.Add($"{onlyPublished} solo remoti");
         if (unresolved > 0) parts.Add($"{unresolved} non verificabili");
         return string.Join(" · ", parts);
     }
+
+    private void UpdateRemoteLocalizationViews(DateTimeOffset checkedAt)
+    {
+        _remoteLocalizationDocument.Update(RemoteLocalizationFiles, checkedAt);
+        RemoteLocalizationRecentProblems.Clear();
+        foreach (var file in RemoteLocalizationFiles
+                     .Where(file => file.Status.Alignment != RemoteLocalizationAlignment.Aligned)
+                     .OrderBy(file => file.Status.Alignment == RemoteLocalizationAlignment.Different ? 0 : 1)
+                     .ThenBy(file => file.DisplayName, StringComparer.OrdinalIgnoreCase)
+                     .Take(3))
+        {
+            RemoteLocalizationRecentProblems.Add(file);
+        }
+        OnPropertyChanged(nameof(HasRemoteLocalizationRecentProblems));
+    }
+
+    public bool HasRemoteLocalizationRecentProblems =>
+        RemoteLocalizationRecentProblems.Count > 0;
 
     private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
