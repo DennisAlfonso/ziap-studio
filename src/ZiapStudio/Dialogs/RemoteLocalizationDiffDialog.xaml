@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="ZiapStudio.Dialogs.RemoteLocalizationDiffDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:coreLocalization="using:ZiapStudio.Core.Localization"
+    DefaultButton="Primary">
+
+    <ContentDialog.Resources>
+        <x:Double x:Key="ContentDialogMaxWidth">1120</x:Double>
+    </ContentDialog.Resources>
+
+    <Grid Width="1040" RowSpacing="12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <TextBlock
+            FontSize="15"
+            FontWeight="SemiBold"
+            Text="{x:Bind SummaryText, Mode=OneTime}"
+            TextWrapping="Wrap" />
+        <TextBlock
+            Grid.Row="1"
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="{x:Bind DestinationText, Mode=OneTime}"
+            TextWrapping="Wrap" />
+        <InfoBar
+            Grid.Row="2"
+            IsClosable="False"
+            IsOpen="True"
+            Message="{x:Bind SafetyText, Mode=OneTime}"
+            Severity="Informational" />
+
+        <Grid Grid.Row="3" Margin="0,4,0,0">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            <Grid Padding="8,6" ColumnSpacing="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="2*" MinWidth="200" />
+                    <ColumnDefinition Width="3*" MinWidth="240" />
+                    <ColumnDefinition Width="3*" MinWidth="240" />
+                    <ColumnDefinition Width="150" />
+                </Grid.ColumnDefinitions>
+                <TextBlock FontWeight="SemiBold" Text="Chiave" />
+                <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="Locale" />
+                <TextBlock Grid.Column="2" FontWeight="SemiBold" Text="Pubblicato" />
+                <TextBlock Grid.Column="3" FontWeight="SemiBold" Text="Stato" />
+            </Grid>
+            <ListView
+                Grid.Row="1"
+                MinHeight="320"
+                MaxHeight="560"
+                IsItemClickEnabled="False"
+                ItemsSource="{x:Bind DisplayedDifferences, Mode=OneTime}"
+                SelectionMode="None">
+                <ListView.ItemTemplate>
+                    <DataTemplate x:DataType="coreLocalization:LocalizationJsonDifference">
+                        <Grid Padding="8,7" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*" MinWidth="200" />
+                                <ColumnDefinition Width="3*" MinWidth="240" />
+                                <ColumnDefinition Width="3*" MinWidth="240" />
+                                <ColumnDefinition Width="150" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{x:Bind Path}" TextTrimming="CharacterEllipsis" />
+                            <TextBlock
+                                Grid.Column="1"
+                                Text="{x:Bind LocalDisplayValue}"
+                                TextTrimming="CharacterEllipsis"
+                                ToolTipService.ToolTip="{x:Bind LocalDisplayValue}" />
+                            <TextBlock
+                                Grid.Column="2"
+                                Text="{x:Bind PublishedDisplayValue}"
+                                TextTrimming="CharacterEllipsis"
+                                ToolTipService.ToolTip="{x:Bind PublishedDisplayValue}" />
+                            <TextBlock
+                                Grid.Column="3"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                Text="{x:Bind KindLabel}" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+        </Grid>
+    </Grid>
+</ContentDialog>

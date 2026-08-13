@@ -1,0 +1,1138 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Page
+    x:Class="ZiapStudio.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:coreModels="using:ZiapStudio.Core.Models"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:viewModels="using:ZiapStudio.ViewModels"
+    Loaded="Page_Loaded"
+    mc:Ignorable="d">
+
+    <Page.KeyboardAccelerators>
+        <KeyboardAccelerator
+            Key="S"
+            Modifiers="Control"
+            Invoked="SaveKeyboardAccelerator_Invoked" />
+        <KeyboardAccelerator
+            Key="S"
+            Modifiers="Control,Shift"
+            Invoked="SaveAllKeyboardAccelerator_Invoked" />
+        <KeyboardAccelerator
+            Key="Z"
+            Modifiers="Control"
+            Invoked="UndoKeyboardAccelerator_Invoked" />
+        <KeyboardAccelerator
+            Key="Y"
+            Modifiers="Control"
+            Invoked="RedoKeyboardAccelerator_Invoked" />
+    </Page.KeyboardAccelerators>
+
+    <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition x:Name="ProjectsPaneColumn" Width="292" />
+            <ColumnDefinition Width="*" />
+        </Grid.ColumnDefinitions>
+
+        <Border
+            Background="{ThemeResource LayerFillColorDefaultBrush}"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+            BorderThickness="0,0,1,0">
+            <Grid>
+            <Grid
+                x:Name="ExpandedProjectsPane"
+                Padding="20,20,16,18">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid ColumnSpacing="10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="4">
+                        <TextBlock FontSize="22" FontWeight="SemiBold" Text="Progetti" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Workspace Zenkaiverse"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                    <Button
+                        Grid.Column="1"
+                        Width="36"
+                        Height="36"
+                        AutomationProperties.Name="Comprimi pannello Progetti"
+                        Click="ToggleProjectsPane_Click"
+                        IsEnabled="{x:Bind ViewModel.HasProject, Mode=OneWay}"
+                        ToolTipService.ToolTip="Comprimi pannello Progetti">
+                        <FontIcon FontSize="14" Glyph="&#xE76B;" />
+                    </Button>
+                </Grid>
+
+                <Button
+                    Grid.Row="1"
+                    Margin="0,22,0,24"
+                    HorizontalAlignment="Stretch"
+                    Click="OpenProject_Click"
+                    IsEnabled="{x:Bind ViewModel.CanInteract, Mode=OneWay}"
+                    Style="{StaticResource AccentButtonStyle}">
+                    <StackPanel HorizontalAlignment="Center" Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="16" Glyph="&#xE8B7;" />
+                        <TextBlock Text="Apri progetto" />
+                    </StackPanel>
+                </Button>
+
+                <Grid Grid.Row="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TextBlock
+                        Margin="4,0,0,10"
+                        FontSize="12"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="RECENTI" />
+
+                    <ListView
+                        x:Name="RecentProjectsList"
+                        Grid.Row="1"
+                        HorizontalContentAlignment="Stretch"
+                        IsItemClickEnabled="True"
+                        ItemClick="RecentProjectsList_ItemClick"
+                        ItemsSource="{x:Bind ViewModel.RecentProjects, Mode=OneWay}"
+                        SelectionMode="None">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="coreModels:ZiapProject">
+                                <Grid Padding="8,9">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="28" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <FontIcon
+                                        Margin="0,2,0,0"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Top"
+                                        FontSize="15"
+                                        Glyph="&#xE8B7;" />
+                                    <StackPanel Grid.Column="1" Spacing="2">
+                                        <TextBlock
+                                            FontWeight="SemiBold"
+                                            Text="{x:Bind Name}"
+                                            TextTrimming="CharacterEllipsis" />
+                                        <TextBlock
+                                            FontSize="12"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{x:Bind Path}"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+
+                <StackPanel Grid.Row="3" Margin="0,12,0,0" Spacing="8">
+                    <Button
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Stretch"
+                        AutomationProperties.Name="Account myZenkai">
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <FontIcon FontSize="17" Glyph="&#xE77B;" />
+                            <StackPanel Grid.Column="1" Spacing="1">
+                                <TextBlock
+                                    FontWeight="SemiBold"
+                                    Text="{x:Bind ViewModel.AccountDisplayName, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{x:Bind ViewModel.AccountDetail, Mode=OneWay}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <FontIcon Grid.Column="2" FontSize="11" Glyph="&#xE70D;" />
+                        </Grid>
+                        <Button.Flyout>
+                            <Flyout Placement="RightEdgeAlignedTop">
+                                <Grid Width="270">
+                                    <StackPanel
+                                        x:Name="ExpandedSignedOutAccountFlyout"
+                                        Spacing="12"
+                                        x:Load="{x:Bind ViewModel.IsNotAuthenticated, Mode=OneWay}">
+                                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Account myZenkai" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="Connetti Studio alla tua identità Zenkaiverse."
+                                            TextWrapping="Wrap" />
+                                        <Button
+                                            HorizontalAlignment="Stretch"
+                                            Click="SignIn_Click"
+                                            Content="Accedi con myZenkai"
+                                            IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}"
+                                            Style="{StaticResource AccentButtonStyle}" />
+                                    </StackPanel>
+                                    <StackPanel
+                                        x:Name="ExpandedSignedInAccountFlyout"
+                                        Spacing="10"
+                                        x:Load="{x:Bind ViewModel.IsAuthenticated, Mode=OneWay}">
+                                        <TextBlock
+                                            FontSize="18"
+                                            FontWeight="SemiBold"
+                                            Text="{x:Bind ViewModel.AccountDisplayName, Mode=OneWay}" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{x:Bind ViewModel.AccountDetail, Mode=OneWay}"
+                                            TextWrapping="Wrap" />
+                                        <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                        <Button
+                                            HorizontalAlignment="Stretch"
+                                            Click="SignOut_Click"
+                                            Content="Disconnetti"
+                                            IsEnabled="{x:Bind ViewModel.CanSignOut, Mode=OneWay}" />
+                                    </StackPanel>
+                                    <ProgressRing
+                                        x:Name="ExpandedAuthenticationProgress"
+                                        Width="22"
+                                        Height="22"
+                                        HorizontalAlignment="Right"
+                                        VerticalAlignment="Top"
+                                        IsActive="True"
+                                        x:Load="{x:Bind ViewModel.IsAuthenticationBusy, Mode=OneWay}" />
+                                </Grid>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                    <TextBlock
+                        Margin="4,0,0,0"
+                        FontSize="12"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="ZIAP Studio 0.1.5" />
+                </StackPanel>
+            </Grid>
+
+            <Grid
+                x:Name="CompactProjectsPane"
+                Padding="8,12,8,14"
+                Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <Button
+                    Width="44"
+                    Height="44"
+                    AutomationProperties.Name="Espandi pannello Progetti"
+                    Click="ToggleProjectsPane_Click"
+                    ToolTipService.ToolTip="Progetti">
+                    <FontIcon FontSize="17" Glyph="&#xE700;" />
+                </Button>
+                <Button
+                    Grid.Row="1"
+                    Width="44"
+                    Height="44"
+                    Margin="0,8,0,0"
+                    AutomationProperties.Name="Apri progetto"
+                    Click="OpenProject_Click"
+                    IsEnabled="{x:Bind ViewModel.CanInteract, Mode=OneWay}"
+                    ToolTipService.ToolTip="Apri progetto">
+                    <FontIcon FontSize="17" Glyph="&#xE8B7;" />
+                </Button>
+                <Button
+                    Grid.Row="2"
+                    Width="44"
+                    Height="44"
+                    AutomationProperties.Name="Project Overview"
+                    Click="ProjectOverview_Click"
+                    ToolTipService.ToolTip="Project Overview">
+                    <FontIcon FontSize="17" Glyph="&#xE80F;" />
+                </Button>
+                <Button
+                    Grid.Row="4"
+                    Width="44"
+                    Height="44"
+                    AutomationProperties.Name="Account myZenkai"
+                    ToolTipService.ToolTip="{x:Bind ViewModel.AccountDisplayName, Mode=OneWay}">
+                    <FontIcon FontSize="17" Glyph="&#xE77B;" />
+                    <Button.Flyout>
+                        <Flyout Placement="RightEdgeAlignedBottom">
+                            <Grid Width="270">
+                                <StackPanel
+                                    x:Name="CompactSignedOutAccountFlyout"
+                                    Spacing="12"
+                                    x:Load="{x:Bind ViewModel.IsNotAuthenticated, Mode=OneWay}">
+                                    <TextBlock FontSize="18" FontWeight="SemiBold" Text="Account myZenkai" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="Non connesso"
+                                        TextWrapping="Wrap" />
+                                    <Button
+                                        HorizontalAlignment="Stretch"
+                                        Click="SignIn_Click"
+                                        Content="Accedi con myZenkai"
+                                        IsEnabled="{x:Bind ViewModel.CanSignIn, Mode=OneWay}"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                                </StackPanel>
+                                <StackPanel
+                                    x:Name="CompactSignedInAccountFlyout"
+                                    Spacing="10"
+                                    x:Load="{x:Bind ViewModel.IsAuthenticated, Mode=OneWay}">
+                                    <TextBlock
+                                        FontSize="18"
+                                        FontWeight="SemiBold"
+                                        Text="{x:Bind ViewModel.AccountDisplayName, Mode=OneWay}" />
+                                    <TextBlock
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{x:Bind ViewModel.AccountDetail, Mode=OneWay}"
+                                        TextWrapping="Wrap" />
+                                    <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    <Button
+                                        HorizontalAlignment="Stretch"
+                                        Click="SignOut_Click"
+                                        Content="Disconnetti"
+                                        IsEnabled="{x:Bind ViewModel.CanSignOut, Mode=OneWay}" />
+                                </StackPanel>
+                                <ProgressRing
+                                    x:Name="CompactAuthenticationProgress"
+                                    Width="22"
+                                    Height="22"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    IsActive="True"
+                                    x:Load="{x:Bind ViewModel.IsAuthenticationBusy, Mode=OneWay}" />
+                            </Grid>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+                <TextBlock
+                    Grid.Row="5"
+                    Margin="0,8,0,0"
+                    HorizontalAlignment="Center"
+                    FontSize="10"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Text="0.1.5" />
+            </Grid>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Column="1">
+            <Grid
+                x:Name="EmptyState"
+                Margin="48"
+                MaxWidth="560"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                x:Load="{x:Bind ViewModel.HasNoProject, Mode=OneWay}">
+                <StackPanel HorizontalAlignment="Center" Spacing="14">
+                    <Border
+                        Width="72"
+                        Height="72"
+                        HorizontalAlignment="Center"
+                        Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                        CornerRadius="20">
+                        <FontIcon
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="30"
+                            Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}"
+                            Glyph="&#xE8B7;" />
+                    </Border>
+                    <TextBlock
+                        HorizontalAlignment="Center"
+                        FontSize="30"
+                        FontWeight="SemiBold"
+                        Text="Apri il tuo primo progetto" />
+                    <TextBlock
+                        MaxWidth="500"
+                        HorizontalAlignment="Center"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Seleziona una cartella con metadata ZIAP, package.json o un progetto RPG Maker riconoscibile."
+                        TextAlignment="Center"
+                        TextWrapping="Wrap" />
+                    <Button
+                        Margin="0,8,0,0"
+                        HorizontalAlignment="Center"
+                        Click="OpenProject_Click"
+                        IsEnabled="{x:Bind ViewModel.CanInteract, Mode=OneWay}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon FontSize="16" Glyph="&#xE8B7;" />
+                            <TextBlock Text="Scegli cartella" />
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <Grid
+                x:Name="ProjectWorkspace"
+                Loaded="ProjectWorkspace_Loaded"
+                x:Load="{x:Bind ViewModel.HasProject, Mode=OneWay}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition
+                        x:Name="ProjectExplorerColumn"
+                        Width="300"
+                        MinWidth="220"
+                        MaxWidth="550" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+
+                <Border
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="0,0,1,0"
+                    SizeChanged="ProjectExplorerPane_SizeChanged">
+                    <Grid Padding="14,22,10,14">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <TextBlock
+                            Margin="8,0,8,3"
+                            FontSize="12"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="PROJECT EXPLORER" />
+                        <Button
+                            Grid.Row="1"
+                            Margin="0,0,0,10"
+                            Padding="8,4"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="ProjectOverview_Click"
+                            ToolTipService.ToolTip="Apri Project Overview">
+                            <TextBlock
+                                FontSize="16"
+                                FontWeight="SemiBold"
+                                Text="{x:Bind ViewModel.ProjectExplorerTitle, Mode=OneWay}"
+                                TextTrimming="CharacterEllipsis" />
+                        </Button>
+
+                        <TreeView
+                            Grid.Row="2"
+                            ItemInvoked="ProjectExplorer_ItemInvoked"
+                            ItemsSource="{x:Bind ViewModel.ProjectExplorerNodes, Mode=OneWay}"
+                            SelectionMode="None">
+                            <TreeView.ItemTemplate>
+                                <DataTemplate x:DataType="viewModels:ProjectExplorerItemViewModel">
+                                    <TreeViewItem
+                                        IsExpanded="{x:Bind IsExpanded}"
+                                        ItemsSource="{x:Bind Children}"
+                                        ToolTipService.ToolTip="{x:Bind Path}">
+                                        <TreeViewItem.Content>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon FontSize="14" Glyph="{x:Bind IconGlyph}" />
+                                                <TextBlock
+                                                    VerticalAlignment="Center"
+                                                    Text="{x:Bind Name}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </StackPanel>
+                                        </TreeViewItem.Content>
+                                    </TreeViewItem>
+                                </DataTemplate>
+                            </TreeView.ItemTemplate>
+                        </TreeView>
+                    </Grid>
+                </Border>
+
+                <Border
+                    Grid.Column="1"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    AutomationProperties.Name="Ridimensiona Project Explorer"
+                    Background="Transparent"
+                    PointerCaptureLost="Splitter_PointerCaptureLost"
+                    PointerMoved="ExplorerSplitter_PointerMoved"
+                    PointerPressed="ExplorerSplitter_PointerPressed"
+                    PointerReleased="Splitter_PointerReleased"
+                    ToolTipService.ToolTip="Trascina per ridimensionare Project Explorer">
+                    <Rectangle
+                        Width="1"
+                        HorizontalAlignment="Center"
+                        Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                </Border>
+
+                <Grid Grid.Column="2">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="48" />
+                        <RowDefinition Height="44" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <TabView
+                        x:Name="DocumentTabs"
+                        CanReorderTabs="True"
+                        CloseButtonOverlayMode="OnPointerOver"
+                        IsAddTabButtonVisible="False"
+                        SelectedItem="{x:Bind ViewModel.SelectedDocument, Mode=TwoWay}"
+                        TabCloseRequested="DocumentTabs_TabCloseRequested"
+                        TabItemsSource="{x:Bind ViewModel.OpenDocuments, Mode=OneWay}">
+                        <TabView.TabItemTemplate>
+                            <DataTemplate x:DataType="viewModels:DocumentTabViewModel">
+                                <TabViewItem Header="{x:Bind Header, Mode=OneWay}" IsClosable="{x:Bind IsClosable}" />
+                            </DataTemplate>
+                        </TabView.TabItemTemplate>
+                    </TabView>
+
+                    <CommandBar
+                        Grid.Row="1"
+                        Padding="8,0"
+                        Background="{ThemeResource LayerFillColorAltBrush}"
+                        DefaultLabelPosition="Right"
+                        IsDynamicOverflowEnabled="False">
+                        <AppBarButton
+                            AutomationProperties.Name="Annulla modifica"
+                            Click="Undo_Click"
+                            IsEnabled="{x:Bind ViewModel.CanUndo, Mode=OneWay}"
+                            Label="Annulla"
+                            ToolTipService.ToolTip="Annulla (Ctrl+Z)">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE7A7;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            AutomationProperties.Name="Ripristina modifica"
+                            Click="Redo_Click"
+                            IsEnabled="{x:Bind ViewModel.CanRedo, Mode=OneWay}"
+                            Label="Ripristina"
+                            ToolTipService.ToolTip="Ripristina (Ctrl+Y)">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE7A6;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarSeparator />
+                        <AppBarButton
+                            AutomationProperties.Name="Salva documento"
+                            Click="SaveDocument_Click"
+                            IsEnabled="{x:Bind ViewModel.CanSaveDocument, Mode=OneWay}"
+                            Label="Salva"
+                            ToolTipService.ToolTip="Salva (Ctrl+S)">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE74E;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            AutomationProperties.Name="Salva tutti i documenti"
+                            Click="SaveAll_Click"
+                            IsEnabled="{x:Bind ViewModel.CanSaveAll, Mode=OneWay}"
+                            Label="Salva tutto"
+                            ToolTipService.ToolTip="Salva tutto (Ctrl+Shift+S)">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xEA35;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                    </CommandBar>
+
+                    <ScrollViewer
+                        x:Name="ProjectOverviewDocument"
+                        Grid.Row="2"
+                        HorizontalScrollBarVisibility="Disabled"
+                        x:Load="{x:Bind ViewModel.IsProjectOverviewSelected, Mode=OneWay}">
+                        <Grid
+                            MaxWidth="1400"
+                            Padding="40,32"
+                            HorizontalAlignment="Stretch"
+                            RowSpacing="24">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="6">
+                                    <TextBlock
+                                        FontSize="34"
+                                        FontWeight="SemiBold"
+                                        Text="{x:Bind ViewModel.ProjectName, Mode=OneWay}"
+                                        TextWrapping="Wrap" />
+                                    <TextBlock
+                                        FontSize="15"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="{x:Bind ViewModel.StatusMessage, Mode=OneWay}"
+                                        TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+
+                                <Border
+                                    Grid.Column="1"
+                                    Margin="20,7,0,0"
+                                    Padding="10,5"
+                                    VerticalAlignment="Top"
+                                    Background="{ThemeResource AccentFillColorTertiaryBrush}"
+                                    CornerRadius="10">
+                                    <TextBlock
+                                        FontSize="11"
+                                        FontWeight="SemiBold"
+                                        Text="{x:Bind ViewModel.ProjectStateLabel, Mode=OneWay}" />
+                                </Border>
+
+                                <Button
+                                    Grid.Column="2"
+                                    Margin="24,2,0,0"
+                                    VerticalAlignment="Top"
+                                    Click="OpenFolder_Click"
+                                    IsEnabled="{x:Bind ViewModel.CanInteract, Mode=OneWay}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <FontIcon FontSize="16" Glyph="&#xE838;" />
+                                        <TextBlock Text="Apri cartella" />
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+
+                            <Border
+                                x:Name="InitializationCard"
+                                Grid.Row="1"
+                                Padding="22"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="12"
+                                x:Load="{x:Bind ViewModel.NeedsInitialization, Mode=OneWay}">
+                                <Grid ColumnSpacing="24">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="5">
+                                        <TextBlock
+                                            FontSize="16"
+                                            FontWeight="SemiBold"
+                                            Text="Questo progetto non è ancora configurato per ZIAP Studio" />
+                                        <TextBlock
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="L'inizializzazione crea un piccolo metadata condiviso nella cartella .ziap."
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <Button
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Click="InitializeProject_Click"
+                                        Content="Inizializza progetto ZIAP"
+                                        IsEnabled="{x:Bind ViewModel.CanInitialize, Mode=OneWay}"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                                </Grid>
+                            </Border>
+
+                            <Grid
+                                x:Name="OverviewSections"
+                                Grid.Row="2"
+                                ColumnSpacing="24"
+                                RowSpacing="24"
+                                SizeChanged="OverviewSections_SizeChanged">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition x:Name="OverviewPrimaryColumn" Width="*" />
+                                    <ColumnDefinition x:Name="OverviewSectionGap" Width="0" />
+                                    <ColumnDefinition x:Name="OverviewSecondaryColumn" Width="0" />
+                                </Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
+                                </Grid.RowDefinitions>
+                                <Border
+                                    x:Name="RemoteLocalizationCard"
+                                    Grid.ColumnSpan="3"
+                                    Padding="22"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="12"
+                                    x:Load="{x:Bind ViewModel.HasRemoteLocalizationCard, Mode=OneWay}">
+                                <StackPanel Spacing="16">
+                                    <Grid ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="4">
+                                            <TextBlock
+                                                FontSize="16"
+                                                FontWeight="SemiBold"
+                                                Text="Localizzazione remota" />
+                                            <TextBlock
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="{x:Bind ViewModel.RemoteLocalizationMessage, Mode=OneWay}"
+                                                TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Orientation="Horizontal"
+                                            Spacing="10">
+                                            <ProgressRing
+                                                x:Name="RemoteLocalizationProgress"
+                                                Width="20"
+                                                Height="20"
+                                                IsActive="True"
+                                                x:Load="{x:Bind ViewModel.IsRemoteLocalizationChecking, Mode=OneWay}" />
+                                            <Button
+                                                Click="RefreshRemoteLocalization_Click"
+                                                Content="Verifica ora"
+                                                IsEnabled="{x:Bind ViewModel.CanRefreshRemoteLocalization, Mode=OneWay}" />
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <ScrollViewer
+                                        x:Name="RemoteLocalizationFilesScroll"
+                                        MaxHeight="520"
+                                        HorizontalScrollBarVisibility="Disabled"
+                                        VerticalScrollBarVisibility="Auto"
+                                        x:Load="{x:Bind ViewModel.HasRemoteLocalizationFiles, Mode=OneWay}">
+                                    <ItemsControl
+                                        x:Name="RemoteLocalizationItems"
+                                        ItemsSource="{x:Bind ViewModel.RemoteLocalizationFiles, Mode=OneWay}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="viewModels:RemoteLocalizationFileViewModel">
+                                                <Border
+                                                    Margin="0,0,0,8"
+                                                    Padding="14,12"
+                                                    Background="{ThemeResource LayerFillColorAltBrush}"
+                                                    CornerRadius="8">
+                                                    <Grid ColumnSpacing="12">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="28" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock
+                                                            HorizontalAlignment="Center"
+                                                            VerticalAlignment="Top"
+                                                            FontSize="17"
+                                                            FontWeight="SemiBold"
+                                                            Text="{x:Bind StatusGlyph}" />
+                                                        <StackPanel Grid.Column="1" Spacing="2">
+                                                            <TextBlock
+                                                                FontWeight="SemiBold"
+                                                                Text="{x:Bind DisplayName}"
+                                                                TextTrimming="CharacterEllipsis" />
+                                                            <TextBlock
+                                                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                                Text="{x:Bind StatusText}" />
+                                                            <TextBlock
+                                                                FontSize="12"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                Text="{x:Bind ChecksumText}"
+                                                                TextWrapping="Wrap" />
+                                                            <TextBlock
+                                                                FontSize="11"
+                                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                                Text="{x:Bind VersionText}"
+                                                                TextTrimming="CharacterEllipsis" />
+                                                        </StackPanel>
+                                                        <StackPanel
+                                                            Grid.Column="2"
+                                                            VerticalAlignment="Center"
+                                                            Orientation="Horizontal"
+                                                            Spacing="8">
+                                                            <Button
+                                                                x:Name="ComparePublishedButton"
+                                                                Click="CompareRemoteLocalization_Click"
+                                                                Content="Confronta"
+                                                                x:Load="{x:Bind CanCompare}" />
+                                                            <Button
+                                                                x:Name="SynchronizePublishedButton"
+                                                                Click="SynchronizeRemoteLocalization_Click"
+                                                                Content="{x:Bind SynchronizeLabel}"
+                                                                Style="{StaticResource AccentButtonStyle}"
+                                                                x:Load="{x:Bind CanSynchronize}" />
+                                                            <Button
+                                                                Click="OpenRemoteLocalizationInConsole_Click"
+                                                                Content="Apri in Console ↗"
+                                                                ToolTipService.ToolTip="{x:Bind ConsoleNavigationToolTip}" />
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    </ScrollViewer>
+                                </StackPanel>
+                                </Border>
+
+                                <StackPanel
+                                    x:Name="OverviewDetailsSection"
+                                    Grid.Row="1"
+                                    Grid.ColumnSpan="3"
+                                    Padding="12,8,12,4"
+                                    Spacing="14">
+                                    <TextBlock
+                                        FontSize="18"
+                                        FontWeight="SemiBold"
+                                        Text="Dettagli progetto" />
+                                    <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                    <Grid RowSpacing="18">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="150" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <TextBlock Style="{StaticResource MetadataLabelStyle}" Text="Nome progetto" />
+                                    <TextBlock Grid.Column="1" Style="{StaticResource MetadataValueStyle}" Text="{x:Bind ViewModel.ProjectName, Mode=OneWay}" />
+                                    <TextBlock Grid.Row="1" Style="{StaticResource MetadataLabelStyle}" Text="Package" />
+                                    <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource MetadataValueStyle}" Text="{x:Bind ViewModel.PackageName, Mode=OneWay}" />
+                                    <TextBlock Grid.Row="2" Style="{StaticResource MetadataLabelStyle}" Text="Versione" />
+                                    <TextBlock Grid.Row="2" Grid.Column="1" Style="{StaticResource MetadataValueStyle}" Text="{x:Bind ViewModel.ProjectVersion, Mode=OneWay}" />
+                                    <TextBlock Grid.Row="3" Style="{StaticResource MetadataLabelStyle}" Text="Tipo progetto" />
+                                    <TextBlock Grid.Row="3" Grid.Column="1" Style="{StaticResource MetadataValueStyle}" Text="{x:Bind ViewModel.ProjectType, Mode=OneWay}" />
+                                    <TextBlock Grid.Row="4" Style="{StaticResource MetadataLabelStyle}" Text="Publisher" />
+                                    <TextBlock Grid.Row="4" Grid.Column="1" Style="{StaticResource MetadataValueStyle}" Text="{x:Bind ViewModel.Publisher, Mode=OneWay}" />
+                                    <TextBlock Grid.Row="5" Style="{StaticResource MetadataLabelStyle}" Text="Percorso" />
+                                    <TextBlock
+                                        Grid.Row="5"
+                                        Grid.Column="1"
+                                        IsTextSelectionEnabled="True"
+                                        Style="{StaticResource MetadataValueStyle}"
+                                        Text="{x:Bind ViewModel.ProjectPath, Mode=OneWay}" />
+                                    </Grid>
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
+                    </ScrollViewer>
+
+                    <Grid
+                        x:Name="DatabaseDocument"
+                        Grid.Row="2"
+                        Padding="32,26"
+                        DataContext="{x:Bind ViewModel.ActiveDatabaseDocument, Mode=OneWay}"
+                        Loaded="DatabaseDocument_Loaded"
+                        x:Load="{x:Bind ViewModel.IsDatabaseDocumentSelected, Mode=OneWay}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
+                                <TextBlock FontSize="30" FontWeight="SemiBold" Text="{Binding DisplayName}" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{Binding SourcePath}"
+                                    TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                            <StackPanel
+                                Grid.Column="1"
+                                Margin="20,7,0,0"
+                                HorizontalAlignment="Right"
+                                Spacing="2">
+                                <TextBlock
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    Text="{Binding ChangeCountText}" />
+                                <TextBlock
+                                    HorizontalAlignment="Right"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{Binding FilteredCountText}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <TextBox
+                            Grid.Row="1"
+                            Width="360"
+                            Margin="0,22,0,18"
+                            HorizontalAlignment="Left"
+                            Header="Cerca nel database"
+                            PlaceholderText="ID o nome…"
+                            Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+
+                        <Grid Grid.Row="2">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition
+                                    x:Name="DatabaseListColumn"
+                                    Width="620"
+                                    MinWidth="360" />
+                                <ColumnDefinition Width="6" />
+                                <ColumnDefinition Width="*" MinWidth="300" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                SizeChanged="DatabaseListPane_SizeChanged">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="42" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <ItemsControl
+                                        Padding="14,0"
+                                        Background="{ThemeResource LayerFillColorAltBrush}"
+                                        ItemsSource="{Binding Columns}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal" />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock
+                                                    Width="{Binding Width}"
+                                                    VerticalAlignment="Center"
+                                                    FontWeight="SemiBold"
+                                                    Text="{Binding DisplayName}"
+                                                    TextTrimming="CharacterEllipsis" />
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+
+                                    <ListView
+                                        Grid.Row="1"
+                                        HorizontalContentAlignment="Stretch"
+                                        ItemsSource="{Binding FilteredEntries}"
+                                        SelectedItem="{Binding SelectedEntry, Mode=TwoWay}"
+                                        SelectionMode="Single">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="viewModels:RpgMakerDatabaseRowViewModel">
+                                                <ItemsControl Padding="14,8" ItemsSource="{x:Bind Cells}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal" />
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate x:DataType="viewModels:RpgMakerDatabaseCellViewModel">
+                                                            <TextBlock
+                                                                Width="{x:Bind Width}"
+                                                                Text="{x:Bind Value, Mode=OneWay}"
+                                                                TextTrimming="CharacterEllipsis" />
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </Grid>
+                            </Border>
+
+                            <Border
+                                Grid.Column="1"
+                                Margin="1,0"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                AutomationProperties.Name="Ridimensiona lista e Inspector"
+                                Background="Transparent"
+                                PointerCaptureLost="Splitter_PointerCaptureLost"
+                                PointerMoved="DatabaseSplitter_PointerMoved"
+                                PointerPressed="DatabaseSplitter_PointerPressed"
+                                PointerReleased="Splitter_PointerReleased"
+                                ToolTipService.ToolTip="Trascina per ridimensionare lista e Inspector">
+                                <Rectangle
+                                    Width="1"
+                                    HorizontalAlignment="Center"
+                                    Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                            </Border>
+
+                            <Border
+                                Grid.Column="2"
+                                Margin="12,0,0,0"
+                                Padding="24"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10">
+                                <ScrollViewer HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Spacing="18">
+                                        <TextBlock FontSize="21" FontWeight="SemiBold" Text="{Binding SelectedEntryTitle}" />
+                                        <ItemsControl ItemsSource="{Binding SelectedSections}">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="viewModels:RpgMakerDatabaseInspectorSectionViewModel">
+                                                    <Expander
+                                                        Margin="0,0,0,8"
+                                                        HorizontalAlignment="Stretch"
+                                                        Header="{x:Bind DisplayName}"
+                                                        IsExpanded="True">
+                                                        <ItemsControl ItemsSource="{x:Bind Fields}">
+                                                            <ItemsControl.ItemTemplate>
+                                                                <DataTemplate x:DataType="viewModels:RpgMakerDatabaseInspectorFieldViewModel">
+                                                                    <Grid Margin="0,4" ColumnSpacing="12">
+                                                                        <Grid.ColumnDefinitions>
+                                                                            <ColumnDefinition Width="112" />
+                                                                            <ColumnDefinition Width="*" />
+                                                                        </Grid.ColumnDefinitions>
+                                                                        <TextBlock
+                                                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                                            Text="{x:Bind DisplayName}"
+                                                                            TextWrapping="Wrap" />
+                                                                        <StackPanel Grid.Column="1">
+                                                                            <NumberBox
+                                                                                x:Name="NumberEditor"
+                                                                                HorizontalAlignment="Stretch"
+                                                                                AutomationProperties.Name="{x:Bind EditorAutomationName}"
+                                                                                Maximum="{x:Bind Maximum}"
+                                                                                Minimum="{x:Bind Minimum}"
+                                                                                SmallChange="1"
+                                                                                SpinButtonPlacementMode="Inline"
+                                                                                Value="{x:Bind NumericValue, Mode=TwoWay}"
+                                                                                x:Load="{x:Bind IsNumberEditor}" />
+                                                                            <ComboBox
+                                                                                x:Name="ReferenceEditor"
+                                                                                HorizontalAlignment="Stretch"
+                                                                                AutomationProperties.Name="{x:Bind EditorAutomationName}"
+                                                                                DisplayMemberPath="DisplayValue"
+                                                                                IsTextSearchEnabled="True"
+                                                                                ItemsSource="{x:Bind EditorOptions}"
+                                                                                SelectedItem="{x:Bind SelectedReferenceOption, Mode=TwoWay}"
+                                                                                x:Load="{x:Bind IsReferenceEditor}" />
+                                                                            <HyperlinkButton
+                                                                                x:Name="NavigateReferenceButton"
+                                                                                Padding="0"
+                                                                                HorizontalAlignment="Left"
+                                                                                Click="ResolvedReference_Click"
+                                                                                Content="{x:Bind DisplayValue}"
+                                                                                ToolTipService.ToolTip="{x:Bind NavigationTarget}"
+                                                                                x:Load="{x:Bind CanNavigate}" />
+                                                                            <TextBlock
+                                                                                x:Name="PlainResolvedValueText"
+                                                                                IsTextSelectionEnabled="True"
+                                                                                Text="{x:Bind DisplayValue}"
+                                                                                TextWrapping="Wrap"
+                                                                                x:Load="{x:Bind CannotNavigate}" />
+                                                                             <TextBlock
+                                                                                 x:Name="SecondaryValueText"
+                                                                                Margin="0,3,0,0"
+                                                                                FontSize="11"
+                                                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                                                Text="{x:Bind SecondaryText}"
+                                                                                 TextWrapping="Wrap"
+                                                                                 x:Load="{x:Bind HasSecondaryText}" />
+                                                                             <StackPanel
+                                                                                 x:Name="ConsoleManagedPanel"
+                                                                                 Margin="0,9,0,0"
+                                                                                 Spacing="5"
+                                                                                 x:Load="{x:Bind IsConsoleManaged}">
+                                                                                 <TextBlock
+                                                                                     FontSize="11"
+                                                                                     FontWeight="SemiBold"
+                                                                                     Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                                                     Text="●  Gestito da ZIAP Console" />
+                                                                                 <Button
+                                                                                     x:Name="OpenLocalizationInConsoleButton"
+                                                                                     Padding="10,5"
+                                                                                     HorizontalAlignment="Left"
+                                                                                     AutomationProperties.Name="{x:Bind ConsoleNavigationAutomationName}"
+                                                                                     Click="OpenLocalizationInConsole_Click"
+                                                                                     Content="Apri in Console →"
+                                                                                     ToolTipService.ToolTip="{x:Bind ConsoleNavigationToolTip}" />
+                                                                             </StackPanel>
+                                                                             <Border
+                                                                                x:Name="AssetPreviewBorder"
+                                                                                Margin="0,8,0,0"
+                                                                                Padding="6"
+                                                                                HorizontalAlignment="Left"
+                                                                                AutomationProperties.Name="{x:Bind AssetPreview.AccessibleName, Mode=OneWay}"
+                                                                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                                BorderThickness="1"
+                                                                                CornerRadius="6"
+                                                                                x:Load="{x:Bind HasAssetPreview, Mode=OneWay}">
+                                                                                <Grid
+                                                                                    Width="{x:Bind AssetPreview.ViewportWidth, Mode=OneWay}"
+                                                                                    Height="{x:Bind AssetPreview.ViewportHeight, Mode=OneWay}">
+                                                                                    <Grid.Clip>
+                                                                                        <RectangleGeometry Rect="{x:Bind AssetPreview.ClipRect, Mode=OneWay}" />
+                                                                                    </Grid.Clip>
+                                                                                    <Image
+                                                                                        Width="{x:Bind AssetPreview.ImageWidth, Mode=OneWay}"
+                                                                                        Height="{x:Bind AssetPreview.ImageHeight, Mode=OneWay}"
+                                                                                        HorizontalAlignment="Left"
+                                                                                        VerticalAlignment="Top"
+                                                                                        Source="{x:Bind AssetPreview.ImageSource, Mode=OneWay}"
+                                                                                        Stretch="Fill">
+                                                                                        <Image.RenderTransform>
+                                                                                            <TranslateTransform
+                                                                                                X="{x:Bind AssetPreview.OffsetX, Mode=OneWay}"
+                                                                                                Y="{x:Bind AssetPreview.OffsetY, Mode=OneWay}" />
+                                                                                        </Image.RenderTransform>
+                                                                                    </Image>
+                                                                                </Grid>
+                                                                            </Border>
+                                                                            <TextBlock
+                                                                                x:Name="AssetDiagnosticText"
+                                                                                Margin="0,5,0,0"
+                                                                                AutomationProperties.Name="Diagnostica asset"
+                                                                                FontSize="11"
+                                                                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                                                Text="{x:Bind AssetDiagnostic}"
+                                                                                TextWrapping="Wrap"
+                                                                                x:Load="{x:Bind HasAssetDiagnostic}" />
+                                                                        </StackPanel>
+                                                                    </Grid>
+                                                                </DataTemplate>
+                                                            </ItemsControl.ItemTemplate>
+                                                        </ItemsControl>
+                                                    </Expander>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </Grid>
+                </Grid>
+            </Grid>
+
+            <InfoBar
+                Margin="24"
+                VerticalAlignment="Top"
+                Closed="ErrorInfoBar_Closed"
+                IsClosable="True"
+                IsOpen="{x:Bind ViewModel.HasError, Mode=OneWay}"
+                Message="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                Severity="Error"
+                Title="Impossibile completare l'operazione" />
+        </Grid>
+
+        <Grid
+            x:Name="BusyOverlay"
+            Grid.ColumnSpan="2"
+            Background="#33000000"
+            x:Load="{x:Bind ViewModel.IsBusy, Mode=OneWay}">
+            <Border
+                Padding="24"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                CornerRadius="12">
+                <StackPanel Orientation="Horizontal" Spacing="14">
+                    <ProgressRing Width="24" Height="24" IsActive="True" />
+                    <TextBlock VerticalAlignment="Center" Text="Lettura del progetto…" />
+                </StackPanel>
+            </Border>
+        </Grid>
+    </Grid>
+</Page>

@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ZIAP Studio (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "ZIAP Studio (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

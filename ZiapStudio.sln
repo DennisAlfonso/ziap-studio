@@ -1,0 +1,39 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZiapStudio.Core", "src\ZiapStudio.Core\ZiapStudio.Core.csproj", "{1AFAE879-8F63-44D8-A069-5A44D4B6A403}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZiapStudio.Services", "src\ZiapStudio.Services\ZiapStudio.Services.csproj", "{3FBCF350-51B7-4A4D-A1AB-2EF98BF78FF6}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZiapStudio", "src\ZiapStudio\ZiapStudio.csproj", "{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZiapStudio.Services.Tests", "tests\ZiapStudio.Services.Tests\ZiapStudio.Services.Tests.csproj", "{A0E4970A-5672-4C99-BB1B-793D5A43594F}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|x64 = Debug|x64
+		Release|x64 = Release|x64
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{1AFAE879-8F63-44D8-A069-5A44D4B6A403}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{1AFAE879-8F63-44D8-A069-5A44D4B6A403}.Debug|x64.Build.0 = Debug|Any CPU
+		{1AFAE879-8F63-44D8-A069-5A44D4B6A403}.Release|x64.ActiveCfg = Release|Any CPU
+		{1AFAE879-8F63-44D8-A069-5A44D4B6A403}.Release|x64.Build.0 = Release|Any CPU
+		{3FBCF350-51B7-4A4D-A1AB-2EF98BF78FF6}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{3FBCF350-51B7-4A4D-A1AB-2EF98BF78FF6}.Debug|x64.Build.0 = Debug|Any CPU
+		{3FBCF350-51B7-4A4D-A1AB-2EF98BF78FF6}.Release|x64.ActiveCfg = Release|Any CPU
+		{3FBCF350-51B7-4A4D-A1AB-2EF98BF78FF6}.Release|x64.Build.0 = Release|Any CPU
+		{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}.Debug|x64.ActiveCfg = Debug|x64
+		{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}.Debug|x64.Build.0 = Debug|x64
+		{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}.Release|x64.ActiveCfg = Release|x64
+		{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}.Release|x64.Build.0 = Release|x64
+		{A0E4970A-5672-4C99-BB1B-793D5A43594F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A0E4970A-5672-4C99-BB1B-793D5A43594F}.Debug|x64.Build.0 = Debug|Any CPU
+		{A0E4970A-5672-4C99-BB1B-793D5A43594F}.Release|x64.ActiveCfg = Release|Any CPU
+		{A0E4970A-5672-4C99-BB1B-793D5A43594F}.Release|x64.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal

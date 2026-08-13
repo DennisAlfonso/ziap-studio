@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ContentDialog
+    x:Class="ZiapStudio.Dialogs.ProjectInitializationDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    DefaultButton="Primary"
+    PrimaryButtonClick="ContentDialog_PrimaryButtonClick"
+    PrimaryButtonText="Inizializza"
+    CloseButtonText="Annulla"
+    Title="Inizializza progetto ZIAP">
+
+    <ContentDialog.Resources>
+        <x:Double x:Key="ContentDialogMaxWidth">640</x:Double>
+    </ContentDialog.Resources>
+
+    <StackPanel Width="540" Spacing="14">
+        <TextBlock
+            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+            Text="Conferma l'identità condivisa del progetto. Verrà creato .ziap/project.json."
+            TextWrapping="Wrap" />
+
+        <InfoBar
+            x:Name="ValidationInfoBar"
+            IsClosable="False"
+            IsOpen="False"
+            Severity="Error" />
+
+        <TextBox
+            x:Name="NameTextBox"
+            Header="Nome"
+            PlaceholderText="Nome visualizzato del progetto"
+            TextChanged="NameTextBox_TextChanged" />
+
+        <TextBox
+            x:Name="IdTextBox"
+            Description="Stabile dopo l'inizializzazione. Usa lettere minuscole, numeri e trattini."
+            Header="ID progetto"
+            PlaceholderText="project-id"
+            TextChanged="IdTextBox_TextChanged" />
+
+        <ComboBox
+            x:Name="TypeComboBox"
+            HorizontalAlignment="Stretch"
+            Header="Tipo"
+            IsEditable="True"
+            PlaceholderText="Tipo progetto">
+            <x:String>rpgmaker-mz</x:String>
+            <x:String>rpgmaker-mv</x:String>
+            <x:String>web</x:String>
+            <x:String>unknown</x:String>
+        </ComboBox>
+
+        <TextBox
+            x:Name="VersionTextBox"
+            Header="Versione"
+            PlaceholderText="Opzionale" />
+
+        <TextBox
+            x:Name="PublisherTextBox"
+            Header="Publisher"
+            PlaceholderText="Opzionale" />
+    </StackPanel>
+</ContentDialog>
