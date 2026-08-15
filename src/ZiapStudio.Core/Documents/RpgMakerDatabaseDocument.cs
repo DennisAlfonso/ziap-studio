@@ -1,5 +1,6 @@
 using System.Text.Json.Nodes;
 using ZiapStudio.Core.Editing;
+using ZiapStudio.Core.Fusion.Weapons;
 using ZiapStudio.Core.Localization;
 
 namespace ZiapStudio.Core.Documents;
@@ -15,6 +16,8 @@ public sealed record RpgMakerDatabaseDocument : StudioDocument
     public JsonNode SourceRoot { get; init; } = new JsonArray();
 
     public DocumentSourceSnapshot SourceSnapshot { get; init; } = new();
+
+    public WeaponNotetagCatalog? WeaponNotetagCatalog { get; init; }
 }
 
 public sealed record RpgMakerDatabaseEntry

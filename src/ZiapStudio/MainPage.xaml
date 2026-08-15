@@ -218,7 +218,7 @@
                         Margin="4,0,0,0"
                         FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="ZIAP Studio 0.1.6" />
+                        Text="ZIAP Studio 0.1.8" />
                 </StackPanel>
             </Grid>
 
@@ -303,6 +303,31 @@
                     </Grid>
                 </Button>
                 <Button
+                    Grid.Row="4"
+                    Width="44"
+                    Height="44"
+                    Padding="0"
+                    VerticalAlignment="Top"
+                    AutomationProperties.Name="Pre-Flight"
+                    Click="OpenPreflightDocument_Click"
+                    ToolTipService.ToolTip="Pre-Flight">
+                    <Grid Width="44" Height="44">
+                        <Border
+                            x:Name="PreflightRailSelection"
+                            Width="3"
+                            Height="24"
+                            HorizontalAlignment="Left"
+                            Background="{ThemeResource AccentFillColorDefaultBrush}"
+                            CornerRadius="2"
+                            x:Load="{x:Bind ViewModel.IsPreflightDocumentSelected, Mode=OneWay}" />
+                        <FontIcon
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            FontSize="17"
+                            Glyph="&#xE9D9;" />
+                    </Grid>
+                </Button>
+                <Button
                     Grid.Row="5"
                     Width="44"
                     Height="44"
@@ -365,7 +390,7 @@
                     HorizontalAlignment="Center"
                     FontSize="10"
                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                    Text="0.1.6" />
+                    Text="0.1.8" />
             </Grid>
             </Grid>
         </Border>
@@ -573,6 +598,17 @@
                             </AppBarButton.Icon>
                         </AppBarButton>
                         <AppBarButton
+                            x:Name="OverviewOpenPreflightCommand"
+                            AutomationProperties.Name="Apri Pre-Flight"
+                            Click="OpenPreflightDocument_Click"
+                            Label="Pre-Flight"
+                            ToolTipService.ToolTip="Mostra l'analisi Pre-Flight"
+                            x:Load="{x:Bind ViewModel.IsProjectOverviewSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE9D9;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
                             x:Name="RemoteRefreshCommand"
                             AutomationProperties.Name="Verifica localizzazione remota"
                             Click="RefreshRemoteLocalization_Click"
@@ -582,6 +618,40 @@
                             x:Load="{x:Bind ViewModel.IsRemoteLocalizationDocumentSelected, Mode=OneWay}">
                             <AppBarButton.Icon>
                                 <FontIcon FontSize="14" Glyph="&#xE72C;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="PreflightAnalyzeCommand"
+                            AutomationProperties.Name="Analizza progetto"
+                            Click="AnalyzePreflight_Click"
+                            IsEnabled="{x:Bind ViewModel.CanAnalyzePreflight, Mode=OneWay}"
+                            Label="Analizza ora"
+                            ToolTipService.ToolTip="Esegui nuovamente il Pre-Flight"
+                            x:Load="{x:Bind ViewModel.IsPreflightDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE72C;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="PreflightRestoreAllCommand"
+                            AutomationProperties.Name="Ripristina tutte le eccezioni Pre-Flight"
+                            Click="RestoreAllPreflight_Click"
+                            Label="Ripristina tutte"
+                            ToolTipService.ToolTip="Rimuovi tutte le eccezioni Pre-Flight"
+                            x:Load="{x:Bind ViewModel.IsPreflightDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE777;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="PreflightCleanObsoleteCommand"
+                            AutomationProperties.Name="Pulisci eccezioni obsolete"
+                            Click="CleanObsoletePreflight_Click"
+                            Label="Pulisci obsolete"
+                            ToolTipService.ToolTip="Elimina manualmente le eccezioni senza problemi corrispondenti"
+                            x:Load="{x:Bind ViewModel.IsPreflightDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE74D;" />
                             </AppBarButton.Icon>
                         </AppBarButton>
                         <AppBarButton
@@ -744,6 +814,7 @@
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <Border
                                     x:Name="RemoteLocalizationCard"
@@ -856,9 +927,114 @@
                                     </StackPanel>
                                 </Border>
 
+                                <Border
+                                    x:Name="PreflightCard"
+                                    Grid.Row="1"
+                                    Grid.ColumnSpan="3"
+                                    Padding="22"
+                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="12"
+                                    x:Load="{x:Bind ViewModel.HasPreflightCard, Mode=OneWay}">
+                                    <StackPanel Spacing="18">
+                                        <Grid ColumnSpacing="16">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="4">
+                                                <TextBlock FontSize="16" FontWeight="SemiBold" Text="Pre-Flight" />
+                                                <TextBlock
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{x:Bind ViewModel.PreflightDocument.LastScanText, Mode=OneWay}" />
+                                            </StackPanel>
+                                            <ProgressRing
+                                                x:Name="PreflightProgress"
+                                                Grid.Column="1"
+                                                Width="20"
+                                                Height="20"
+                                                VerticalAlignment="Center"
+                                                IsActive="True"
+                                                x:Load="{x:Bind ViewModel.IsPreflightScanning, Mode=OneWay}" />
+                                        </Grid>
+
+                                        <Grid ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Style="{StaticResource RemoteSummaryTileStyle}">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{x:Bind ViewModel.PreflightDocument.ErrorCount, Mode=OneWay}" />
+                                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Errori" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="1" Style="{StaticResource RemoteSummaryTileStyle}">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{x:Bind ViewModel.PreflightDocument.WarningCount, Mode=OneWay}" />
+                                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Avvisi" />
+                                                </StackPanel>
+                                            </Border>
+                                            <Border Grid.Column="2" Style="{StaticResource RemoteSummaryTileStyle}">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock FontSize="22" FontWeight="SemiBold" Text="{x:Bind ViewModel.PreflightDocument.IgnoredCount, Mode=OneWay}" />
+                                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Ignorati" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Grid>
+
+                                        <StackPanel
+                                            x:Name="PreflightRecentIssuesPanel"
+                                            Spacing="8"
+                                            x:Load="{x:Bind ViewModel.PreflightDocument.HasRecentIssues, Mode=OneWay}">
+                                            <TextBlock
+                                                FontSize="12"
+                                                FontWeight="SemiBold"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="PROBLEMI RECENTI" />
+                                            <ItemsControl ItemsSource="{x:Bind ViewModel.PreflightDocument.RecentIssues, Mode=OneWay}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:PreflightIssueViewModel">
+                                                        <Grid Padding="0,5" ColumnSpacing="10">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock FontWeight="SemiBold" Text="{x:Bind Glyph}" />
+                                                            <StackPanel Grid.Column="1">
+                                                                <TextBlock FontWeight="SemiBold" Text="{x:Bind RecordText}" TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Message}" TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <Grid ColumnSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock
+                                                VerticalAlignment="Center"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="{x:Bind ViewModel.PreflightDocument.SummaryText, Mode=OneWay}"
+                                                TextWrapping="Wrap" />
+                                            <Button
+                                                Grid.Column="1"
+                                                Click="OpenPreflightDocument_Click"
+                                                Content="Mostra tutti"
+                                                Style="{StaticResource AccentButtonStyle}" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
                                 <StackPanel
                                     x:Name="OverviewDetailsSection"
-                                    Grid.Row="1"
+                                    Grid.Row="2"
                                     Grid.ColumnSpan="3"
                                     Padding="12,8,12,4"
                                     Spacing="14">
@@ -1073,6 +1249,144 @@
                     </Grid>
 
                     <Grid
+                        x:Name="PreflightDocument"
+                        Grid.Row="2"
+                        Padding="32,26"
+                        DataContext="{x:Bind ViewModel.PreflightDocument, Mode=OneWay}"
+                        x:Load="{x:Bind ViewModel.IsPreflightDocumentSelected, Mode=OneWay}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid ColumnSpacing="18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
+                                <TextBlock FontSize="30" FontWeight="SemiBold" Text="Pre-Flight" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="Controlla la coerenza semantica del progetto prima di test, build e release." />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                <TextBlock
+                                    HorizontalAlignment="Right"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                    Text="{Binding SummaryText}" />
+                                <TextBlock
+                                    HorizontalAlignment="Right"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{Binding LastScanText}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Grid.Row="1" Margin="0,22,0,18" ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock><Run Text="● " /><Run Text="{Binding ErrorCount}" /><Run Text=" Errori" /></TextBlock>
+                            <TextBlock Grid.Column="1"><Run Text="▲ " /><Run Text="{Binding WarningCount}" /><Run Text=" Avvisi" /></TextBlock>
+                            <TextBlock Grid.Column="2"><Run Text="○ " /><Run Text="{Binding IgnoredCount}" /><Run Text=" Ignorati" /></TextBlock>
+                            <TextBlock Grid.Column="3"><Run Text="◇ " /><Run Text="{Binding ObsoleteCount}" /><Run Text=" Obsoleti" /></TextBlock>
+                            <ComboBox
+                                Grid.Column="4"
+                                Width="180"
+                                HorizontalAlignment="Right"
+                                SelectedIndex="0">
+                                <x:String>Weapons</x:String>
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid Grid.Row="2" Margin="0,0,0,16" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="360" />
+                                <ColumnDefinition Width="220" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox
+                                PlaceholderText="Cerca arma, ID, regola o messaggio…"
+                                Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                            <ComboBox
+                                Grid.Column="1"
+                                HorizontalAlignment="Stretch"
+                                SelectedIndex="{Binding FilterIndex, Mode=TwoWay}">
+                                <x:String>Tutti</x:String>
+                                <x:String>Errori</x:String>
+                                <x:String>Avvisi</x:String>
+                                <x:String>Ignorati</x:String>
+                                <x:String>Obsoleti</x:String>
+                            </ComboBox>
+                            <TextBlock
+                                Grid.Column="3"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="{Binding VisibleCountText}" />
+                        </Grid>
+
+                        <Border
+                            Grid.Row="3"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10">
+                            <ListView
+                                HorizontalContentAlignment="Stretch"
+                                ItemsSource="{Binding VisibleItems}"
+                                SelectionMode="None">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:PreflightIssueViewModel">
+                                        <Grid Padding="16,13" ColumnSpacing="14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="28" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock
+                                                VerticalAlignment="Top"
+                                                FontSize="17"
+                                                FontWeight="SemiBold"
+                                                Text="{x:Bind Glyph}" />
+                                            <StackPanel Grid.Column="1" Spacing="3">
+                                                <TextBlock FontWeight="SemiBold" Text="{x:Bind RecordText}" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Text="{x:Bind Message}" TextWrapping="Wrap" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                    Text="{x:Bind SuppressionText}"
+                                                    TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
+                                                <Button
+                                                    Click="OpenPreflightIssue_Click"
+                                                    Content="Apri arma"
+                                                    Visibility="{x:Bind CanOpen, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <Button
+                                                    Click="IgnorePreflightIssue_Click"
+                                                    Content="Ignora"
+                                                    Visibility="{x:Bind CanIgnore, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                <Button
+                                                    Click="RestorePreflightIssue_Click"
+                                                    Content="Ripristina"
+                                                    Visibility="{x:Bind CanRestore, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Border>
+                    </Grid>
+
+                    <Grid
                         x:Name="DatabaseDocument"
                         Grid.Row="2"
                         Padding="32,26"
@@ -1172,21 +1486,37 @@
                                         SelectionMode="Single">
                                         <ListView.ItemTemplate>
                                             <DataTemplate x:DataType="viewModels:RpgMakerDatabaseRowViewModel">
-                                                <ItemsControl Padding="14,8" ItemsSource="{x:Bind Cells}">
-                                                    <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate>
-                                                            <StackPanel Orientation="Horizontal" />
-                                                        </ItemsPanelTemplate>
-                                                    </ItemsControl.ItemsPanel>
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate x:DataType="viewModels:RpgMakerDatabaseCellViewModel">
-                                                            <TextBlock
-                                                                Width="{x:Bind Width}"
-                                                                Text="{x:Bind Value, Mode=OneWay}"
-                                                                TextTrimming="CharacterEllipsis" />
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
+                                                <Grid>
+                                                    <ItemsControl Padding="14,8" ItemsSource="{x:Bind Cells}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <StackPanel Orientation="Horizontal" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate x:DataType="viewModels:RpgMakerDatabaseCellViewModel">
+                                                                <TextBlock
+                                                                    Width="{x:Bind Width}"
+                                                                    Text="{x:Bind Value, Mode=OneWay}"
+                                                                    TextTrimming="CharacterEllipsis" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                    <Border
+                                                        Margin="0,0,8,0"
+                                                        Padding="7,2"
+                                                        HorizontalAlignment="Right"
+                                                        VerticalAlignment="Center"
+                                                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                                        CornerRadius="8"
+                                                        ToolTipService.ToolTip="{x:Bind PreflightToolTip, Mode=OneWay}"
+                                                        Visibility="{x:Bind HasPreflightIssues, Mode=OneWay, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                        <TextBlock
+                                                            FontSize="11"
+                                                            FontWeight="SemiBold"
+                                                            Text="{x:Bind PreflightMarker, Mode=OneWay}" />
+                                                    </Border>
+                                                </Grid>
                                             </DataTemplate>
                                         </ListView.ItemTemplate>
                                     </ListView>
@@ -1222,7 +1552,7 @@
                                 <ScrollViewer HorizontalScrollBarVisibility="Disabled">
                                     <StackPanel Spacing="18">
                                         <TextBlock FontSize="21" FontWeight="SemiBold" Text="{Binding SelectedEntryTitle}" />
-                                        <ItemsControl ItemsSource="{Binding SelectedSections}">
+                                         <ItemsControl ItemsSource="{Binding SelectedSections}">
                                             <ItemsControl.ItemTemplate>
                                                 <DataTemplate x:DataType="viewModels:RpgMakerDatabaseInspectorSectionViewModel">
                                                     <Expander
@@ -1354,9 +1684,300 @@
                                                         </ItemsControl>
                                                     </Expander>
                                                 </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-                                    </StackPanel>
+                                             </ItemsControl.ItemTemplate>
+                                         </ItemsControl>
+                                         <Expander
+                                             Margin="0,2,0,8"
+                                             Padding="0"
+                                             HorizontalAlignment="Stretch"
+                                             Background="Transparent"
+                                             BorderThickness="0"
+                                             Header="{Binding AdvancedEditor.HeaderText}"
+                                             IsExpanded="{Binding AdvancedEditor.IsExpanded, Mode=TwoWay}"
+                                             Visibility="{Binding HasAdvancedEditor, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                             <StackPanel
+                                                 DataContext="{Binding AdvancedEditor}"
+                                                 Spacing="18">
+                                                 <Border
+                                                     Padding="12"
+                                                     Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                                     CornerRadius="8"
+                                                     Visibility="{Binding HasPreflightIssues, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                     <StackPanel Spacing="7">
+                                                         <TextBlock FontWeight="SemiBold" Text="Problemi Pre-Flight" />
+                                                         <ItemsControl ItemsSource="{Binding PreflightIssues}">
+                                                             <ItemsControl.ItemTemplate>
+                                                                 <DataTemplate x:DataType="viewModels:PreflightIssueViewModel">
+                                                                     <TextBlock Margin="0,2" TextWrapping="Wrap">
+                                                                         <Run FontWeight="SemiBold" Text="{x:Bind Glyph}" />
+                                                                         <Run Text="  " />
+                                                                         <Run Text="{x:Bind Message}" />
+                                                                     </TextBlock>
+                                                                 </DataTemplate>
+                                                             </ItemsControl.ItemTemplate>
+                                                         </ItemsControl>
+                                                     </StackPanel>
+                                                 </Border>
+                                                 <StackPanel Spacing="9">
+                                                     <TextBlock FontWeight="SemiBold" Text="Progressione" />
+                                                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                     <Grid ColumnSpacing="12" RowSpacing="8">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="132" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <Grid.RowDefinitions>
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                         </Grid.RowDefinitions>
+                                                         <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Rarità" />
+                                                         <ComboBox
+                                                             Grid.Column="1"
+                                                             HorizontalAlignment="Stretch"
+                                                             DisplayMemberPath="DisplayName"
+                                                             ItemsSource="{Binding RarityOptions}"
+                                                             SelectedItem="{Binding SelectedRarity, Mode=TwoWay}" />
+                                                         <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Livello richiesto" />
+                                                         <NumberBox
+                                                             Grid.Row="1"
+                                                             Grid.Column="1"
+                                                             Minimum="1"
+                                                             SmallChange="1"
+                                                             SpinButtonPlacementMode="Inline"
+                                                             Value="{Binding RequiredLevel, Mode=TwoWay}" />
+                                                         <TextBlock Grid.Row="2" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Livello massimo" />
+                                                         <ToggleSwitch
+                                                             Grid.Row="2"
+                                                             Grid.Column="1"
+                                                             Header="Override esplicito"
+                                                             IsOn="{Binding HasMaximumLevelOverride, Mode=TwoWay}" />
+                                                         <NumberBox
+                                                             Grid.Row="3"
+                                                             Grid.Column="1"
+                                                             Minimum="1"
+                                                             SmallChange="1"
+                                                             SpinButtonPlacementMode="Inline"
+                                                             Value="{Binding MaximumLevel, Mode=TwoWay}"
+                                                             Visibility="{Binding HasMaximumLevelOverride, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                         <StackPanel Grid.Row="4" Grid.Column="1" Spacing="3">
+                                                             <TextBlock
+                                                                 FontSize="11"
+                                                                 Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                                 Text="{Binding AutomaticMaximumLevelText}" />
+                                                             <TextBlock
+                                                                 FontSize="11"
+                                                                 Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                                 Text="{Binding MaximumLevelDiagnostic}"
+                                                                 TextWrapping="Wrap"
+                                                                 Visibility="{Binding HasMaximumLevelDiagnostic, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                                         </StackPanel>
+                                                     </Grid>
+                                                 </StackPanel>
+
+                                                 <StackPanel Spacing="9">
+                                                     <TextBlock FontWeight="SemiBold" Text="Perk" />
+                                                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                     <Grid ColumnSpacing="12" RowSpacing="8">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="132" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <Grid.RowDefinitions>
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                         </Grid.RowDefinitions>
+                                                         <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Colonna I · Lv. 5" />
+                                                         <ComboBox
+                                                             Grid.Column="1"
+                                                             HorizontalAlignment="Stretch"
+                                                             DisplayMemberPath="DisplayName"
+                                                             ItemsSource="{Binding PerkColumnOneOptions}"
+                                                             SelectedItem="{Binding SelectedPerkColumnOne, Mode=TwoWay}" />
+                                                         <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Colonna II · Lv. 15" />
+                                                         <ComboBox
+                                                             Grid.Row="1"
+                                                             Grid.Column="1"
+                                                             HorizontalAlignment="Stretch"
+                                                             DisplayMemberPath="DisplayName"
+                                                             ItemsSource="{Binding PerkColumnTwoOptions}"
+                                                             SelectedItem="{Binding SelectedPerkColumnTwo, Mode=TwoWay}" />
+                                                         <TextBlock Grid.Row="2" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Colonna III · Lv. 30" />
+                                                         <ComboBox
+                                                             Grid.Row="2"
+                                                             Grid.Column="1"
+                                                             HorizontalAlignment="Stretch"
+                                                             DisplayMemberPath="DisplayName"
+                                                             ItemsSource="{Binding PerkColumnThreeOptions}"
+                                                             SelectedItem="{Binding SelectedPerkColumnThree, Mode=TwoWay}" />
+                                                     </Grid>
+                                                 </StackPanel>
+
+                                                 <StackPanel Spacing="9">
+                                                     <TextBlock FontWeight="SemiBold" Text="Parametri personalizzati" />
+                                                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                     <ItemsControl ItemsSource="{Binding CustomParameters}">
+                                                         <ItemsControl.ItemTemplate>
+                                                             <DataTemplate x:DataType="viewModels:WeaponCustomParameterEditorViewModel">
+                                                                 <Grid Margin="0,2" ColumnSpacing="8">
+                                                                     <Grid.ColumnDefinitions>
+                                                                         <ColumnDefinition Width="*" />
+                                                                         <ColumnDefinition Width="72" />
+                                                                         <ColumnDefinition Width="92" />
+                                                                         <ColumnDefinition Width="Auto" />
+                                                                     </Grid.ColumnDefinitions>
+                                                                     <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" TextTrimming="CharacterEllipsis" />
+                                                                     <NumberBox
+                                                                         Grid.Column="1"
+                                                                         Header="ID"
+                                                                         Minimum="1"
+                                                                         SpinButtonPlacementMode="Compact"
+                                                                         Value="{x:Bind ParameterId, Mode=TwoWay}" />
+                                                                     <NumberBox
+                                                                         Grid.Column="2"
+                                                                         Header="Valore"
+                                                                         SpinButtonPlacementMode="Compact"
+                                                                         Value="{x:Bind Value, Mode=TwoWay}" />
+                                                                     <Button
+                                                                         Grid.Column="3"
+                                                                         VerticalAlignment="Bottom"
+                                                                         AutomationProperties.Name="Rimuovi parametro custom"
+                                                                         Click="RemoveCustomParameter_Click">
+                                                                         <FontIcon FontSize="12" Glyph="&#xE74D;" />
+                                                                     </Button>
+                                                                 </Grid>
+                                                             </DataTemplate>
+                                                         </ItemsControl.ItemTemplate>
+                                                     </ItemsControl>
+                                                     <Button
+                                                         HorizontalAlignment="Left"
+                                                         Click="AddCustomParameter_Click"
+                                                         Content="+ Aggiungi parametro" />
+                                                 </StackPanel>
+
+                                                 <StackPanel Spacing="9">
+                                                     <TextBlock FontWeight="SemiBold" Text="Lore arma" />
+                                                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                     <ComboBox
+                                                         HorizontalAlignment="Stretch"
+                                                         DisplayMemberPath="DisplayName"
+                                                         IsTextSearchEnabled="True"
+                                                         ItemsSource="{Binding LoreOptions}"
+                                                         SelectedItem="{Binding SelectedLore, Mode=TwoWay}" />
+                                                     <TextBlock
+                                                         FontFamily="Consolas"
+                                                         FontSize="11"
+                                                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                         Text="{Binding LoreStatusText}"
+                                                         TextWrapping="Wrap" />
+                                                 </StackPanel>
+
+                                                 <StackPanel Spacing="9">
+                                                     <TextBlock FontWeight="SemiBold" Text="Disassemblaggio" />
+                                                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                     <ItemsControl ItemsSource="{Binding DisassemblyResults}">
+                                                         <ItemsControl.ItemTemplate>
+                                                             <DataTemplate x:DataType="viewModels:WeaponDisassemblyResultEditorViewModel">
+                                                                 <Grid Margin="0,2" ColumnSpacing="8">
+                                                                     <Grid.ColumnDefinitions>
+                                                                         <ColumnDefinition Width="*" />
+                                                                         <ColumnDefinition Width="66" />
+                                                                         <ColumnDefinition Width="66" />
+                                                                         <ColumnDefinition Width="76" />
+                                                                         <ColumnDefinition Width="Auto" />
+                                                                     </Grid.ColumnDefinitions>
+                                                                     <ComboBox
+                                                                         HorizontalAlignment="Stretch"
+                                                                         DisplayMemberPath="DisplayName"
+                                                                         IsTextSearchEnabled="True"
+                                                                         ItemsSource="{x:Bind ResourceOptions}"
+                                                                         SelectedItem="{x:Bind SelectedResource, Mode=TwoWay}"
+                                                                         ToolTipService.ToolTip="{x:Bind RawResource}" />
+                                                                     <NumberBox
+                                                                         Grid.Column="1"
+                                                                         Header="Min"
+                                                                         Minimum="0"
+                                                                         SpinButtonPlacementMode="Compact"
+                                                                         Value="{x:Bind MinimumQuantity, Mode=TwoWay}" />
+                                                                     <NumberBox
+                                                                         Grid.Column="2"
+                                                                         Header="Max"
+                                                                         Minimum="0"
+                                                                         SpinButtonPlacementMode="Compact"
+                                                                         Value="{x:Bind MaximumQuantity, Mode=TwoWay}" />
+                                                                     <NumberBox
+                                                                         Grid.Column="3"
+                                                                         Header="%"
+                                                                         Maximum="100"
+                                                                         Minimum="0"
+                                                                         SpinButtonPlacementMode="Compact"
+                                                                         Value="{x:Bind Probability, Mode=TwoWay}" />
+                                                                     <Button
+                                                                         Grid.Column="4"
+                                                                         VerticalAlignment="Bottom"
+                                                                         AutomationProperties.Name="Rimuovi risultato disassemblaggio"
+                                                                         Click="RemoveDisassemblyResult_Click">
+                                                                         <FontIcon FontSize="12" Glyph="&#xE74D;" />
+                                                                     </Button>
+                                                                 </Grid>
+                                                             </DataTemplate>
+                                                         </ItemsControl.ItemTemplate>
+                                                     </ItemsControl>
+                                                     <Button
+                                                         HorizontalAlignment="Left"
+                                                         Click="AddDisassemblyResult_Click"
+                                                         Content="+ Aggiungi risultato" />
+                                                 </StackPanel>
+
+                                                 <StackPanel Spacing="9">
+                                                     <TextBlock FontWeight="SemiBold" Text="Comportamento" />
+                                                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                     <CheckBox
+                                                         Content="Non renderizzare l'icona oggetto"
+                                                         IsChecked="{Binding HideItemIcon, Mode=TwoWay}" />
+                                                 </StackPanel>
+
+                                                 <StackPanel
+                                                     Spacing="7"
+                                                     Visibility="{Binding HasDiagnostics, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                     <TextBlock FontWeight="SemiBold" Text="Validazione" />
+                                                     <ItemsControl ItemsSource="{Binding Diagnostics}">
+                                                         <ItemsControl.ItemTemplate>
+                                                             <DataTemplate x:DataType="viewModels:WeaponNotetagDiagnosticViewModel">
+                                                                 <TextBlock Margin="0,2" TextWrapping="Wrap">
+                                                                     <Run FontWeight="SemiBold" Text="{x:Bind Glyph}" />
+                                                                     <Run Text="  " />
+                                                                     <Run Text="{x:Bind Message}" />
+                                                                 </TextBlock>
+                                                             </DataTemplate>
+                                                         </ItemsControl.ItemTemplate>
+                                                     </ItemsControl>
+                                                 </StackPanel>
+
+                                                 <StackPanel Spacing="7">
+                                                     <TextBlock FontWeight="SemiBold" Text="Sorgente" />
+                                                     <TextBlock
+                                                         FontSize="11"
+                                                         Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                         Text="{Binding SourceSummary}"
+                                                         TextWrapping="Wrap" />
+                                                     <Expander Header="Mostra note raw" IsExpanded="False">
+                                                         <TextBox
+                                                             MaxHeight="280"
+                                                             AcceptsReturn="True"
+                                                             FontFamily="Consolas"
+                                                             FontSize="11"
+                                                             IsReadOnly="True"
+                                                             Text="{Binding RawSource, Mode=OneWay}"
+                                                             TextWrapping="NoWrap" />
+                                                     </Expander>
+                                                 </StackPanel>
+                                             </StackPanel>
+                                         </Expander>
+                                     </StackPanel>
                                 </ScrollViewer>
                             </Border>
                         </Grid>

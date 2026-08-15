@@ -144,9 +144,16 @@ public sealed partial class MainPage : Page
         {
             Grid.SetColumnSpan(RemoteLocalizationCard, useWideLayout ? 1 : 3);
         }
-        Grid.SetRow(OverviewDetailsSection, useWideLayout ? 0 : 1);
+        if (PreflightCard is not null)
+        {
+            Grid.SetRow(PreflightCard, 1);
+            Grid.SetColumn(PreflightCard, 0);
+            Grid.SetColumnSpan(PreflightCard, useWideLayout ? 1 : 3);
+        }
+        Grid.SetRow(OverviewDetailsSection, useWideLayout ? 0 : 2);
         Grid.SetColumn(OverviewDetailsSection, useWideLayout ? 2 : 0);
         Grid.SetColumnSpan(OverviewDetailsSection, useWideLayout ? 1 : 3);
+        Grid.SetRowSpan(OverviewDetailsSection, useWideLayout ? 2 : 1);
     }
 
     private void ExplorerSplitter_PointerPressed(object sender, PointerRoutedEventArgs e) =>
@@ -276,6 +283,64 @@ public sealed partial class MainPage : Page
 
     private void OpenRemoteLocalizationDocument_Click(object sender, RoutedEventArgs e) =>
         ViewModel.OpenRemoteLocalizationDocument();
+
+    private void OpenPreflightDocument_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.OpenPreflightDocument();
+
+    private async void AnalyzePreflight_Click(object sender, RoutedEventArgs e) =>
+        await ViewModel.AnalyzePreflightAsync();
+
+    private async void OpenPreflightIssue_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PreflightIssueViewModel item })
+        {
+            await ViewModel.OpenPreflightIssueAsync(item);
+        }
+    }
+
+    private async void IgnorePreflightIssue_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: PreflightIssueViewModel item })
+        {
+            return;
+        }
+
+        var reasonBox = new TextBox
+        {
+            Header = "Motivo (facoltativo)",
+            PlaceholderText = "Perché questo problema è accettabile?",
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinWidth = 420,
+        };
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = $"Ignora {item.RuleId}",
+            Content = reasonBox,
+            PrimaryButtonText = "Ignora",
+            CloseButtonText = "Annulla",
+            DefaultButton = ContentDialogButton.Primary,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            await ViewModel.IgnorePreflightIssueAsync(item, reasonBox.Text);
+        }
+    }
+
+    private async void RestorePreflightIssue_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: PreflightIssueViewModel item })
+        {
+            await ViewModel.RestorePreflightIssueAsync(item);
+        }
+    }
+
+    private async void RestoreAllPreflight_Click(object sender, RoutedEventArgs e) =>
+        await ViewModel.RestoreAllPreflightIssuesAsync();
+
+    private async void CleanObsoletePreflight_Click(object sender, RoutedEventArgs e) =>
+        await ViewModel.CleanObsoletePreflightSuppressionsAsync();
 
     private void OpenRemoteLocalizationAreaInConsole_Click(object sender, RoutedEventArgs e) =>
         ViewModel.OpenRemoteLocalizationAreaInConsole();
@@ -506,6 +571,38 @@ public sealed partial class MainPage : Page
         if (result == ContentDialogResult.Primary && dialog.Options is not null)
         {
             await ViewModel.InitializeProjectAsync(dialog.Options);
+        }
+    }
+
+    private void AddCustomParameter_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: WeaponAdvancedEditorViewModel editor })
+        {
+            editor.AddCustomParameter();
+        }
+    }
+
+    private void RemoveCustomParameter_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: WeaponCustomParameterEditorViewModel parameter })
+        {
+            parameter.Remove();
+        }
+    }
+
+    private void AddDisassemblyResult_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: WeaponAdvancedEditorViewModel editor })
+        {
+            editor.AddDisassemblyResult();
+        }
+    }
+
+    private void RemoveDisassemblyResult_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: WeaponDisassemblyResultEditorViewModel result })
+        {
+            result.Remove();
         }
     }
 

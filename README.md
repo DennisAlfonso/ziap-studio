@@ -1,10 +1,9 @@
 # ZIAP Studio
 
 ZIAP Studio è un editor desktop Windows per i progetti Zenkaiverse. La milestone
-`0.1.6` rifinisce il workspace con un documento strumento Remote Localization,
-una Overview sintetica, CommandBar contestuale e navigazione rail con selezione
-esplicita. Published Localization Sync continua a confrontare e aggiornare i file
-in modo esplicito e atomico.
+`0.1.8 — Project Pre-Flight` introduce la prima analisi semantica dell'intero
+database Weapons, con problemi navigabili, eccezioni persistenti e indicatori
+contestuali nell'editor.
 
 ## Funzionalità attuali
 
@@ -35,6 +34,16 @@ in modo esplicito e atomico.
 - filtri per categoria nella surface di confronto JSON;
 - definizioni dichiarative di colonne, campi e sezioni degli inspector;
 - editor dichiarativo per Armi; Attori, Nemici e fallback generico restano read-only;
+- sezione `Avanzate` delle armi chiusa di default, dedicata ai sistemi Fusion/plugin;
+- editor semantico per `perk`, `itemRare`, `lvReq`, `maxLevel` e `fhd:no_itemicon`;
+- picker perk posizionali per colonna I/II/III, alimentati da `ZDP_WeaponPerks.js`;
+- collezione modificabile dei parametri `cp[n]`, con `cp[1]` risolto come Maestria Hex;
+- picker lore da `locales/it/books.json`, con ID, chiavi canoniche e alias legacy preservati;
+- mini-editor del `Disassemble Pool` con risorsa raw, nome localizzato, quantità e probabilità;
+- sorgente note sempre disponibile in sola lettura con contatori riconosciuti/non gestiti;
+- parser generico dei notetag con AST e span originali, riutilizzabile sugli altri database;
+- patch interne alle note che non eliminano testo, blocchi o notetag sconosciuti;
+- validazioni pre-save per colonne perk, rarità, livelli, parametri, lore e disassemblaggio;
 - `NumberBox` per prezzo, Icon ID e parametri delle armi;
 - `ComboBox` semantiche per tipo, slot e animazione, salvando sempre l'ID raw;
 - Nome e Descrizione localizzati intenzionalmente protetti dalla modifica diretta;
@@ -83,13 +92,22 @@ in modo esplicito e atomico.
 - visualizzazione di nome, package, versione, tipo, publisher e percorso;
 - apertura della cartella in Esplora file;
 - recent projects persistiti in `%LOCALAPPDATA%\Zenkaiverse\ZIAP Studio`.
+- motore Pre-Flight generico con provider e regole separati dalla UI;
+- profilo iniziale Weapons per rarità, perk, livelli, parametri custom, lore e disassemblaggio;
+- analisi automatica all'apertura del progetto e dopo ogni salvataggio, oltre al comando manuale;
+- pagina Pre-Flight con ricerca, filtri per severità, ignorati ed eccezioni obsolete;
+- navigazione diretta dal problema al record arma con apertura della sezione `Avanzate`;
+- contatori nella Overview, marker nella lista Armi e diagnostica contestuale nell'Inspector;
+- suppression identificate da regola, database e record, salvate solo nel metadata `.ziap`;
+- ripristino delle eccezioni e pulizia manuale delle sole suppression obsolete.
 
 ## Architettura
 
 ```text
 src/
-├── ZiapStudio.Core/       progetti, documenti, editing e ChangeSet
+├── ZiapStudio.Core/       progetti, documenti, editing, ChangeSet e AST notetag
 ├── ZiapStudio.Services/   resolver, asset, salvataggio e integrazioni
+│   ├── Fusion/Weapons/   cataloghi, semantica e patch dei notetag arma
 │   ├── Authentication/  OAuth browser, Firebase token e sessione
 │   └── Integration/
 │       ├── Console/       target, deep-link builder e servizio di apertura
@@ -202,3 +220,32 @@ Un progetto può dichiarare `.ziap/project.json`:
 I valori ZIAP hanno precedenza sui metadata dell'engine. `package.json` conserva
 la propria identità separata: il suo campo `name` non sostituisce il nome del
 progetto. I campi ancora mancanti ricevono un fallback sicuro dal filesystem.
+
+## Project Pre-Flight
+
+La `0.1.8` analizza `data/Weapons.json` senza modificarlo. Il profilo considera
+soltanto i record non null con `wtypeId != 0` e riusa lo stesso provider semantico
+dell'editor avanzato, così parsing, cataloghi e diagnostica non possono divergere.
+L'analisi parte all'apertura del progetto, dopo un salvataggio e tramite `Analizza ora`.
+
+Il comando `Ignora` registra una suppression strutturale in `.ziap/project.json`:
+
+```json
+{
+  "preflight": {
+    "suppressions": [
+      {
+        "ruleId": "weapon.rarity.missing",
+        "scope": "Weapons",
+        "recordId": 12,
+        "ignoredAt": "2026-08-15T14:30:00+02:00",
+        "reason": "Eccezione intenzionale per il prototipo"
+      }
+    ]
+  }
+}
+```
+
+L'identità è `ruleId + scope + recordId`: rinominare un'arma non perde quindi
+l'eccezione. Le suppression che non corrispondono più a un problema restano visibili
+come obsolete e vengono rimosse soltanto con un comando manuale.

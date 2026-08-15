@@ -5,6 +5,7 @@ using ZiapStudio.Core.Documents;
 using ZiapStudio.Core.Editing;
 using ZiapStudio.Core.Localization;
 using ZiapStudio.Core.Models;
+using ZiapStudio.Core.Preflight;
 using ZiapStudio.Platform.Windows;
 using ZiapStudio.Services;
 using ZiapStudio.Services.Assets;
@@ -12,6 +13,7 @@ using ZiapStudio.Services.Authentication;
 using ZiapStudio.Services.Documents;
 using ZiapStudio.Services.Editing;
 using ZiapStudio.Services.Initialization;
+using ZiapStudio.Services.Fusion.Preflight;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
 using ZiapStudio.Services.Providers;
@@ -36,6 +38,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private readonly PublishedLocalizationSyncService _publishedLocalizationSyncService;
     private readonly ZiapAuthenticationService _authenticationService;
     private readonly RemoteLocalizationDocumentViewModel _remoteLocalizationDocument = new();
+    private readonly PreflightScanner _preflightScanner;
+    private readonly PreflightSuppressionStore _preflightSuppressionStore;
+    private readonly PreflightDocumentViewModel _preflightDocument = new();
     private ZiapProject? _currentProject;
     private string? _errorMessage;
     private string _statusMessage = "Scegli una cartella per iniziare.";
@@ -46,6 +51,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private string _remoteLocalizationMessage = "Apri un progetto ZIAP per verificare la localizzazione.";
     private int _remoteLocalizationRequestVersion;
     private bool _isAuthenticationBusy;
+    private bool _isPreflightScanning;
+    private PreflightScanResult _preflightResult = PreflightScanResult.Empty;
 
     public MainPageViewModel(
         ProjectService projectService,
@@ -62,7 +69,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         ConsoleIntegrationService consoleIntegrationService,
         RemoteLocalizationService remoteLocalizationService,
         PublishedLocalizationSyncService publishedLocalizationSyncService,
-        ZiapAuthenticationService authenticationService)
+        ZiapAuthenticationService authenticationService,
+        PreflightScanner preflightScanner,
+        PreflightSuppressionStore preflightSuppressionStore)
     {
         _projectService = projectService;
         _projectInitializationService = projectInitializationService;
@@ -79,6 +88,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         _remoteLocalizationService = remoteLocalizationService;
         _publishedLocalizationSyncService = publishedLocalizationSyncService;
         _authenticationService = authenticationService;
+        _preflightScanner = preflightScanner;
+        _preflightSuppressionStore = preflightSuppressionStore;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -95,6 +106,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public RemoteLocalizationDocumentViewModel RemoteLocalizationDocument =>
         _remoteLocalizationDocument;
+
+    public PreflightDocumentViewModel PreflightDocument => _preflightDocument;
 
     public ProjectIdGenerator ProjectIdGenerator => _projectIdGenerator;
 
@@ -137,6 +150,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     public string ProjectPath => CurrentProject?.Path ?? string.Empty;
 
     public bool HasRemoteLocalizationCard => CurrentProject?.IsZiapInitialized == true;
+
+    public bool HasPreflightCard => CurrentProject?.IsZiapInitialized == true;
 
     public bool HasRemoteLocalizationFiles => RemoteLocalizationFiles.Count > 0;
 
@@ -182,6 +197,21 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     public bool CanRefreshRemoteLocalization =>
         CurrentProject?.IsZiapInitialized == true && !IsRemoteLocalizationChecking;
 
+    public bool IsPreflightScanning
+    {
+        get => _isPreflightScanning;
+        private set
+        {
+            if (SetProperty(ref _isPreflightScanning, value))
+            {
+                OnPropertyChanged(nameof(CanAnalyzePreflight));
+            }
+        }
+    }
+
+    public bool CanAnalyzePreflight =>
+        CurrentProject?.IsZiapInitialized == true && !IsPreflightScanning;
+
     public string RemoteLocalizationMessage
     {
         get => _remoteLocalizationMessage;
@@ -197,6 +227,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             {
                 OnPropertyChanged(nameof(IsProjectOverviewSelected));
                 OnPropertyChanged(nameof(IsRemoteLocalizationDocumentSelected));
+                OnPropertyChanged(nameof(IsPreflightDocumentSelected));
                 OnPropertyChanged(nameof(IsDatabaseDocumentSelected));
                 OnPropertyChanged(nameof(IsEditingDocumentSelected));
                 OnPropertyChanged(nameof(ActiveDatabaseDocument));
@@ -209,6 +240,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public bool IsRemoteLocalizationDocumentSelected =>
         SelectedDocument?.IsRemoteLocalization == true;
+
+    public bool IsPreflightDocumentSelected => SelectedDocument?.IsPreflight == true;
 
     public bool IsDatabaseDocumentSelected => ActiveDatabaseDocument is not null;
 
@@ -672,6 +705,154 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         SelectedDocument = openDocument;
     }
 
+    public void OpenPreflightDocument()
+    {
+        if (CurrentProject?.IsZiapInitialized != true)
+        {
+            return;
+        }
+
+        var openDocument = OpenDocuments.FirstOrDefault(document => document.IsPreflight);
+        if (openDocument is null)
+        {
+            openDocument = DocumentTabViewModel.CreatePreflight(
+                CurrentProject.Id,
+                _preflightDocument);
+            OpenDocuments.Add(openDocument);
+        }
+
+        SelectedDocument = openDocument;
+    }
+
+    public async Task AnalyzePreflightAsync()
+    {
+        var project = CurrentProject;
+        if (project?.IsZiapInitialized != true || IsPreflightScanning)
+        {
+            return;
+        }
+
+        IsPreflightScanning = true;
+        try
+        {
+            var suppressions = await _preflightSuppressionStore.LoadAsync(project.Path);
+            if (!ReferenceEquals(project, CurrentProject))
+            {
+                return;
+            }
+
+            _preflightResult = await _preflightScanner.ScanAsync(project, suppressions);
+            if (!ReferenceEquals(project, CurrentProject))
+            {
+                return;
+            }
+
+            ApplyPreflightResult();
+            StatusMessage = "Pre-Flight completato · " +
+                $"{FormatCount(_preflightResult.ErrorCount, "errore", "errori")}, " +
+                $"{FormatCount(_preflightResult.WarningCount, "avviso", "avvisi")}.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException or ExternalDocumentModificationException)
+        {
+            ErrorMessage = $"Pre-Flight non completato: {exception.Message}";
+        }
+        finally
+        {
+            IsPreflightScanning = false;
+        }
+    }
+
+    public async Task IgnorePreflightIssueAsync(
+        PreflightIssueViewModel item,
+        string? reason)
+    {
+        if (CurrentProject?.IsZiapInitialized != true || !item.CanIgnore)
+        {
+            return;
+        }
+
+        var projectPath = CurrentProject.Path;
+        await PersistPreflightSuppressionChangeAsync(() =>
+            _preflightSuppressionStore.IgnoreAsync(
+            projectPath,
+            new PreflightSuppression
+            {
+                RuleId = item.RuleId,
+                Scope = item.Scope,
+                RecordId = item.RecordId,
+                Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim(),
+                IgnoredAt = DateTimeOffset.Now,
+            }));
+    }
+
+    public async Task RestorePreflightIssueAsync(PreflightIssueViewModel item)
+    {
+        if (CurrentProject?.IsZiapInitialized != true || !item.CanRestore)
+        {
+            return;
+        }
+
+        var projectPath = CurrentProject.Path;
+        await PersistPreflightSuppressionChangeAsync(() =>
+            _preflightSuppressionStore.RestoreAsync(projectPath, item.Identity));
+    }
+
+    public async Task RestoreAllPreflightIssuesAsync()
+    {
+        if (CurrentProject?.IsZiapInitialized != true)
+        {
+            return;
+        }
+
+        var projectPath = CurrentProject.Path;
+        await PersistPreflightSuppressionChangeAsync(() =>
+            _preflightSuppressionStore.RestoreAllAsync(projectPath));
+    }
+
+    public async Task CleanObsoletePreflightSuppressionsAsync()
+    {
+        if (CurrentProject?.IsZiapInitialized != true ||
+            _preflightResult.ObsoleteSuppressions.Count == 0)
+        {
+            return;
+        }
+
+        var projectPath = CurrentProject.Path;
+        var obsolete = _preflightResult.ObsoleteSuppressions;
+        await PersistPreflightSuppressionChangeAsync(() =>
+            _preflightSuppressionStore.RemoveObsoleteAsync(projectPath, obsolete));
+    }
+
+    public async Task OpenPreflightIssueAsync(PreflightIssueViewModel item)
+    {
+        if (item.NavigationTarget is null)
+        {
+            return;
+        }
+
+        await NavigateToReferenceAsync(item.NavigationTarget.AbsoluteUri);
+        if (SelectedDocument?.Database?.AdvancedEditor is { } advancedEditor)
+        {
+            advancedEditor.IsExpanded = true;
+        }
+    }
+
+    private async Task PersistPreflightSuppressionChangeAsync(Func<Task> mutation)
+    {
+        ClearError();
+        try
+        {
+            await mutation();
+            await AnalyzePreflightAsync();
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or
+            System.Text.Json.JsonException or ExternalDocumentModificationException or InvalidOperationException)
+        {
+            ErrorMessage = $"Impossibile aggiornare le eccezioni Pre-Flight: {exception.Message}";
+        }
+    }
+
     public void OpenRemoteLocalizationAreaInConsole()
     {
         if (CurrentProject is null)
@@ -732,6 +913,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             tab.PropertyChanged += DocumentTab_PropertyChanged;
             OpenDocuments.Add(tab);
             SelectedDocument = tab;
+            tab.Database?.ApplyPreflightIssues(_preflightResult.ActiveIssues);
         }
         catch (DocumentLoadException exception)
         {
@@ -794,6 +976,10 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         {
             var result = await _documentSaveService.SaveAsync(document.EditSession);
             ApplySaveResult(document, result);
+            if (result.Status == DocumentSaveStatus.Saved)
+            {
+                await AnalyzePreflightAsync();
+            }
             return result;
         }
         finally
@@ -904,6 +1090,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
         if (loaded)
         {
+            await AnalyzePreflightAsync();
             await RefreshRemoteLocalizationAsync();
         }
     }
@@ -944,6 +1131,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
         OpenDocuments.Clear();
         _remoteLocalizationDocument.Reset();
+        _preflightResult = PreflightScanResult.Empty;
+        _preflightDocument.Reset();
         RemoteLocalizationRecentProblems.Clear();
         var overview = DocumentTabViewModel.CreateProjectOverview(project.Id);
         OpenDocuments.Add(overview);
@@ -951,6 +1140,17 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         ResetRemoteLocalizationStatus(project.IsZiapInitialized
             ? "Verifica delle versioni pubblicate in attesa…"
             : "Inizializza il progetto ZIAP per verificare le versioni pubblicate.");
+    }
+
+    private void ApplyPreflightResult()
+    {
+        _preflightDocument.Update(_preflightResult);
+        foreach (var document in OpenDocuments)
+        {
+            document.Database?.ApplyPreflightIssues(_preflightResult.ActiveIssues);
+        }
+
+        OnPropertyChanged(nameof(PreflightDocument));
     }
 
     private void DocumentTab_PropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -1035,7 +1235,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(Publisher));
         OnPropertyChanged(nameof(ProjectPath));
         OnPropertyChanged(nameof(HasRemoteLocalizationCard));
+        OnPropertyChanged(nameof(HasPreflightCard));
         OnPropertyChanged(nameof(CanRefreshRemoteLocalization));
+        OnPropertyChanged(nameof(CanAnalyzePreflight));
     }
 
     private void NotifyAuthenticationPropertiesChanged()
@@ -1119,6 +1321,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    private static string FormatCount(int count, string singular, string plural) =>
+        $"{count} {(count == 1 ? singular : plural)}";
 
     private static string ValueOrDash(string? value) =>
         string.IsNullOrWhiteSpace(value) ? "—" : value;

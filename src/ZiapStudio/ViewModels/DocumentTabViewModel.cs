@@ -12,11 +12,13 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         DocumentDescriptor descriptor,
         RpgMakerDatabaseDocumentViewModel? database,
         RemoteLocalizationDocumentViewModel? remoteLocalization = null,
+        PreflightDocumentViewModel? preflight = null,
         DocumentEditSession? editSession = null)
     {
         Descriptor = descriptor;
         Database = database;
         RemoteLocalization = remoteLocalization;
+        Preflight = preflight;
         EditSession = editSession;
         if (EditSession is not null)
         {
@@ -38,9 +40,13 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
 
     public bool IsRemoteLocalization => RemoteLocalization is not null;
 
+    public bool IsPreflight => Preflight is not null;
+
     public RpgMakerDatabaseDocumentViewModel? Database { get; }
 
     public RemoteLocalizationDocumentViewModel? RemoteLocalization { get; }
+
+    public PreflightDocumentViewModel? Preflight { get; }
 
     public DocumentEditSession? EditSession { get; }
 
@@ -72,6 +78,19 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         },
         database: null,
         remoteLocalization: remoteLocalization);
+
+    public static DocumentTabViewModel CreatePreflight(
+        string projectId,
+        PreflightDocumentViewModel preflight) => new(
+        new DocumentDescriptor
+        {
+            Id = new DocumentId($"{projectId}:preflight"),
+            DisplayName = "Pre-Flight",
+            Kind = DocumentKind.Tool,
+            ResourceId = new Uri("ziap://project/preflight"),
+        },
+        database: null,
+        preflight: preflight);
 
     public static DocumentTabViewModel Create(
         RpgMakerDatabaseDocument document,

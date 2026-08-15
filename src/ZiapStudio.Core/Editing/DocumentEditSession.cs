@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using ZiapStudio.Core.Documents;
+using ZiapStudio.Core.Fusion.Weapons;
 
 namespace ZiapStudio.Core.Editing;
 
@@ -24,6 +25,7 @@ public sealed class DocumentEditSession : INotifyPropertyChanged
         WorkingState = document.SourceRoot.DeepClone();
         _originalState = document.SourceRoot.DeepClone();
         BaselineIssues = baselineIssues ?? [];
+        WeaponNotetagCatalog = document.WeaponNotetagCatalog;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -39,6 +41,8 @@ public sealed class DocumentEditSession : INotifyPropertyChanged
     public JsonNode OriginalState => _originalState.DeepClone();
 
     public IReadOnlyList<DocumentValidationIssue> BaselineIssues { get; }
+
+    public WeaponNotetagCatalog? WeaponNotetagCatalog { get; }
 
     public bool IsDirty => !JsonNode.DeepEquals(WorkingState, _originalState);
 

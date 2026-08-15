@@ -7,6 +7,7 @@ using ZiapStudio.Services.Assets;
 using ZiapStudio.Services.Authentication;
 using ZiapStudio.Services.Documents;
 using ZiapStudio.Services.Editing;
+using ZiapStudio.Services.Fusion.Preflight;
 using ZiapStudio.Services.Initialization;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
@@ -40,6 +41,8 @@ public sealed partial class MainWindow : Window
         RemoteLocalizationService remoteLocalizationService,
         PublishedLocalizationSyncService publishedLocalizationSyncService,
         ZiapAuthenticationService authenticationService,
+        PreflightScanner preflightScanner,
+        PreflightSuppressionStore preflightSuppressionStore,
         StudioLayoutSettingsService layoutSettingsService,
         StudioLayoutSettings layoutSettings)
     {
@@ -67,7 +70,9 @@ public sealed partial class MainWindow : Window
             consoleIntegrationService,
             remoteLocalizationService,
             publishedLocalizationSyncService,
-            authenticationService);
+            authenticationService,
+            preflightScanner,
+            preflightSuppressionStore);
         _mainPage = new MainPage(viewModel, layoutSettings);
         RootFrame.Content = _mainPage;
         AppWindow.Changed += AppWindow_Changed;

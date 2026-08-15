@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ZiapStudio.Core.Documents;
 using ZiapStudio.Core.Editing;
+using ZiapStudio.Services.Fusion.Weapons;
 
 namespace ZiapStudio.Services.Editing;
 
@@ -77,6 +78,32 @@ public sealed class DocumentValidationService
                     $"{change.PropertyPath} cambia tipo da {Describe(oldKind)} a {Describe(newKind)}.",
                     change.Target,
                     change.PropertyPath));
+            }
+
+            if (session.Definition.ResourceName.Equals("weapons", StringComparison.OrdinalIgnoreCase) &&
+                change.PropertyPath.Equals("note", StringComparison.OrdinalIgnoreCase) &&
+                change.NewValue is JsonValue noteValue &&
+                noteValue.TryGetValue<string>(out var note))
+            {
+                var metadata = new WeaponAdvancedMetadataProvider().Parse(
+                    note,
+                    session.WeaponNotetagCatalog);
+                foreach (var diagnostic in metadata.Diagnostics.Where(diagnostic =>
+                    diagnostic.Severity != WeaponNotetagDiagnosticSeverity.Information))
+                {
+                    issues.Add(new DocumentValidationIssue
+                    {
+                        Severity = diagnostic.Severity == WeaponNotetagDiagnosticSeverity.Error
+                            ? DocumentValidationSeverity.Error
+                            : DocumentValidationSeverity.Warning,
+                        Code = diagnostic.Severity == WeaponNotetagDiagnosticSeverity.Error
+                            ? "invalid-weapon-notetag"
+                            : "weapon-notetag-warning",
+                        Message = diagnostic.Message,
+                        Target = change.Target,
+                        PropertyPath = change.PropertyPath,
+                    });
+                }
             }
 
             var definition = session.Definition.Sections

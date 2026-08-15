@@ -5,7 +5,9 @@ using System.Text.Json.Nodes;
 using ZiapStudio.Core.Assets;
 using ZiapStudio.Core.Documents;
 using ZiapStudio.Core.Editing;
+using ZiapStudio.Core.Fusion.Weapons;
 using ZiapStudio.Core.Localization;
+using ZiapStudio.Core.Preflight;
 
 namespace ZiapStudio.ViewModels;
 
@@ -15,8 +17,10 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
     private readonly IReadOnlyList<RpgMakerDatabaseRowViewModel> _allEntries;
     private readonly IReadOnlyDictionary<AssetPreviewKey, AssetPreviewResult> _assetPreviews;
     private readonly DocumentEditSession _editSession;
+    private readonly WeaponNotetagCatalog? _documentWeaponCatalog;
     private string _searchText = string.Empty;
     private RpgMakerDatabaseRowViewModel? _selectedEntry;
+    private IReadOnlyList<PreflightIssue> _preflightIssues = [];
 
     public RpgMakerDatabaseDocumentViewModel(
         RpgMakerDatabaseDocument document,
@@ -27,6 +31,7 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
         _assetPreviews = assetPreviews ??
             new Dictionary<AssetPreviewKey, AssetPreviewResult>();
         _editSession = editSession;
+        _documentWeaponCatalog = document.WeaponNotetagCatalog;
         _editSession.PropertyChanged += EditSession_PropertyChanged;
         DisplayName = document.Descriptor.DisplayName;
         SourcePath = document.SourcePath;
@@ -48,6 +53,10 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
     public ObservableCollection<RpgMakerDatabaseRowViewModel> FilteredEntries { get; } = [];
 
     public ObservableCollection<RpgMakerDatabaseInspectorSectionViewModel> SelectedSections { get; } = [];
+
+    public WeaponAdvancedEditorViewModel? AdvancedEditor { get; private set; }
+
+    public bool HasAdvancedEditor => AdvancedEditor is not null;
 
     public string SearchText
     {
@@ -116,6 +125,20 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
         }
     }
 
+    public void ApplyPreflightIssues(IEnumerable<PreflightIssue> issues)
+    {
+        _preflightIssues = _definition.ResourceName.Equals("weapons", StringComparison.OrdinalIgnoreCase)
+            ? issues.Where(issue => issue.Scope.Equals("Weapons", StringComparison.OrdinalIgnoreCase)).ToArray()
+            : [];
+        foreach (var row in _allEntries)
+        {
+            row.ApplyPreflightIssues(_preflightIssues.Where(issue => issue.RecordId == row.Entry.Id));
+        }
+
+        AdvancedEditor?.ApplyPreflightIssues(_preflightIssues.Where(issue =>
+            issue.RecordId == SelectedEntry?.Entry.Id));
+    }
+
     private void ApplyFilter()
     {
         var previousSelection = SelectedEntry;
@@ -146,13 +169,22 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
     private void RebuildInspector()
     {
         SelectedSections.Clear();
+        AdvancedEditor = null;
         if (SelectedEntry is null)
         {
+            OnPropertyChanged(nameof(AdvancedEditor));
+            OnPropertyChanged(nameof(HasAdvancedEditor));
             return;
         }
 
         foreach (var section in _definition.Sections)
         {
+            if (_definition.ResourceName.Equals("weapons", StringComparison.OrdinalIgnoreCase) &&
+                section.DisplayName.Equals("Note", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
             SelectedSections.Add(new RpgMakerDatabaseInspectorSectionViewModel(
                 section.DisplayName,
                 section.Fields
@@ -165,6 +197,19 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
                             new AssetPreviewKey(SelectedEntry.Entry.Id, field.Key))))
                     .ToArray()));
         }
+
+        if (_definition.ResourceName.Equals("weapons", StringComparison.OrdinalIgnoreCase))
+        {
+            AdvancedEditor = new WeaponAdvancedEditorViewModel(
+                SelectedEntry.Entry.Id,
+                _editSession,
+                _documentWeaponCatalog);
+            AdvancedEditor.ApplyPreflightIssues(_preflightIssues.Where(issue =>
+                issue.RecordId == SelectedEntry.Entry.Id));
+        }
+
+        OnPropertyChanged(nameof(AdvancedEditor));
+        OnPropertyChanged(nameof(HasAdvancedEditor));
     }
 
     private void EditSession_PropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -183,6 +228,8 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
         {
             field.RefreshFromSession();
         }
+
+        AdvancedEditor?.RefreshFromSession();
 
         OnPropertyChanged(nameof(ChangeCountText));
     }
@@ -204,8 +251,11 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
 
 }
 
-public sealed class RpgMakerDatabaseRowViewModel
+public sealed class RpgMakerDatabaseRowViewModel : INotifyPropertyChanged
 {
+    private int _preflightIssueCount;
+    private bool _hasPreflightErrors;
+
     public RpgMakerDatabaseRowViewModel(
         RpgMakerDatabaseEntry entry,
         IReadOnlyList<RpgMakerDatabaseColumnDefinition> columns)
@@ -220,7 +270,32 @@ public sealed class RpgMakerDatabaseRowViewModel
 
     public RpgMakerDatabaseEntry Entry { get; }
 
+    public event PropertyChangedEventHandler? PropertyChanged;
+
     public IReadOnlyList<RpgMakerDatabaseCellViewModel> Cells { get; }
+
+    public int PreflightIssueCount => _preflightIssueCount;
+
+    public bool HasPreflightIssues => PreflightIssueCount > 0;
+
+    public string PreflightMarker => !HasPreflightIssues
+        ? string.Empty
+        : _hasPreflightErrors ? $"● {PreflightIssueCount}" : $"▲ {PreflightIssueCount}";
+
+    public string PreflightToolTip => !HasPreflightIssues
+        ? string.Empty
+        : $"{PreflightIssueCount} problemi Pre-Flight";
+
+    public void ApplyPreflightIssues(IEnumerable<PreflightIssue> issues)
+    {
+        var current = issues.ToArray();
+        _preflightIssueCount = current.Length;
+        _hasPreflightErrors = current.Any(issue => issue.Severity == PreflightSeverity.Error);
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PreflightIssueCount)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(HasPreflightIssues)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PreflightMarker)));
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(PreflightToolTip)));
+    }
 
     public void RefreshFromSession(
         DocumentEditSession session,

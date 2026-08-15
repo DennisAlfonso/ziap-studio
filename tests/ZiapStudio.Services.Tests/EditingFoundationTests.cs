@@ -4,6 +4,7 @@ using ZiapStudio.Core.Editing;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Services.Documents;
 using ZiapStudio.Services.Editing;
+using ZiapStudio.Services.Fusion.Weapons;
 
 namespace ZiapStudio.Services.Tests;
 
@@ -254,6 +255,64 @@ public sealed class EditingFoundationTests
         Assert.Null(savedRoot[2]);
         Assert.Equal("preservami", savedRoot[1]!["qualcheCampoCustom"]!.GetValue<string>());
         Assert.Equal("<custom>", savedRoot[1]!["note"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task AdvancedWeaponNotetags_SaveOnlyRequestedSemanticValues()
+    {
+        using var workspace = new TestWorkspace();
+        const string note =
+            "<perk:incrementoAttacco,nullo,nullo>\n" +
+            "<cp[1]: +2>\n" +
+            "<itemRare:0>\n" +
+            "<plugin-sconosciuto:preservami>\n" +
+            "<Disassemble Pool>\n" +
+            "   x1-2 {db[0].partiArmamento}\n" +
+            "</Disassemble Pool>";
+        var json = StandardWeaponsJson.Replace(
+            "<custom>",
+            note.Replace("\n", "\\n", StringComparison.Ordinal),
+            StringComparison.Ordinal);
+        var sourcePath = workspace.WriteFile("data/Weapons.json", json);
+        var document = await OpenWeaponsAsync(workspace);
+        var session = new DocumentEditSessionFactory().Create(document);
+        var editor = new WeaponAdvancedNoteEditor();
+        var changed = editor.SetRarity(note, 1);
+        changed = editor.SetCustomParameter(changed, 1, 1, 3);
+        changed = editor.UpdateDisassemblyResult(
+            changed,
+            0,
+            "{db[0].partiArmamento}",
+            2,
+            3,
+            100);
+        session.SetValue(1, "note", JsonValue.Create(changed));
+
+        var result = await CreateSaveService().SaveAsync(session);
+
+        Assert.Equal(DocumentSaveStatus.Saved, result.Status);
+        var expected = json
+            .Replace("<itemRare:0>", "<itemRare:1>", StringComparison.Ordinal)
+            .Replace("<cp[1]: +2>", "<cp[1]: +3>", StringComparison.Ordinal)
+            .Replace("x1-2", "x2-3", StringComparison.Ordinal);
+        Assert.Equal(expected, await File.ReadAllTextAsync(sourcePath));
+        Assert.Contains("<plugin-sconosciuto:preservami>", expected);
+    }
+
+    [Fact]
+    public async Task AdvancedWeaponNotetags_BlockSaveWhenEditedNoteIsInvalid()
+    {
+        using var workspace = new TestWorkspace();
+        var sourcePath = workspace.WriteFile("data/Weapons.json", StandardWeaponsJson);
+        var document = await OpenWeaponsAsync(workspace);
+        var session = new DocumentEditSessionFactory().Create(document);
+        session.SetValue(1, "note", JsonValue.Create("<itemRare:8>\n<perk:nullo,nullo>"));
+
+        var result = await CreateSaveService().SaveAsync(session);
+
+        Assert.Equal(DocumentSaveStatus.ValidationFailed, result.Status);
+        Assert.Contains(result.Validation.Issues, issue => issue.Code == "invalid-weapon-notetag");
+        Assert.Equal(StandardWeaponsJson, await File.ReadAllTextAsync(sourcePath));
     }
 
     private const string StandardWeaponsJson =

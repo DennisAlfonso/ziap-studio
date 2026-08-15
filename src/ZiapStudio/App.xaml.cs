@@ -5,6 +5,9 @@ using ZiapStudio.Services.Assets;
 using ZiapStudio.Services.Authentication;
 using ZiapStudio.Services.Documents;
 using ZiapStudio.Services.Editing;
+using ZiapStudio.Services.Fusion.Preflight;
+using ZiapStudio.Services.Fusion.Preflight.Weapons;
+using ZiapStudio.Services.Fusion.Weapons;
 using ZiapStudio.Services.Initialization;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
@@ -79,6 +82,15 @@ public partial class App : Application
             new PublishedLocalizationFileWriter(
                 fileSystem,
                 new AtomicJsonFileWriter(fileSystem)));
+        var preflightScanner = new PreflightScanner(
+        [
+            new WeaponPreflightProvider(
+                fileSystem,
+                new WeaponNotetagCatalogProvider(fileSystem)),
+        ]);
+        var preflightSuppressionStore = new PreflightSuppressionStore(
+            fileSystem,
+            new AtomicJsonFileWriter(fileSystem));
 
         _window = new MainWindow(
             new ProjectService(fileSystem),
@@ -95,6 +107,8 @@ public partial class App : Application
             remoteLocalizationService,
             publishedLocalizationSyncService,
             authenticationService,
+            preflightScanner,
+            preflightSuppressionStore,
             layoutSettingsService,
             layoutSettings);
         _window.Activate();

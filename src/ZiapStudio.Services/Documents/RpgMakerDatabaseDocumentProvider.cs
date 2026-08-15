@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using ZiapStudio.Core.Documents;
 using ZiapStudio.Core.Editing;
 using ZiapStudio.Core.Models;
+using ZiapStudio.Services.Fusion.Weapons;
 
 namespace ZiapStudio.Services.Documents;
 
@@ -28,18 +29,25 @@ public sealed class RpgMakerDatabaseDocumentProvider : IDocumentProvider
 
     private readonly FileSystemService _fileSystem;
     private readonly RpgMakerValueResolver _valueResolver;
+    private readonly WeaponNotetagCatalogProvider _weaponNotetagCatalogProvider;
 
     public RpgMakerDatabaseDocumentProvider(FileSystemService fileSystem)
-        : this(fileSystem, new RpgMakerValueResolver(fileSystem))
+        : this(
+            fileSystem,
+            new RpgMakerValueResolver(fileSystem),
+            new WeaponNotetagCatalogProvider(fileSystem))
     {
     }
 
     public RpgMakerDatabaseDocumentProvider(
         FileSystemService fileSystem,
-        RpgMakerValueResolver valueResolver)
+        RpgMakerValueResolver valueResolver,
+        WeaponNotetagCatalogProvider? weaponNotetagCatalogProvider = null)
     {
         _fileSystem = fileSystem;
         _valueResolver = valueResolver;
+        _weaponNotetagCatalogProvider = weaponNotetagCatalogProvider ??
+            new WeaponNotetagCatalogProvider(fileSystem);
     }
 
     public bool CanOpen(DocumentDescriptor descriptor) =>
@@ -104,6 +112,11 @@ public sealed class RpgMakerDatabaseDocumentProvider : IDocumentProvider
             var entries = recordElements
                 .Select(element => CreateEntry(element, valueDefinitions, resolutionContext))
                 .ToArray();
+            var weaponNotetagCatalog = resourceName.Equals(
+                "weapons",
+                StringComparison.OrdinalIgnoreCase)
+                    ? await _weaponNotetagCatalogProvider.LoadAsync(project, cancellationToken)
+                    : null;
 
             return new RpgMakerDatabaseDocument
             {
@@ -121,6 +134,7 @@ public sealed class RpgMakerDatabaseDocumentProvider : IDocumentProvider
                     Length = sourceBytes.LongLength,
                     ContentHash = Convert.ToHexString(SHA256.HashData(sourceBytes)),
                 },
+                WeaponNotetagCatalog = weaponNotetagCatalog,
             };
         }
         catch (Exception exception) when (
