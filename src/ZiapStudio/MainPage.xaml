@@ -7,6 +7,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:viewModels="using:ZiapStudio.ViewModels"
+    xmlns:views="using:ZiapStudio.Views"
     KeyboardAcceleratorPlacementMode="Hidden"
     Loaded="Page_Loaded"
     mc:Ignorable="d">
@@ -218,7 +219,7 @@
                         Margin="4,0,0,0"
                         FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="ZIAP Studio 0.1.8" />
+                        Text="ZIAP Studio 0.1.9" />
                 </StackPanel>
             </Grid>
 
@@ -390,7 +391,7 @@
                     HorizontalAlignment="Center"
                     FontSize="10"
                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                    Text="0.1.8" />
+                    Text="0.1.9" />
             </Grid>
             </Grid>
         </Border>
@@ -652,6 +653,88 @@
                             x:Load="{x:Bind ViewModel.IsPreflightDocumentSelected, Mode=OneWay}">
                             <AppBarButton.Icon>
                                 <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="FusionAudioAddEventCommand"
+                            AutomationProperties.Name="Nuovo evento Fusion Audio"
+                            Click="AddFusionAudioEvent_Click"
+                            Label="Nuovo evento"
+                            x:Load="{x:Bind ViewModel.IsFusionAudioDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE710;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="FusionBossAnalyzeCommand"
+                            AutomationProperties.Name="Analizza Fusion Boss Battle"
+                            Click="AnalyzePreflight_Click"
+                            IsEnabled="{x:Bind ViewModel.CanAnalyzePreflight, Mode=OneWay}"
+                            Label="Analizza"
+                            ToolTipService.ToolTip="Esegui il Pre-Flight dei contratti boss battle"
+                            x:Load="{x:Bind ViewModel.IsFusionBossDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE9D9;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="FusionBossOpenPreflightCommand"
+                            AutomationProperties.Name="Apri Pre-Flight Fusion Boss Battle"
+                            Click="OpenPreflightDocument_Click"
+                            Label="Pre-Flight"
+                            x:Load="{x:Bind ViewModel.IsFusionBossDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE773;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="FusionAudioRemoveEventCommand"
+                            AutomationProperties.Name="Rimuovi evento Fusion Audio"
+                            Click="RemoveFusionAudioEvent_Click"
+                            Label="Rimuovi"
+                            x:Load="{x:Bind ViewModel.IsFusionAudioDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE74D;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="FusionAudioPlayCommand"
+                            AutomationProperties.Name="Riproduci evento Fusion Audio"
+                            Click="PlayFusionAudio_Click"
+                            Label="Riproduci evento"
+                            x:Load="{x:Bind ViewModel.IsFusionAudioDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE768;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="FusionAudioStopCommand"
+                            AutomationProperties.Name="Ferma preview Fusion Audio"
+                            Click="StopFusionAudio_Click"
+                            Label="Stop"
+                            x:Load="{x:Bind ViewModel.IsFusionAudioDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE71A;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="FusionAudioValidateCommand"
+                            AutomationProperties.Name="Valida Fusion Audio"
+                            Click="ValidateFusionAudio_Click"
+                            Label="Valida"
+                            x:Load="{x:Bind ViewModel.IsFusionAudioDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE9D9;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
+                            x:Name="FusionAudioOpenFolderCommand"
+                            AutomationProperties.Name="Apri cartella audio"
+                            Click="OpenFusionAudioFolder_Click"
+                            Label="Apri cartella"
+                            x:Load="{x:Bind ViewModel.IsFusionAudioDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE838;" />
                             </AppBarButton.Icon>
                         </AppBarButton>
                         <AppBarButton
@@ -1301,9 +1384,8 @@
                                 Grid.Column="4"
                                 Width="180"
                                 HorizontalAlignment="Right"
-                                SelectedIndex="0">
-                                <x:String>Weapons</x:String>
-                            </ComboBox>
+                                ItemsSource="{Binding ScopeOptions}"
+                                SelectedItem="{Binding SelectedScope, Mode=TwoWay}" />
                         </Grid>
 
                         <Grid Grid.Row="2" Margin="0,0,0,16" ColumnSpacing="12">
@@ -1314,7 +1396,7 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBox
-                                PlaceholderText="Cerca arma, ID, regola o messaggio…"
+                                PlaceholderText="Cerca record, evento, regola o messaggio…"
                                 Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
                             <ComboBox
                                 Grid.Column="1"
@@ -1368,7 +1450,7 @@
                                             <StackPanel Grid.Column="2" VerticalAlignment="Center" Orientation="Horizontal" Spacing="8">
                                                 <Button
                                                     Click="OpenPreflightIssue_Click"
-                                                    Content="Apri arma"
+                                                    Content="Apri"
                                                     Visibility="{x:Bind CanOpen, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                                 <Button
                                                     Click="IgnorePreflightIssue_Click"
@@ -1386,6 +1468,286 @@
                         </Border>
                     </Grid>
 
+                    <Grid
+                        x:Name="FusionAudioDocument"
+                        Grid.Row="2"
+                        Padding="32,26"
+                        DataContext="{x:Bind ViewModel.ActiveFusionAudioDocument, Mode=OneWay}"
+                        x:Load="{x:Bind ViewModel.IsFusionAudioDocumentSelected, Mode=OneWay}">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <Grid ColumnSpacing="18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4">
+                                <TextBlock FontSize="30" FontWeight="SemiBold" Text="Fusion Audio" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="Catalogo semantico degli effetti sonori di Fusion: Hexella Dive." />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="14">
+                                <TextBlock Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{Binding PluginStatusText}" />
+                                <TextBlock Text="{Binding CatalogStatusText}" />
+                                <TextBlock Text="{Binding EventCountText}" />
+                                <TextBlock Text="{Binding AssetCountText}" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Grid.Row="1" Margin="0,22,0,0" ColumnSpacing="18">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="360" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Border
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10">
+                                <Grid Padding="14">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <TextBox
+                                        PlaceholderText="Cerca evento o categoria…"
+                                        Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                    <ListView
+                                        Grid.Row="1"
+                                        Margin="0,12,0,0"
+                                        HorizontalContentAlignment="Stretch"
+                                        IsItemClickEnabled="True"
+                                        ItemClick="FusionAudioEvent_ItemClick"
+                                        ItemsSource="{Binding VisibleEntries}"
+                                        SelectedItem="{Binding SelectedEntry, Mode=OneWay}"
+                                        SelectionChanged="FusionAudioEvent_SelectionChanged"
+                                        SelectionMode="Single">
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="viewModels:FusionAudioEntryViewModel">
+                                                <StackPanel Padding="5,4" Spacing="2">
+                                                    <TextBlock FontWeight="SemiBold" Text="{x:Bind EventId, Mode=OneWay}" />
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                        Text="{x:Bind Category, Mode=OneWay}" />
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </Grid>
+                            </Border>
+
+                            <Border
+                                Grid.Column="1"
+                                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10">
+                                <ScrollViewer Padding="22,18">
+                                    <StackPanel
+                                        DataContext="{Binding SelectedEntry}"
+                                        Spacing="18">
+                                        <Grid ColumnSpacing="14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <NumberBox
+                                                Header="Volume master"
+                                                Maximum="1"
+                                                Minimum="0"
+                                                SmallChange="0.05"
+                                                SpinButtonPlacementMode="Compact"
+                                                Value="{Binding DataContext.MasterVolume, ElementName=FusionAudioDocument, Mode=TwoWay}" />
+                                            <NumberBox
+                                                Grid.Column="1"
+                                                Header="Volume categoria"
+                                                Maximum="1"
+                                                Minimum="0"
+                                                SmallChange="0.05"
+                                                SpinButtonPlacementMode="Compact"
+                                                Value="{Binding DataContext.SelectedCategoryVolume, ElementName=FusionAudioDocument, Mode=TwoWay}" />
+                                        </Grid>
+                                        <Grid ColumnSpacing="14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="2*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox
+                                                Header="Evento"
+                                                LostFocus="FusionAudioIdentity_LostFocus"
+                                                Text="{Binding EventId, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                            <TextBox
+                                                Grid.Column="1"
+                                                Header="Categoria"
+                                                LostFocus="FusionAudioIdentity_LostFocus"
+                                                Text="{Binding Category, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                                        </Grid>
+
+                                        <Grid ColumnSpacing="14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox
+                                                Header="Sorgente"
+                                                HorizontalAlignment="Stretch"
+                                                ItemsSource="{Binding SourceKindOptions}"
+                                                SelectedIndex="{Binding SourceKindIndex, Mode=OneWay}"
+                                                DropDownClosed="FusionAudioSourceKind_DropDownClosed" />
+                                            <ComboBox
+                                                Grid.Column="1"
+                                                Header="System Sound slot"
+                                                HorizontalAlignment="Stretch"
+                                                ItemsSource="{Binding SystemSlotOptions}"
+                                                SelectedIndex="{Binding SystemSlotIndex, Mode=OneWay}"
+                                                DropDownClosed="FusionAudioSystemSlot_DropDownClosed"
+                                                Visibility="{Binding IsSystemSoundSource, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                                        </Grid>
+
+                                        <StackPanel
+                                            Spacing="9"
+                                            Visibility="{Binding IsFileSource, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <Grid>
+                                                <TextBlock FontWeight="SemiBold" Text="Varianti" />
+                                                <Button
+                                                    HorizontalAlignment="Right"
+                                                    Click="AddFusionAudioVariant_Click"
+                                                    Content="+ Aggiungi" />
+                                            </Grid>
+                                            <ItemsControl ItemsSource="{Binding Variants}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:FusionAudioVariantViewModel">
+                                                        <Grid Margin="0,3" ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <AutoSuggestBox
+                                                                AutomationProperties.HelpText="Freccette per scorrere, Invio per selezionare, Spazio per riprodurre"
+                                                                AutomationProperties.Name="Selettore file audio"
+                                                                GotFocus="FusionAudioFileSelector_GotFocus"
+                                                                MaxSuggestionListHeight="420"
+                                                                PlaceholderText="{Binding DataContext.AudioFileSelectorPlaceholder, ElementName=FusionAudioDocument}"
+                                                                PreviewKeyDown="FusionAudioFileSelector_PreviewKeyDown"
+                                                                QuerySubmitted="FusionAudioFileSelector_QuerySubmitted"
+                                                                SuggestionChosen="FusionAudioFileSelector_SuggestionChosen"
+                                                                Text="{x:Bind File, Mode=OneWay}"
+                                                                TextChanged="FusionAudioFileSelector_TextChanged"
+                                                                TextMemberPath="CatalogPath"
+                                                                UpdateTextOnSelect="False">
+                                                                <AutoSuggestBox.QueryIcon>
+                                                                    <SymbolIcon Symbol="Find" />
+                                                                </AutoSuggestBox.QueryIcon>
+                                                                <AutoSuggestBox.ItemTemplate>
+                                                                    <DataTemplate x:DataType="viewModels:FusionAudioFileOptionViewModel">
+                                                                        <Grid MinWidth="520" Padding="3" ColumnSpacing="12">
+                                                                            <Grid.ColumnDefinitions>
+                                                                                <ColumnDefinition Width="*" />
+                                                                                <ColumnDefinition Width="Auto" />
+                                                                            </Grid.ColumnDefinitions>
+                                                                            <StackPanel Spacing="2">
+                                                                                <TextBlock FontWeight="SemiBold" Text="{x:Bind DisplayName}" />
+                                                                                <TextBlock
+                                                                                    FontSize="11"
+                                                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                                                    Text="{x:Bind DetailText}" />
+                                                                            </StackPanel>
+                                                                            <Button
+                                                                Grid.Column="1"
+                                                                                AutomationProperties.Name="Riproduci asset grezzo"
+                                                                                Click="PreviewFusionAudioFile_Click"
+                                                                                ToolTipService.ToolTip="Riproduci asset grezzo (Spazio)">
+                                                                                <FontIcon FontSize="12" Glyph="&#xE768;" />
+                                                                            </Button>
+                                                                        </Grid>
+                                                                    </DataTemplate>
+                                                                </AutoSuggestBox.ItemTemplate>
+                                                            </AutoSuggestBox>
+                                                            <Button Grid.Column="1" Click="PlayFusionAudioVariant_Click" ToolTipService.ToolTip="Riproduci asset grezzo selezionato (Spazio)">
+                                                                <FontIcon FontSize="12" Glyph="&#xE768;" />
+                                                            </Button>
+                                                            <Button Grid.Column="2" Click="RemoveFusionAudioVariant_Click" ToolTipService.ToolTip="Rimuovi variante">
+                                                                <FontIcon FontSize="12" Glyph="&#xE74D;" />
+                                                            </Button>
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                            <TextBlock
+                                                FontSize="11"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Text="↑/↓ scorri  ·  Invio seleziona  ·  Spazio riproduce l'asset grezzo" />
+                                        </StackPanel>
+
+                                        <Border
+                                            Padding="12,9"
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            CornerRadius="6"
+                                            DataContext="{Binding DataContext, ElementName=FusionAudioDocument}"
+                                            Visibility="{Binding HasLastPlayback, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                            <StackPanel Spacing="2">
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    FontWeight="SemiBold"
+                                                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                    Text="ULTIMA RIPRODUZIONE EVENTO" />
+                                                <TextBlock FontWeight="SemiBold" Text="{Binding LastPlaybackFileText}" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    Text="{Binding LastPlaybackSettingsText}" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Grid ColumnSpacing="12" RowSpacing="12">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <NumberBox Header="Volume" Maximum="100" Minimum="0" SpinButtonPlacementMode="Compact" Value="{Binding Volume, Mode=TwoWay}" />
+                                            <NumberBox Grid.Column="1" Header="Pitch minimo" Maximum="150" Minimum="50" SpinButtonPlacementMode="Compact" Value="{Binding PitchMin, Mode=TwoWay}" />
+                                            <NumberBox Grid.Column="2" Header="Pitch massimo" Maximum="150" Minimum="50" SpinButtonPlacementMode="Compact" Value="{Binding PitchMax, Mode=TwoWay}" />
+                                            <NumberBox Grid.Row="1" Header="Pan" Maximum="100" Minimum="-100" SpinButtonPlacementMode="Compact" Value="{Binding Pan, Mode=TwoWay}" />
+                                            <NumberBox Grid.Row="1" Grid.Column="1" Header="Cooldown (ms)" Minimum="0" SpinButtonPlacementMode="Compact" Value="{Binding Cooldown, Mode=TwoWay}" />
+                                            <CheckBox Grid.Row="1" Grid.Column="2" VerticalAlignment="Bottom" Content="Anti-ripetizione" IsChecked="{Binding AntiRepeat, Mode=TwoWay}" />
+                                        </Grid>
+
+                                        <Expander Header="Diagnostica catalogo" IsExpanded="False">
+                                            <ItemsControl DataContext="{Binding DataContext, ElementName=FusionAudioDocument}" ItemsSource="{Binding Diagnostics}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate x:DataType="viewModels:FusionAudioDiagnosticViewModel">
+                                                        <TextBlock Margin="0,3" TextWrapping="Wrap">
+                                                            <Run FontWeight="SemiBold" Text="{x:Bind Glyph}" />
+                                                            <Run Text="  " />
+                                                            <Run Text="{x:Bind Message}" />
+                                                        </TextBlock>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </Expander>
+                                    </StackPanel>
+                                </ScrollViewer>
+                            </Border>
+                        </Grid>
+                    </Grid>
+
+                    <views:FusionBossDocumentView
+                        x:Name="FusionBossDocument"
+                        Grid.Row="2"
+                        DataContext="{x:Bind ViewModel.ActiveFusionBossDocument, Mode=OneWay}"
+                        x:Load="{x:Bind ViewModel.IsFusionBossDocumentSelected, Mode=OneWay}" />
                     <Grid
                         x:Name="DatabaseDocument"
                         Grid.Row="2"

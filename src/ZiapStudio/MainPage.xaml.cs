@@ -290,6 +290,148 @@ public sealed partial class MainPage : Page
     private async void AnalyzePreflight_Click(object sender, RoutedEventArgs e) =>
         await ViewModel.AnalyzePreflightAsync();
 
+    private void AddFusionAudioEvent_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.AddFusionAudioEvent();
+
+    private void RemoveFusionAudioEvent_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.RemoveFusionAudioEvent();
+
+    private async void PlayFusionAudio_Click(object sender, RoutedEventArgs e) =>
+        await ViewModel.PlaySelectedFusionAudioAsync();
+
+    private void StopFusionAudio_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.StopFusionAudioPreview();
+
+    private async void ValidateFusionAudio_Click(object sender, RoutedEventArgs e) =>
+        await ViewModel.ValidateFusionAudioAsync();
+
+    private void OpenFusionAudioFolder_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.OpenFusionAudioFolder();
+
+    private void AddFusionAudioVariant_Click(object sender, RoutedEventArgs e) =>
+        ViewModel.AddFusionAudioVariant();
+
+    private async void PlayFusionAudioVariant_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: FusionAudioVariantViewModel variant })
+        {
+            await ViewModel.PlayFusionAudioVariantAsync(variant);
+        }
+    }
+
+    private void RemoveFusionAudioVariant_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: FusionAudioVariantViewModel variant })
+        {
+            ViewModel.RemoveFusionAudioVariant(variant);
+        }
+    }
+
+    private void FusionAudioFileSelector_GotFocus(object sender, RoutedEventArgs e)
+    {
+        if (sender is AutoSuggestBox selector)
+        {
+            UpdateFusionAudioFileSuggestions(selector, string.Empty, open: true);
+        }
+    }
+
+    private void FusionAudioFileSelector_TextChanged(
+        AutoSuggestBox sender,
+        AutoSuggestBoxTextChangedEventArgs args)
+    {
+        if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
+        {
+            return;
+        }
+
+        sender.Tag = null;
+        UpdateFusionAudioFileSuggestions(sender, sender.Text, open: true);
+    }
+
+    private void FusionAudioFileSelector_SuggestionChosen(
+        AutoSuggestBox sender,
+        AutoSuggestBoxSuggestionChosenEventArgs args)
+    {
+        sender.Tag = args.SelectedItem as FusionAudioFileOptionViewModel;
+    }
+
+    private void FusionAudioFileSelector_QuerySubmitted(
+        AutoSuggestBox sender,
+        AutoSuggestBoxQuerySubmittedEventArgs args)
+    {
+        if (sender.DataContext is not FusionAudioVariantViewModel variant)
+        {
+            return;
+        }
+
+        var option = args.ChosenSuggestion as FusionAudioFileOptionViewModel ??
+            sender.Tag as FusionAudioFileOptionViewModel ??
+            ViewModel.ActiveFusionAudioDocument?.FindAudioFile(args.QueryText) ??
+            (sender.ItemsSource as IEnumerable<FusionAudioFileOptionViewModel>)?.FirstOrDefault();
+        if (option is null)
+        {
+            return;
+        }
+
+        variant.File = option.CatalogPath;
+        sender.Text = option.CatalogPath;
+        sender.Tag = null;
+        sender.IsSuggestionListOpen = false;
+    }
+
+    private void FusionAudioFileSelector_PreviewKeyDown(
+        object sender,
+        KeyRoutedEventArgs e)
+    {
+        if (sender is not AutoSuggestBox selector)
+        {
+            return;
+        }
+
+        if (e.Key is Windows.System.VirtualKey.Up or Windows.System.VirtualKey.Down)
+        {
+            if (!selector.IsSuggestionListOpen)
+            {
+                UpdateFusionAudioFileSuggestions(selector, selector.Text, open: true);
+            }
+            return;
+        }
+
+        if (e.Key != Windows.System.VirtualKey.Space)
+        {
+            return;
+        }
+
+        var option = selector.Tag as FusionAudioFileOptionViewModel ??
+            ViewModel.ActiveFusionAudioDocument?.FindAudioFile(selector.Text) ??
+            (selector.ItemsSource as IEnumerable<FusionAudioFileOptionViewModel>)?.FirstOrDefault();
+        if (option is null)
+        {
+            return;
+        }
+
+        e.Handled = true;
+        ViewModel.PlayFusionAudioFile(option);
+    }
+
+    private void PreviewFusionAudioFile_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: FusionAudioFileOptionViewModel option })
+        {
+            ViewModel.PlayFusionAudioFile(option);
+        }
+    }
+
+    private void UpdateFusionAudioFileSuggestions(
+        AutoSuggestBox selector,
+        string? query,
+        bool open)
+    {
+        var suggestions = ViewModel.ActiveFusionAudioDocument?.SearchAudioFiles(query) ?? [];
+        selector.ItemsSource = suggestions;
+        selector.IsSuggestionListOpen = open && suggestions.Count > 0;
+    }
+
     private async void OpenPreflightIssue_Click(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement { DataContext: PreflightIssueViewModel item })
@@ -489,6 +631,57 @@ public sealed partial class MainPage : Page
             })
         {
             ViewModel.OpenLocalizationInConsole(field.LocalizationOrigin);
+        }
+    }
+
+    private void FusionAudioSourceKind_DropDownClosed(object sender, object e)
+    {
+        if (sender is ComboBox
+            {
+                SelectedIndex: >= 0,
+                DataContext: FusionAudioEntryViewModel entry,
+            } combo)
+        {
+            entry.SourceKindIndex = combo.SelectedIndex;
+        }
+    }
+
+    private void FusionAudioEvent_ItemClick(object sender, ItemClickEventArgs e)
+    {
+        if (sender is ListView
+            {
+                DataContext: FusionAudioDocumentViewModel document,
+            } && e.ClickedItem is FusionAudioEntryViewModel entry)
+        {
+            document.SelectedEntry = entry;
+        }
+    }
+
+    private void FusionAudioEvent_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (sender is ListView
+            {
+                FocusState: FocusState.Keyboard,
+                SelectedItem: FusionAudioEntryViewModel entry,
+                DataContext: FusionAudioDocumentViewModel document,
+            } && !ReferenceEquals(document.SelectedEntry, entry))
+        {
+            document.SelectedEntry = entry;
+        }
+    }
+
+    private void FusionAudioIdentity_LostFocus(object sender, RoutedEventArgs e) =>
+        ViewModel.ActiveFusionAudioDocument?.RefreshVisibleEntries();
+
+    private void FusionAudioSystemSlot_DropDownClosed(object sender, object e)
+    {
+        if (sender is ComboBox
+            {
+                SelectedIndex: >= 0,
+                DataContext: FusionAudioEntryViewModel entry,
+            } combo)
+        {
+            entry.SystemSlotIndex = combo.SelectedIndex;
         }
     }
 

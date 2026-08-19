@@ -4,5 +4,6 @@ public enum DocumentKind
 {
     ProjectOverview,
     RpgMakerDatabase,
+    ProjectIntegration,
     Tool,
 }

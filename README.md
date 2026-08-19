@@ -1,9 +1,9 @@
 # ZIAP Studio
 
 ZIAP Studio è un editor desktop Windows per i progetti Zenkaiverse. La milestone
-`0.1.8 — Project Pre-Flight` introduce la prima analisi semantica dell'intero
-database Weapons, con problemi navigabili, eccezioni persistenti e indicatori
-contestuali nell'editor.
+`0.1.9 — Project Integrations & Fusion Audio` introduce capability custom
+rilevate dal registry plugin di RPG Maker. La prima integrazione è un editor
+semantico e un browser con preview per `ZDP_FusionAudio`.
 
 ## Funzionalità attuali
 
@@ -14,6 +14,19 @@ contestuali nell'editor.
 - dialog di inizializzazione precompilato con generazione automatica dell'ID;
 - creazione atomica di `.ziap/project.json`, senza sovrascrivere identità esistenti;
 - provider RPG Maker MZ con Database, World, System, Assets e mappe nominate;
+- registry delle Project Integrations separato dal provider RPG Maker;
+- rilevamento di `ZDP_FusionAudio` attivo esclusivamente tramite `js/plugins.js`;
+- documento Fusion Audio con ricerca, inspector, sorgenti file/System Sound,
+  varianti, volume, pitch, pan, cooldown e anti-ripetizione;
+- preview diretta degli asset audio supportati da Windows e apertura della cartella SE;
+- capability `Fusion Boss Battle` rilevata dai plugin Combat, Encounter e Arena attivi;
+- workspace Boss Battle con inventario di `FusionCombat`, `FusionEncounters`, `FusionArenas` e `FusionPuzzles`;
+- validazione incrociata di boss, enemy, scaling profile, encounter, fasi, arene, puzzle e completion profile;
+- verifica delle mappe e delle quantità di `<FusionAnchor:...>` richieste dalle arene;
+- diagnostica Boss Battle integrata nel Pre-Flight con navigazione al workspace;
+- salvataggio atomico di `data/fusion/audio.json` con protezione dalle modifiche esterne;
+- diagnostica Fusion Audio nel Pre-Flight per schema, valori, slot e asset mancanti;
+- albero minimale `Assets → Audio` con cartelle BGM/BGS/ME/SE e relativi file;
 - provider generico con vista Files limitata e protetta da directory troppo grandi;
 - descriptor indipendenti dalla UI per le risorse (`rpgmaker://database/...`);
 - identità stabile della risorsa separata dal nome localizzato mostrato nella UI;
@@ -107,6 +120,9 @@ contestuali nell'editor.
 src/
 ├── ZiapStudio.Core/       progetti, documenti, editing, ChangeSet e AST notetag
 ├── ZiapStudio.Services/   resolver, asset, salvataggio e integrazioni
+│   ├── Integrations/     registry plugin e provider delle capability di progetto
+│   ├── Fusion/Audio/     catalogo, risoluzione asset e salvataggio FusionAudio
+│   ├── Fusion/Bosses/    workspace e validazione dei contratti Boss Battle
 │   ├── Fusion/Weapons/   cataloghi, semantica e patch dei notetag arma
 │   ├── Authentication/  OAuth browser, Firebase token e sessione
 │   └── Integration/
@@ -220,6 +236,40 @@ Un progetto può dichiarare `.ziap/project.json`:
 I valori ZIAP hanno precedenza sui metadata dell'engine. `package.json` conserva
 la propria identità separata: il suo campo `name` non sostituisce il nome del
 progetto. I campi ancora mancanti ricevono un fallback sicuro dal filesystem.
+
+## Project Integrations e Fusion Audio
+
+Studio non analizza il sorgente di `ZDP_FusionAudio.js`. Legge soltanto il
+registry dichiarativo `js/plugins.js`; quando trova il plugin attivo,
+`FusionAudioIntegrationProvider` pubblica il documento
+`fusionaudio://catalog/` nel nodo `System → Plugin`.
+
+Il contenuto modificabile vive in `data/fusion/audio.json`. Le sorgenti
+`systemSound` risolvono gli slot tramite `data/System.json`, mentre le sorgenti
+`files` puntano a nomi relativi sotto `audio/se` senza estensione obbligatoria.
+Il selector delle varianti indicizza ricorsivamente `audio/se/**`, riunisce le
+copie `.ogg`/`.m4a` dello stesso asset e permette di cercare per nome o cartella.
+Nel popup si usano `↑`/`↓` per scorrere, `Invio` per assegnare e `Spazio` per
+ascoltare l'elemento evidenziato; ogni risultato espone anche il pulsante play.
+Questi pulsanti riproducono l'asset grezzo. Il comando `Riproduci evento` della
+toolbar usa invece il catalogo modificato in memoria e simula il runtime:
+selezione varianti, anti-ripetizione, volume master/categoria/evento, pitch,
+pan, cooldown e risoluzione degli slot `System.json`.
+Il runtime FHD conserva un catalogo interno di fallback e applica il JSON come
+override, lasciando alle chiamate `FusionAudio.register()` la precedenza finale.
+
+## Fusion Boss Battle
+
+Quando almeno uno dei plugin core `ZDP_FusionCombat`, `ZDP_FusionEncounter` o
+`ZDP_FusionArena` è attivo, Studio pubblica `Fusion Boss Battle` sotto
+`System → Plugin`. Il workspace legge i quattro database Fusion senza eseguire o
+analizzare il sorgente JavaScript dei plugin e controlla i riferimenti fra i relativi
+record. Per ogni arena verifica inoltre l'esistenza delle mappe dichiarate e confronta
+gli anchor richiesti con i notetag presenti negli eventi della mappa.
+
+La prima surface è intenzionalmente diagnostica e read-only: costituisce la foundation
+per graph delle fasi, timeline degli attacchi e anteprima spaziale delle arene senza
+anticipare scritture sulle mappe RPG Maker.
 
 ## Project Pre-Flight
 

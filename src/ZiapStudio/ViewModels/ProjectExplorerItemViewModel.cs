@@ -38,6 +38,7 @@ public sealed class ProjectExplorerItemViewModel
         ProjectExplorerNodeKind.Database => "\uE8F1",
         ProjectExplorerNodeKind.Map => "\uE707",
         ProjectExplorerNodeKind.Plugin => "\uE74C",
+        ProjectExplorerNodeKind.Integration => "\uE995",
         ProjectExplorerNodeKind.Asset => "\uEB9F",
         ProjectExplorerNodeKind.Directory => "\uE8B7",
         ProjectExplorerNodeKind.Information => "\uE946",

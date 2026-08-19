@@ -21,6 +21,7 @@ public enum ProjectExplorerNodeKind
     Database,
     Map,
     Plugin,
+    Integration,
     Asset,
     Directory,
     File,

@@ -3,6 +3,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using ZiapStudio.Core.Documents;
 using ZiapStudio.Core.Editing;
+using ZiapStudio.Core.Fusion.Audio;
 using ZiapStudio.Core.Localization;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Core.Preflight;
@@ -14,6 +15,7 @@ using ZiapStudio.Services.Documents;
 using ZiapStudio.Services.Editing;
 using ZiapStudio.Services.Initialization;
 using ZiapStudio.Services.Fusion.Preflight;
+using ZiapStudio.Services.Fusion.Audio;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
 using ZiapStudio.Services.Providers;
@@ -40,6 +42,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private readonly RemoteLocalizationDocumentViewModel _remoteLocalizationDocument = new();
     private readonly PreflightScanner _preflightScanner;
     private readonly PreflightSuppressionStore _preflightSuppressionStore;
+    private readonly FusionAudioCatalogService _fusionAudioCatalogService;
+    private readonly FusionAudioPlaybackResolver _fusionAudioPlaybackResolver;
+    private readonly AudioPreviewService _audioPreviewService;
     private readonly PreflightDocumentViewModel _preflightDocument = new();
     private ZiapProject? _currentProject;
     private string? _errorMessage;
@@ -71,7 +76,10 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         PublishedLocalizationSyncService publishedLocalizationSyncService,
         ZiapAuthenticationService authenticationService,
         PreflightScanner preflightScanner,
-        PreflightSuppressionStore preflightSuppressionStore)
+        PreflightSuppressionStore preflightSuppressionStore,
+        FusionAudioCatalogService fusionAudioCatalogService,
+        FusionAudioPlaybackResolver fusionAudioPlaybackResolver,
+        AudioPreviewService audioPreviewService)
     {
         _projectService = projectService;
         _projectInitializationService = projectInitializationService;
@@ -90,6 +98,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         _authenticationService = authenticationService;
         _preflightScanner = preflightScanner;
         _preflightSuppressionStore = preflightSuppressionStore;
+        _fusionAudioCatalogService = fusionAudioCatalogService;
+        _fusionAudioPlaybackResolver = fusionAudioPlaybackResolver;
+        _audioPreviewService = audioPreviewService;
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -228,9 +239,13 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(IsProjectOverviewSelected));
                 OnPropertyChanged(nameof(IsRemoteLocalizationDocumentSelected));
                 OnPropertyChanged(nameof(IsPreflightDocumentSelected));
+                OnPropertyChanged(nameof(IsFusionAudioDocumentSelected));
+                OnPropertyChanged(nameof(IsFusionBossDocumentSelected));
                 OnPropertyChanged(nameof(IsDatabaseDocumentSelected));
                 OnPropertyChanged(nameof(IsEditingDocumentSelected));
                 OnPropertyChanged(nameof(ActiveDatabaseDocument));
+                OnPropertyChanged(nameof(ActiveFusionAudioDocument));
+                OnPropertyChanged(nameof(ActiveFusionBossDocument));
                 NotifyEditingPropertiesChanged();
             }
         }
@@ -243,11 +258,22 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public bool IsPreflightDocumentSelected => SelectedDocument?.IsPreflight == true;
 
+    public bool IsFusionAudioDocumentSelected => SelectedDocument?.IsFusionAudio == true;
+
+    public bool IsFusionBossDocumentSelected => SelectedDocument?.IsFusionBoss == true;
+
     public bool IsDatabaseDocumentSelected => ActiveDatabaseDocument is not null;
 
-    public bool IsEditingDocumentSelected => IsDatabaseDocumentSelected;
+    public bool IsEditingDocumentSelected =>
+        IsDatabaseDocumentSelected || IsFusionAudioDocumentSelected;
 
     public RpgMakerDatabaseDocumentViewModel? ActiveDatabaseDocument => SelectedDocument?.Database;
+
+    public FusionAudioDocumentViewModel? ActiveFusionAudioDocument =>
+        SelectedDocument?.FusionAudio;
+
+    public FusionBossDocumentViewModel? ActiveFusionBossDocument =>
+        SelectedDocument?.FusionBoss;
 
     public bool CanSaveDocument => CanInteract && SelectedDocument?.IsDirty == true;
 
@@ -724,6 +750,178 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         SelectedDocument = openDocument;
     }
 
+    public void AddFusionAudioEvent()
+    {
+        ActiveFusionAudioDocument?.AddEvent();
+        NotifyEditingPropertiesChanged();
+    }
+
+    public void RemoveFusionAudioEvent()
+    {
+        if (ActiveFusionAudioDocument?.RemoveSelectedEvent() == true)
+        {
+            NotifyEditingPropertiesChanged();
+        }
+    }
+
+    public void AddFusionAudioVariant()
+    {
+        ActiveFusionAudioDocument?.SelectedEntry?.AddVariant();
+        NotifyEditingPropertiesChanged();
+    }
+
+    public void RemoveFusionAudioVariant(FusionAudioVariantViewModel variant)
+    {
+        ActiveFusionAudioDocument?.SelectedEntry?.RemoveVariant(variant);
+        NotifyEditingPropertiesChanged();
+    }
+
+    public async Task ValidateFusionAudioAsync()
+    {
+        if (CurrentProject is not { } project || ActiveFusionAudioDocument is not { } document)
+        {
+            return;
+        }
+
+        try
+        {
+            if (document.IdentityError is { } identityError)
+            {
+                ErrorMessage = identityError;
+                return;
+            }
+            var analysis = await _fusionAudioCatalogService.AnalyzeAsync(
+                project,
+                document.BuildCatalog());
+            document.UpdateAnalysis(analysis.Assets, analysis.Diagnostics);
+            StatusMessage = document.HasErrors
+                ? "Fusion Audio contiene errori da correggere."
+                : "Catalogo Fusion Audio valido.";
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or System.Text.Json.JsonException)
+        {
+            ErrorMessage = $"Validazione Fusion Audio non riuscita: {exception.Message}";
+        }
+    }
+
+    public async Task PlaySelectedFusionAudioAsync()
+    {
+        if (CurrentProject is not { } project ||
+            ActiveFusionAudioDocument is not { } document ||
+            document.SelectedEntry is not { } entry)
+        {
+            return;
+        }
+
+        ClearError();
+        try
+        {
+            var resolution = await _fusionAudioPlaybackResolver.ResolveAsync(
+                project,
+                document.BuildCatalog(),
+                entry.EventId,
+                entry.ToModel());
+            if (resolution.Status == FusionAudioPlaybackResolutionStatus.Cooldown)
+            {
+                StatusMessage = $"Preview evento soppressa · cooldown " +
+                    $"{resolution.RemainingCooldownMs} ms";
+                return;
+            }
+            if (resolution.Plan is not { } plan)
+            {
+                ErrorMessage = resolution.Message ??
+                    "L'evento selezionato non può essere risolto.";
+                return;
+            }
+
+            _audioPreviewService.Play(plan);
+            _fusionAudioPlaybackResolver.CommitPlayback(project, plan);
+            document.RecordPlayback(plan);
+            StatusMessage = $"Preview evento · {plan.RelativePath} · " +
+                $"{plan.Volume:P0} · pitch {plan.Pitch:0.#}";
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            ErrorMessage = $"Impossibile riprodurre l'asset: {exception.Message}";
+        }
+    }
+
+    public async Task PlayFusionAudioVariantAsync(FusionAudioVariantViewModel variant)
+    {
+        ArgumentNullException.ThrowIfNull(variant);
+        if (CurrentProject is not { } project ||
+            ActiveFusionAudioDocument?.SelectedEntry is not { } entry)
+        {
+            return;
+        }
+
+        ClearError();
+        var entryModel = entry.ToModel();
+        var model = entryModel with
+        {
+            Source = entryModel.Source with { Files = [variant.File] },
+        };
+        try
+        {
+            var asset = await _fusionAudioCatalogService.ResolvePreviewAsync(
+                project,
+                entry.EventId,
+                model);
+            if (asset is not { Exists: true, ResolvedPath: not null })
+            {
+                ErrorMessage = "L'asset selezionato non esiste o non può essere risolto.";
+                return;
+            }
+
+            _audioPreviewService.PlayRaw(asset.ResolvedPath);
+            StatusMessage = $"Preview asset grezzo · {asset.RelativePath}";
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            ErrorMessage = $"Impossibile riprodurre l'asset: {exception.Message}";
+        }
+    }
+
+    public void PlayFusionAudioFile(FusionAudioFileOptionViewModel option)
+    {
+        ArgumentNullException.ThrowIfNull(option);
+        ClearError();
+        try
+        {
+            _audioPreviewService.PlayRaw(option.ResolvedPath);
+            StatusMessage = $"Preview asset grezzo · audio/se/{option.CatalogPath}";
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or NotSupportedException)
+        {
+            ErrorMessage = $"Impossibile riprodurre l'asset: {exception.Message}";
+        }
+    }
+
+    public void StopFusionAudioPreview()
+    {
+        _audioPreviewService.Stop();
+        StatusMessage = "Preview audio arrestata.";
+    }
+
+    public void OpenFusionAudioFolder()
+    {
+        if (CurrentProject is null) return;
+        var path = Path.Combine(CurrentProject.Path, "audio", "se");
+        try
+        {
+            _shellService.OpenFolder(path);
+        }
+        catch (Exception exception) when (
+            exception is DirectoryNotFoundException or System.ComponentModel.Win32Exception)
+        {
+            ErrorMessage = $"Impossibile aprire la cartella audio: {exception.Message}";
+        }
+    }
+
     public async Task AnalyzePreflightAsync()
     {
         var project = CurrentProject;
@@ -899,21 +1097,38 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         try
         {
             var document = await _documentService.OpenAsync(CurrentProject, item.Document);
-            if (document is not RpgMakerDatabaseDocument databaseDocument)
+            DocumentTabViewModel tab;
+            if (document is RpgMakerDatabaseDocument databaseDocument)
+            {
+                var assetPreviews = await _assetPreviewService.CreatePreviewsAsync(
+                    CurrentProject,
+                    databaseDocument);
+                var editSession = _editSessionFactory.Create(databaseDocument, assetPreviews);
+                tab = DocumentTabViewModel.Create(databaseDocument, assetPreviews, editSession);
+                tab.Database?.ApplyPreflightIssues(_preflightResult.ActiveIssues);
+            }
+            else if (document is FusionAudioDocument fusionAudioDocument)
+            {
+                var fusionAudio = new FusionAudioDocumentViewModel(fusionAudioDocument);
+                fusionAudio.UpdateAnalysis(
+                    fusionAudioDocument.Assets,
+                    fusionAudioDocument.Diagnostics);
+                tab = DocumentTabViewModel.CreateFusionAudio(fusionAudioDocument, fusionAudio);
+            }
+            else if (document is FusionBossWorkspaceDocument fusionBossDocument)
+            {
+                tab = DocumentTabViewModel.CreateFusionBoss(
+                    fusionBossDocument,
+                    new FusionBossDocumentViewModel(fusionBossDocument));
+            }
+            else
             {
                 throw new DocumentLoadException(
                     $"Il documento '{item.Document.DisplayName}' non ha una vista disponibile.");
             }
-
-            var assetPreviews = await _assetPreviewService.CreatePreviewsAsync(
-                CurrentProject,
-                databaseDocument);
-            var editSession = _editSessionFactory.Create(databaseDocument, assetPreviews);
-            var tab = DocumentTabViewModel.Create(databaseDocument, assetPreviews, editSession);
             tab.PropertyChanged += DocumentTab_PropertyChanged;
             OpenDocuments.Add(tab);
             SelectedDocument = tab;
-            tab.Database?.ApplyPreflightIssues(_preflightResult.ActiveIssues);
         }
         catch (DocumentLoadException exception)
         {
@@ -965,7 +1180,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     public async Task<DocumentSaveResult?> SaveDocumentAsync(DocumentTabViewModel document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        if (IsBusy || document.EditSession is null || !document.EditSession.IsDirty)
+        if (IsBusy || !document.IsDirty)
         {
             return null;
         }
@@ -974,7 +1189,19 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         IsBusy = true;
         try
         {
-            var result = await _documentSaveService.SaveAsync(document.EditSession);
+            DocumentSaveResult result;
+            if (document.FusionAudio is { } fusionAudio && CurrentProject is { } project)
+            {
+                result = await SaveFusionAudioAsync(project, fusionAudio);
+            }
+            else if (document.EditSession is { } editSession)
+            {
+                result = await _documentSaveService.SaveAsync(editSession);
+            }
+            else
+            {
+                return null;
+            }
             ApplySaveResult(document, result);
             if (result.Status == DocumentSaveStatus.Saved)
             {
@@ -985,6 +1212,61 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private async Task<DocumentSaveResult> SaveFusionAudioAsync(
+        ZiapProject project,
+        FusionAudioDocumentViewModel fusionAudio)
+    {
+        try
+        {
+            if (fusionAudio.IdentityError is { } identityError)
+            {
+                return new DocumentSaveResult
+                {
+                    Status = DocumentSaveStatus.ValidationFailed,
+                    Message = identityError,
+                };
+            }
+            var catalog = fusionAudio.BuildCatalog();
+            var analysis = await _fusionAudioCatalogService.AnalyzeAsync(project, catalog);
+            fusionAudio.UpdateAnalysis(analysis.Assets, analysis.Diagnostics);
+            if (fusionAudio.HasErrors)
+            {
+                return new DocumentSaveResult
+                {
+                    Status = DocumentSaveStatus.ValidationFailed,
+                    Message = "Il catalogo Fusion Audio contiene errori.",
+                };
+            }
+
+            var snapshot = await _fusionAudioCatalogService.SaveAsync(
+                project,
+                catalog,
+                fusionAudio.SourceSnapshot);
+            fusionAudio.AcceptSaved(snapshot);
+            return new DocumentSaveResult { Status = DocumentSaveStatus.Saved };
+        }
+        catch (ExternalDocumentModificationException exception)
+        {
+            return new DocumentSaveResult
+            {
+                Status = DocumentSaveStatus.ExternalModification,
+                Message = exception.Message,
+                Exception = exception,
+            };
+        }
+        catch (Exception exception) when (
+            exception is IOException or UnauthorizedAccessException or
+                System.Text.Json.JsonException or InvalidOperationException)
+        {
+            return new DocumentSaveResult
+            {
+                Status = DocumentSaveStatus.Failed,
+                Message = exception.Message,
+                Exception = exception,
+            };
         }
     }
 
@@ -1027,8 +1309,46 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public async Task NavigateToReferenceAsync(string target)
     {
-        if (!Uri.TryCreate(target, UriKind.Absolute, out var targetUri) ||
-            !targetUri.Scheme.Equals("rpgmaker", StringComparison.OrdinalIgnoreCase) ||
+        if (!Uri.TryCreate(target, UriKind.Absolute, out var targetUri))
+        {
+            return;
+        }
+
+        if (targetUri.Scheme.Equals("fusionaudio", StringComparison.OrdinalIgnoreCase) &&
+            targetUri.Host.Equals("catalog", StringComparison.OrdinalIgnoreCase))
+        {
+            var resourceId = new Uri("fusionaudio://catalog");
+            var fusionExplorerItem = FindExplorerItem(ProjectExplorerNodes, resourceId);
+            if (fusionExplorerItem is null)
+            {
+                ErrorMessage = "L'integrazione Fusion Audio non è disponibile nel Project Explorer.";
+                return;
+            }
+            await OpenDocumentAsync(fusionExplorerItem);
+            var fusionSegments = targetUri.AbsolutePath.Trim('/').Split('/');
+            if (fusionSegments.Length == 2 &&
+                fusionSegments[0].Equals("event", StringComparison.OrdinalIgnoreCase))
+            {
+                ActiveFusionAudioDocument?.SelectEvent(Uri.UnescapeDataString(fusionSegments[1]));
+            }
+            return;
+        }
+
+        if (targetUri.Scheme.Equals("fusionboss", StringComparison.OrdinalIgnoreCase) &&
+            targetUri.Host.Equals("workspace", StringComparison.OrdinalIgnoreCase))
+        {
+            var resourceId = new Uri("fusionboss://workspace/");
+            var bossExplorerItem = FindExplorerItem(ProjectExplorerNodes, resourceId);
+            if (bossExplorerItem is null)
+            {
+                ErrorMessage = "L'integrazione Fusion Boss Battle non è disponibile nel Project Explorer.";
+                return;
+            }
+            await OpenDocumentAsync(bossExplorerItem);
+            return;
+        }
+
+        if (!targetUri.Scheme.Equals("rpgmaker", StringComparison.OrdinalIgnoreCase) ||
             !targetUri.Host.Equals("database", StringComparison.OrdinalIgnoreCase))
         {
             return;
@@ -1124,6 +1444,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     private void ResetDocumentWorkspace(ZiapProject project)
     {
+        _audioPreviewService.Stop();
         foreach (var document in OpenDocuments)
         {
             document.PropertyChanged -= DocumentTab_PropertyChanged;

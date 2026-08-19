@@ -8,6 +8,7 @@ using ZiapStudio.Services.Authentication;
 using ZiapStudio.Services.Documents;
 using ZiapStudio.Services.Editing;
 using ZiapStudio.Services.Fusion.Preflight;
+using ZiapStudio.Services.Fusion.Audio;
 using ZiapStudio.Services.Initialization;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
@@ -43,6 +44,9 @@ public sealed partial class MainWindow : Window
         ZiapAuthenticationService authenticationService,
         PreflightScanner preflightScanner,
         PreflightSuppressionStore preflightSuppressionStore,
+        FusionAudioCatalogService fusionAudioCatalogService,
+        FusionAudioPlaybackResolver fusionAudioPlaybackResolver,
+        AudioPreviewService audioPreviewService,
         StudioLayoutSettingsService layoutSettingsService,
         StudioLayoutSettings layoutSettings)
     {
@@ -72,7 +76,10 @@ public sealed partial class MainWindow : Window
             publishedLocalizationSyncService,
             authenticationService,
             preflightScanner,
-            preflightSuppressionStore);
+            preflightSuppressionStore,
+            fusionAudioCatalogService,
+            fusionAudioPlaybackResolver,
+            audioPreviewService);
         _mainPage = new MainPage(viewModel, layoutSettings);
         RootFrame.Content = _mainPage;
         AppWindow.Changed += AppWindow_Changed;

@@ -16,7 +16,7 @@
     <EnableMsixTooling>true</EnableMsixTooling>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>0.1.8</Version>
+    <Version>0.1.9</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -34,6 +34,27 @@
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
+
+  <!--
+    Microsoft.Windows.SDK.BuildTools.WinApp 0.3.1 includes every generated .cs
+    under obj during design-time builds. The WinUI XAML targets can add the same
+    files again before CoreCompile, which triggers NETSDK1022 in Visual Studio.
+    Rebuild that generated subset once, immediately before the SDK duplicate
+    check. Normal builds are deliberately unaffected.
+  -->
+  <Target
+    Name="DeduplicateWinAppDesignTimeCompileItems"
+    BeforeTargets="CheckForDuplicateItems"
+    Condition="'$(DesignTimeBuild)' == 'true' and '$(UseWinUI)' == 'true'">
+    <ItemGroup>
+      <_WinAppDesignTimeCompile Include="$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\**\*.cs" />
+      <Compile Remove="@(_WinAppDesignTimeCompile)" />
+      <Compile Include="@(_WinAppDesignTimeCompile)">
+        <AutoGen>True</AutoGen>
+        <Visible>False</Visible>
+      </Compile>
+    </ItemGroup>
+  </Target>
 
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
     <ProjectCapability Include="Msix" />

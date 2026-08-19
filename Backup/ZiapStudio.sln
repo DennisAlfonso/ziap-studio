@@ -1,6 +1,6 @@
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 18
-VisualStudioVersion = 18.10.12106.202 insiders
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZiapStudio.Core", "src\ZiapStudio.Core\ZiapStudio.Core.csproj", "{1AFAE879-8F63-44D8-A069-5A44D4B6A403}"
 EndProject
@@ -26,10 +26,8 @@ Global
 		{3FBCF350-51B7-4A4D-A1AB-2EF98BF78FF6}.Release|x64.Build.0 = Release|Any CPU
 		{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}.Debug|x64.ActiveCfg = Debug|x64
 		{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}.Debug|x64.Build.0 = Debug|x64
-		{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}.Debug|x64.Deploy.0 = Debug|x64
 		{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}.Release|x64.ActiveCfg = Release|x64
 		{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}.Release|x64.Build.0 = Release|x64
-		{72B8A8D2-8D97-4368-A4D8-0EBAC419B0E9}.Release|x64.Deploy.0 = Release|x64
 		{A0E4970A-5672-4C99-BB1B-793D5A43594F}.Debug|x64.ActiveCfg = Debug|Any CPU
 		{A0E4970A-5672-4C99-BB1B-793D5A43594F}.Debug|x64.Build.0 = Debug|Any CPU
 		{A0E4970A-5672-4C99-BB1B-793D5A43594F}.Release|x64.ActiveCfg = Release|Any CPU
@@ -37,8 +35,5 @@ Global
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
-	EndGlobalSection
-	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid = {016D2031-68AC-4424-8A84-9B815B975DE3}
 	EndGlobalSection
 EndGlobal

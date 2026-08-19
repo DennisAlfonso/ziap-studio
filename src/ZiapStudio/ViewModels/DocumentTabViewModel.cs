@@ -13,16 +13,24 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         RpgMakerDatabaseDocumentViewModel? database,
         RemoteLocalizationDocumentViewModel? remoteLocalization = null,
         PreflightDocumentViewModel? preflight = null,
+        FusionAudioDocumentViewModel? fusionAudio = null,
+        FusionBossDocumentViewModel? fusionBoss = null,
         DocumentEditSession? editSession = null)
     {
         Descriptor = descriptor;
         Database = database;
         RemoteLocalization = remoteLocalization;
         Preflight = preflight;
+        FusionAudio = fusionAudio;
+        FusionBoss = fusionBoss;
         EditSession = editSession;
         if (EditSession is not null)
         {
             EditSession.PropertyChanged += EditSession_PropertyChanged;
+        }
+        if (FusionAudio is not null)
+        {
+            FusionAudio.PropertyChanged += FusionAudio_PropertyChanged;
         }
     }
 
@@ -42,15 +50,23 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
 
     public bool IsPreflight => Preflight is not null;
 
+    public bool IsFusionAudio => FusionAudio is not null;
+
+    public bool IsFusionBoss => FusionBoss is not null;
+
     public RpgMakerDatabaseDocumentViewModel? Database { get; }
 
     public RemoteLocalizationDocumentViewModel? RemoteLocalization { get; }
 
     public PreflightDocumentViewModel? Preflight { get; }
 
+    public FusionAudioDocumentViewModel? FusionAudio { get; }
+
+    public FusionBossDocumentViewModel? FusionBoss { get; }
+
     public DocumentEditSession? EditSession { get; }
 
-    public bool IsDirty => EditSession?.IsDirty == true;
+    public bool IsDirty => EditSession?.IsDirty == true || FusionAudio?.IsDirty == true;
 
     public bool CanUndo => EditSession?.CanUndo == true;
 
@@ -92,6 +108,20 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         database: null,
         preflight: preflight);
 
+    public static DocumentTabViewModel CreateFusionAudio(
+        FusionAudioDocument document,
+        FusionAudioDocumentViewModel fusionAudio) => new(
+        document.Descriptor,
+        database: null,
+        fusionAudio: fusionAudio);
+
+    public static DocumentTabViewModel CreateFusionBoss(
+        FusionBossWorkspaceDocument document,
+        FusionBossDocumentViewModel fusionBoss) => new(
+        document.Descriptor,
+        database: null,
+        fusionBoss: fusionBoss);
+
     public static DocumentTabViewModel Create(
         RpgMakerDatabaseDocument document,
         IReadOnlyDictionary<AssetPreviewKey, AssetPreviewResult> assetPreviews,
@@ -117,6 +147,15 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         if (args.PropertyName == nameof(DocumentEditSession.CanRedo))
         {
             OnPropertyChanged(nameof(CanRedo));
+        }
+    }
+
+    private void FusionAudio_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(FusionAudioDocumentViewModel.IsDirty))
+        {
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(Header));
         }
     }
 

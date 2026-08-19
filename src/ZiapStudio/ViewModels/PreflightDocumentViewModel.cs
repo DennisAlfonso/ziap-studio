@@ -10,6 +10,7 @@ public sealed class PreflightDocumentViewModel : INotifyPropertyChanged
     private readonly List<PreflightIssueViewModel> _allItems = [];
     private string _searchText = string.Empty;
     private int _filterIndex;
+    private string _selectedScope = "Tutti";
     private PreflightScanResult _result = PreflightScanResult.Empty;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -17,6 +18,8 @@ public sealed class PreflightDocumentViewModel : INotifyPropertyChanged
     public ObservableCollection<PreflightIssueViewModel> VisibleItems { get; } = [];
 
     public ObservableCollection<PreflightIssueViewModel> RecentIssues { get; } = [];
+
+    public ObservableCollection<string> ScopeOptions { get; } = ["Tutti"];
 
     public string SearchText
     {
@@ -36,6 +39,18 @@ public sealed class PreflightDocumentViewModel : INotifyPropertyChanged
         set
         {
             if (SetProperty(ref _filterIndex, value))
+            {
+                ApplyFilter();
+            }
+        }
+    }
+
+    public string SelectedScope
+    {
+        get => _selectedScope;
+        set
+        {
+            if (SetProperty(ref _selectedScope, value ?? "Tutti"))
             {
                 ApplyFilter();
             }
@@ -89,6 +104,17 @@ public sealed class PreflightDocumentViewModel : INotifyPropertyChanged
             RecentIssues.Add(item);
         }
 
+        var previousScope = SelectedScope;
+        ScopeOptions.Clear();
+        ScopeOptions.Add("Tutti");
+        foreach (var scope in _allItems.Select(item => item.Scope)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(scope => scope, StringComparer.OrdinalIgnoreCase))
+        {
+            ScopeOptions.Add(scope);
+        }
+        SelectedScope = ScopeOptions.Contains(previousScope) ? previousScope : "Tutti";
+
         ApplyFilter();
         OnPropertyChanged(nameof(ErrorCount));
         OnPropertyChanged(nameof(WarningCount));
@@ -105,6 +131,7 @@ public sealed class PreflightDocumentViewModel : INotifyPropertyChanged
     {
         SearchText = string.Empty;
         FilterIndex = 0;
+        SelectedScope = "Tutti";
         Update(PreflightScanResult.Empty);
     }
 
@@ -119,6 +146,12 @@ public sealed class PreflightDocumentViewModel : INotifyPropertyChanged
             4 => item.IsObsolete,
             _ => !item.IsIgnored && !item.IsObsolete,
         });
+        if (!SelectedScope.Equals("Tutti", StringComparison.OrdinalIgnoreCase))
+        {
+            items = items.Where(item => item.Scope.Equals(
+                SelectedScope,
+                StringComparison.OrdinalIgnoreCase));
+        }
         if (search.Length > 0)
         {
             items = items.Where(item =>

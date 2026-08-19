@@ -9,4 +9,6 @@ public sealed record DocumentDescriptor
     public DocumentKind Kind { get; init; }
 
     public Uri ResourceId { get; init; } = new("ziap://document/unknown");
+
+    public string? SourcePath { get; init; }
 }

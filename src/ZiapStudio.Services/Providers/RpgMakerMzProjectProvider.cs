@@ -9,6 +9,7 @@ internal sealed class RpgMakerMzProjectProvider : IProjectProvider
 {
     private const int MaximumPlugins = 100;
     private const int MaximumCustomDatabases = 40;
+    private const int MaximumAudioAssets = 2500;
 
     private static readonly (string FileName, string DisplayName, string? ResourceName)[] DatabaseFiles =
     [
@@ -272,7 +273,12 @@ internal sealed class RpgMakerMzProjectProvider : IProjectProvider
     {
         var assets = new List<ProjectExplorerNode>();
         AddDirectoryIfPresent(assets, projectPath, "img", "Immagini");
-        AddDirectoryIfPresent(assets, projectPath, "audio", "Audio");
+        var audioPath = Path.Combine(projectPath, "audio");
+        if (_fileSystem.DirectoryExists(audioPath))
+        {
+            var remaining = MaximumAudioAssets;
+            assets.Add(BuildAudioNode(audioPath, "Audio", ref remaining, depth: 0));
+        }
         AddDirectoryIfPresent(assets, projectPath, "fonts", "Font");
 
         return new ProjectExplorerNode
@@ -281,6 +287,57 @@ internal sealed class RpgMakerMzProjectProvider : IProjectProvider
             Kind = ProjectExplorerNodeKind.Category,
             Path = projectPath,
             Children = assets,
+        };
+    }
+
+    private ProjectExplorerNode BuildAudioNode(
+        string path,
+        string displayName,
+        ref int remaining,
+        int depth)
+    {
+        if (remaining <= 0 || depth > 8)
+        {
+            return new ProjectExplorerNode
+            {
+                Name = displayName,
+                Kind = depth == 0 ? ProjectExplorerNodeKind.Asset : ProjectExplorerNodeKind.Directory,
+                Path = path,
+            };
+        }
+
+        var children = new List<ProjectExplorerNode>();
+        foreach (var directory in _fileSystem.EnumerateDirectories(path)
+            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+        {
+            if (remaining <= 0) break;
+            children.Add(BuildAudioNode(
+                directory,
+                Path.GetFileName(directory).ToUpperInvariant(),
+                ref remaining,
+                depth + 1));
+        }
+
+        foreach (var file in _fileSystem.EnumerateFiles(path, "*.*")
+            .Where(file => Path.GetExtension(file).ToLowerInvariant() is
+                ".ogg" or ".m4a" or ".wav" or ".mp3")
+            .OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase))
+        {
+            if (remaining-- <= 0) break;
+            children.Add(new ProjectExplorerNode
+            {
+                Name = Path.GetFileName(file),
+                Kind = ProjectExplorerNodeKind.Asset,
+                Path = file,
+            });
+        }
+
+        return new ProjectExplorerNode
+        {
+            Name = displayName,
+            Kind = depth == 0 ? ProjectExplorerNodeKind.Asset : ProjectExplorerNodeKind.Directory,
+            Path = path,
+            Children = children,
         };
     }
 

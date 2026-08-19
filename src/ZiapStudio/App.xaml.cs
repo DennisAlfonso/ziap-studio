@@ -6,12 +6,17 @@ using ZiapStudio.Services.Authentication;
 using ZiapStudio.Services.Documents;
 using ZiapStudio.Services.Editing;
 using ZiapStudio.Services.Fusion.Preflight;
+using ZiapStudio.Services.Fusion.Audio;
+using ZiapStudio.Services.Fusion.Bosses;
+using ZiapStudio.Services.Fusion.Preflight.Audio;
+using ZiapStudio.Services.Fusion.Preflight.Bosses;
 using ZiapStudio.Services.Fusion.Preflight.Weapons;
 using ZiapStudio.Services.Fusion.Weapons;
 using ZiapStudio.Services.Initialization;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
 using ZiapStudio.Services.Providers;
+using ZiapStudio.Services.Integrations;
 
 namespace ZiapStudio;
 
@@ -37,9 +42,29 @@ public partial class App : Application
             Path.Combine(settingsDirectory, "layout.json"));
         var layoutSettings = await layoutSettingsService.LoadAsync();
         var projectIdGenerator = new ProjectIdGenerator();
+        var atomicJsonWriter = new AtomicJsonFileWriter(fileSystem);
+        var pluginRegistry = new RpgMakerPluginRegistryService(fileSystem);
+        var fusionAudioIntegrationProvider = new FusionAudioIntegrationProvider(pluginRegistry);
+        var fusionBossIntegrationProvider = new FusionBossIntegrationProvider(pluginRegistry);
+        var projectIntegrationService = new ProjectIntegrationService(
+        [
+            fusionAudioIntegrationProvider,
+            fusionBossIntegrationProvider,
+        ]);
+        var fusionAudioCatalogService = new FusionAudioCatalogService(
+            fileSystem,
+            pluginRegistry,
+            atomicJsonWriter);
+        var fusionAudioPlaybackResolver = new FusionAudioPlaybackResolver(
+            fusionAudioCatalogService);
+        var fusionBossWorkspaceService = new FusionBossWorkspaceService(
+            fileSystem,
+            pluginRegistry);
         var documentResolver = new DocumentResolver(
         [
             new RpgMakerDatabaseDocumentProvider(fileSystem),
+            new FusionAudioDocumentProvider(fusionAudioCatalogService),
+            new FusionBossDocumentProvider(fusionBossWorkspaceService),
         ]);
         var assetPreviewService = new AssetPreviewService(
             new AssetResolver(new RpgMakerAssetProvider(fileSystem)),
@@ -48,7 +73,7 @@ public partial class App : Application
         var documentSaveService = new DocumentSaveService(
             new DocumentValidationService(),
             new ExternalModificationDetector(fileSystem, snapshotService),
-            new AtomicJsonFileWriter(fileSystem),
+            atomicJsonWriter,
             snapshotService,
             new JsonTextPatchSerializer(fileSystem));
         var shellService = new WindowsShellService();
@@ -87,6 +112,10 @@ public partial class App : Application
             new WeaponPreflightProvider(
                 fileSystem,
                 new WeaponNotetagCatalogProvider(fileSystem)),
+            new FusionAudioPreflightProvider(fusionAudioCatalogService, pluginRegistry),
+            new FusionBossPreflightProvider(
+                fusionBossWorkspaceService,
+                fusionBossIntegrationProvider),
         ]);
         var preflightSuppressionStore = new PreflightSuppressionStore(
             fileSystem,
@@ -96,7 +125,7 @@ public partial class App : Application
             new ProjectService(fileSystem),
             new ProjectInitializationService(fileSystem, projectIdGenerator),
             projectIdGenerator,
-            new ProjectProviderService(fileSystem),
+            new ProjectProviderService(fileSystem, projectIntegrationService),
             new DocumentService(documentResolver),
             assetPreviewService,
             new DocumentEditSessionFactory(),
@@ -109,6 +138,9 @@ public partial class App : Application
             authenticationService,
             preflightScanner,
             preflightSuppressionStore,
+            fusionAudioCatalogService,
+            fusionAudioPlaybackResolver,
+            new AudioPreviewService(),
             layoutSettingsService,
             layoutSettings);
         _window.Activate();
