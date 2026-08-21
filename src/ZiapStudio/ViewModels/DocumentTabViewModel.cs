@@ -131,6 +131,19 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
             new RpgMakerDatabaseDocumentViewModel(document, assetPreviews, editSession),
             editSession: editSession);
 
+    public void Dispose()
+    {
+        if (EditSession is not null)
+        {
+            EditSession.PropertyChanged -= EditSession_PropertyChanged;
+        }
+        if (FusionAudio is not null)
+        {
+            FusionAudio.PropertyChanged -= FusionAudio_PropertyChanged;
+        }
+        FusionBoss?.CloseExternalSurfaces();
+    }
+
     private void EditSession_PropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName == nameof(DocumentEditSession.IsDirty))

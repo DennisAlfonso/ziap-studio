@@ -21,6 +21,18 @@ semantico e un browser con preview per `ZDP_FusionAudio`.
 - preview diretta degli asset audio supportati da Windows e apertura della cartella SE;
 - capability `Fusion Boss Battle` rilevata dai plugin Combat, Encounter e Arena attivi;
 - workspace Boss Battle con inventario di `FusionCombat`, `FusionEncounters`, `FusionArenas` e `FusionPuzzles`;
+- browser degli encounter con selezione sincronizzata di fase e sequenza;
+- grafo interattivo delle fasi con transizioni e condizioni;
+- timeline visuale di azioni, attese, sincronizzazioni, sequenze annidate e loop;
+- stima dei frame minimi che distingue i tempi esatti da quelli successivi a condizioni dinamiche;
+- Arena Preview con il Tilemap reale di RPG Maker MZ, selezione arena/mappa e asset del progetto;
+- navigazione interattiva dell'arena con pan, zoom, griglia, regioni, anchor e ruoli;
+- AttackGeometry collegata alla timeline con layer separati per telegraph, hitbox e traiettorie;
+- probe interattivo per ispezionare gli attacchi il cui bersaglio viene acquisito soltanto a runtime;
+- scheduler a 60 FPS per warning, partenze ripetute, collider mobili e raffiche multi-target;
+- import dei trace reali del playtest con confronto temporale e geometrico Previsto/Runtime;
+- overlay runtime di movimento boss/player, telegraph, collider, proiettili e impatti;
+- Arena Preview separabile in una finestra ridimensionabile sincronizzata con il documento;
 - validazione incrociata di boss, enemy, scaling profile, encounter, fasi, arene, puzzle e completion profile;
 - verifica delle mappe e delle quantità di `<FusionAnchor:...>` richieste dalle arene;
 - diagnostica Boss Battle integrata nel Pre-Flight con navigazione al workspace;
@@ -267,9 +279,120 @@ analizzare il sorgente JavaScript dei plugin e controlla i riferimenti fra i rel
 record. Per ogni arena verifica inoltre l'esistenza delle mappe dichiarate e confronta
 gli anchor richiesti con i notetag presenti negli eventi della mappa.
 
-La prima surface è intenzionalmente diagnostica e read-only: costituisce la foundation
-per graph delle fasi, timeline degli attacchi e anteprima spaziale delle arene senza
-anticipare scritture sulle mappe RPG Maker.
+La surface resta intenzionalmente read-only, ma proietta già gli encounter in un grafo
+interattivo delle fasi e in una timeline per sequenza. Le attese deterministiche
+contribuiscono al tempo minimo; dopo `waitUntil`, chiamate a sequenze annidate o loop,
+gli step successivi sono marcati con `≥` perché il frame assoluto dipende dal runtime.
+Questa distinzione evita che l'editor presenti come esatto un timing che non può
+conoscere staticamente.
+
+Il workspace separa ora il lavoro in quattro modalità focalizzate: `Panoramica` mostra
+soltanto struttura e transizioni dell'encounter, `Sequenza` concentra timeline e step
+selezionato, `Runtime` isola gli scostamenti osservati durante il playtest, mentre
+`Arena` rende espliciti fase, sequenza, trace, arena e mappa nello stesso contesto.
+L'elenco tecnico completo degli step è chiuso per impostazione
+predefinita e il comando `Focus` può nascondere il selettore degli encounter per
+ampliare la superficie attiva. Nel grafo le condizioni non sono più etichette sempre
+visibili: le connessioni della fase selezionata vengono evidenziate e il dettaglio
+resta disponibile nel riepilogo contestuale e tramite tooltip.
+
+Una semantic layer evita che il designer debba conoscere a memoria gli ID del runtime.
+Fasi e sequenze possono dichiarare facoltativamente `displayName`, `summary`,
+`playerGoal` e `designerIntent`; se questi metadati mancano, Studio continua comunque
+a spiegare automaticamente ogni step. Il catalogo opzionale
+`data/FusionActionCatalog.json` associa agli action ID un nome leggibile, una categoria,
+un'icona e un template descrittivo, mantenendo sempre visibili ID e argomenti tecnici
+come informazione secondaria. La timeline evidenzia anche le dipendenze essenziali fra
+step, ad esempio una posizione prodotta da `combat.captureTarget` e consumata dai cast
+successivi.
+
+L'overview compatta della timeline rappresenta le attese come segmenti, le finestre
+di attacco come barre e gli step salienti con marker iconici. L'hover espone dettagli,
+target, warning e ripetizioni; il click seleziona e porta in vista lo step, mentre
+click-and-drag, frecce, Page Up/Down, Home ed End spostano il cursore temporale. Lo
+stesso frame viene condiviso con lo scheduler di Arena Preview, anche quando la preview
+si trova nella finestra separata.
+
+La scheda `Arena Preview` ricostruisce la scena dai dati originali `MapXXX.json`,
+`MapInfos.json` e `Tilesets.json`. Il rendering usa le copie di `pixi.js` e del
+`Tilemap` presenti nel progetto RPG Maker, quindi autotile, livelli e flag del
+tileset seguono lo stesso codice dell'engine. Il renderer gira in una WebView2
+isolata e read-only: non esegue i plugin del gioco, non espone oggetti host, blocca
+rete, finestre e permessi, e può leggere soltanto il runtime MZ e le immagini di
+tileset/parallasse necessarie. Gli overlay dell'editor restano separati dal tilemap,
+così griglia, regioni, `<FusionAnchor>` e `<FusionRole>` possono essere attivati e
+ispezionati senza alterare la scena.
+
+La preview può essere spostata in una finestra secondaria, dove il canvas occupa
+l'intera area client disponibile. Arena e mappa restano sincronizzate con il documento;
+la tab mostra chiaramente che la preview è esterna e permette di richiamarla o riportarla
+nel workspace. Chiudere la finestra, il documento, il progetto o Studio aggiorna e libera
+la superficie collegata senza lasciare renderer WebView2 orfani.
+
+Selezionando un'azione di attacco nella timeline, `AttackGeometry` sovrappone tre
+layer indipendenti: telegraph previsto, collisione primaria del runtime e
+traiettoria. Le geometrie sono ricavate dai notetag ABS delle skill e dai parametri
+di `FHD_EnemyAttackTelegraph.js`; le hitbox aggiuntive sono visualizzate
+separatamente. Per target acquisiti a runtime, come `captured:impact`, Studio usa un
+probe spostabile con doppio clic sulla mappa e lo dichiara come tale, invece di
+presentare una coordinata statica come reale.
+
+La modalità `Simula` aggiunge uno scheduler a 60 FPS basato sul tempo minimo della
+sequenza. Distingue durata visiva del telegraph, ritardo effettivo di esecuzione,
+`repeat`, `repeatOnUse` e `repeatDelay`; per i proiettili mostra i collider circolari
+in movimento lungo la traiettoria invece di trattare l'intero corridoio come una
+hitbox. Le skill direzionali usano le stesse otto direzioni discrete dell'adapter
+Alpha ABS, mentre `combat.castVolley` espande tutti i target e rispetta l'indice
+degli anchor omonimi. Dopo `roleMovementComplete`, l'origine del cast viene inoltre
+proiettata sulla destinazione raggiunta dal ruolo.
+
+La barra inferiore di Arena Preview rappresenta anche la struttura della sequenza:
+le attese sono segmenti neutri, le finestre di telegraph/esecuzione sono rosse e
+cue, catture, cast, loop e sincronizzazioni hanno marker dedicati. Gli eventi sullo
+stesso frame vengono raggruppati con un contatore; passando il puntatore si vedono
+dettagli, target e frame d'impatto, mentre il clic seleziona lo step corrispondente
+anche nella timeline di Studio. Lo slider, la riproduzione e i marker condividono
+sempre lo stesso cursore con la finestra principale e con la preview separata.
+
+### Runtime Trace & Fidelity
+
+Con `ZDP_FusionRuntimeTrace` attivo, i playtest delle Fusion Arena producono file
+versionati in `.ziap/runtime-traces`. Studio li filtra per encounter e sincronizza
+automaticamente arena e mappa con la registrazione scelta; il pulsante di refresh importa
+subito un trace appena concluso senza riaprire il documento. Per le sequenze ripetute
+viene mostrata l'esecuzione più recente del file selezionato. Il selettore indica anche
+il profilo di cattura `Full`, `Balanced`, `Compact` o `Custom`: i profili ridotti
+mantengono integri gli eventi di combattimento e riducono soltanto campioni continui di
+posizione e formattazione del JSON.
+
+La barra inferiore separa `PREVISTO` e `RUNTIME`. La seconda corsia mostra step reali,
+telegraph, esecuzioni, attivazioni dei collider e impatti; hover e click espongono e
+raggiungono il frame effettivo. Le raffiche confrontano ogni cast usando il proprio
+`castIndex`, quindi `repeatOnUse` e `repeatDelay` non generano falsi scostamenti. Gli
+stati `Aligned`, `Drift`, `Divergent` e `Missing` sintetizzano delta di frame, centro e
+raggio.
+
+La scheda `Runtime` presenta questi stati come una review orientata ai problemi: per
+impostazione predefinita elenca soltanto drift, divergenze e cast mancanti, lasciando gli
+attacchi allineati dietro un filtro opzionale. Il dettaglio espone frame previsti e reali,
+telegraph, collider, geometria e identificativi di cast/run. Selezionare un confronto
+sincronizza lo step e il cursore temporale; i comandi contestuali aprono direttamente lo
+stesso punto nella timeline o nell'Arena Preview.
+
+In modalità temporale il layer `Runtime` sovrappone all'arena le posizioni interpolate
+di boss e giocatore, le relative scie, i telegraph realmente mostrati, collider,
+proiettili e target colpiti. Si tratta di dati osservati dal runtime, non di una seconda
+simulazione; possono quindi essere confrontati visivamente con Telegraph, Hitbox e
+Traiettoria previsti usando lo stesso scrubber.
+
+Per l'abilità 95 (`Impatto stordente`) telegraph e collider primario coincidono:
+raggio 1 tile, centro verticale a `-0.5` tile e warning di 60 frame. L'anteprima
+evidenzia però anche il punto grezzo acquisito e il relativo offset, utile per
+distinguere lo scarto visivo dello sprite dalla geometria effettiva. La collisione
+finale può comunque dipendere dalla hurtbox del giocatore e dallo stato dinamico
+del runtime. Le sequenze che attraversano condizioni dinamiche mantengono quindi
+il prefisso `≥`: lo scheduler rappresenta il tempo minimo, non spaccia una stima
+statica per un frame assoluto.
 
 ## Project Pre-Flight
 

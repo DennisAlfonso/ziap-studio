@@ -176,6 +176,7 @@ public sealed partial class MainWindow : Window
             }
 
             await SaveLayoutAsync();
+            _mainPage.ViewModel.CloseExternalSurfaces();
             _allowClose = true;
             Close();
         }

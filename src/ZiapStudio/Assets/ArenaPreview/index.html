@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="it">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+    <title>ZIAP Arena Preview</title>
+    <style>
+        :root { color-scheme: dark; font-family: "Segoe UI", sans-serif; }
+        [hidden] { display: none !important; }
+        html, body { width: 100%; height: 100%; margin: 0; overflow: hidden; background: #101218; }
+        #stage {
+            position: absolute; inset: 0; display: block;
+            width: 100% !important; height: 100% !important;
+            image-rendering: pixelated; cursor: grab;
+        }
+        #stage.dragging { cursor: grabbing; }
+        #toolbar {
+            position: absolute; top: 12px; left: 12px; display: flex; gap: 6px; flex-wrap: wrap;
+            padding: 7px; border: 1px solid rgba(255,255,255,.14); border-radius: 8px;
+            background: rgba(20,23,31,.9); backdrop-filter: blur(8px); user-select: none; z-index: 3;
+        }
+        button {
+            color: #e8eaf0; border: 1px solid rgba(255,255,255,.15); border-radius: 5px;
+            background: rgba(255,255,255,.07); padding: 5px 9px; font: inherit; font-size: 12px;
+        }
+        button:hover { background: rgba(255,255,255,.13); }
+        button.active { border-color: #5cc8ff; background: rgba(43,158,216,.3); }
+        button.zoom { min-width: 30px; padding-inline: 7px; font-size: 14px; }
+        .separator { width: 1px; margin: 2px 2px; background: rgba(255,255,255,.13); }
+        .hint { align-self: center; margin: 0 4px; color: #aeb4c2; font-size: 11px; }
+        .telegraph.active { border-color: #ff5b61; background: rgba(190,42,49,.28); }
+        .hitbox.active { border-color: #53d9ff; background: rgba(28,139,179,.28); }
+        .trajectory.active { border-color: #ffcf5c; background: rgba(181,132,26,.25); }
+        .runtime.active { border-color: #d87cff; background: rgba(151,63,190,.28); }
+        #status {
+            position: absolute; right: 12px; bottom: 10px; max-width: 70%; padding: 5px 8px;
+            color: #d7dbe6; border-radius: 5px; background: rgba(10,12,17,.78); font-size: 11px;
+            pointer-events: none; user-select: none; z-index: 3;
+        }
+        #error, #empty {
+            position: absolute; inset: 0; display: none; place-items: center; padding: 30px;
+            background: #101218; text-align: center; white-space: pre-wrap; z-index: 4;
+        }
+        #error { color: #ffb4ab; }
+        #empty { display: grid; color: #aeb4c2; z-index: 2; }
+        #empty strong { display: block; margin-bottom: 5px; color: #e8eaf0; font-size: 15px; }
+        #attack-info {
+            position: absolute; left: 12px; bottom: 10px; display: none; max-width: min(520px, 55%);
+            padding: 8px 10px; border: 1px solid rgba(255,255,255,.14); border-radius: 7px;
+            color: #cbd0dc; background: rgba(10,12,17,.84); font-size: 11px; z-index: 3;
+            pointer-events: none; user-select: none;
+        }
+        #attack-info strong { display: block; margin-bottom: 3px; color: #f1f3f7; font-size: 12px; }
+        #scheduler {
+            position: absolute; left: 50%; bottom: 10px; display: grid; align-items: center;
+            grid-template-columns: auto auto minmax(140px, 1fr) auto; grid-template-rows: auto 72px;
+            column-gap: 7px; row-gap: 3px;
+            width: min(900px, calc(100% - 48px)); padding: 7px 9px; transform: translateX(-50%);
+            border: 1px solid rgba(255,255,255,.14); border-radius: 7px;
+            color: #d7dbe6; background: rgba(10,12,17,.93); z-index: 3; user-select: none;
+            box-shadow: 0 8px 28px rgba(0,0,0,.28);
+        }
+        #scheduler-mode, #scheduler-play { grid-row: 1 / span 2; align-self: center; }
+        #scheduler-meta {
+            display: flex; min-width: 0; align-items: baseline; gap: 7px; overflow: hidden;
+            color: #f1f3f7; font-size: 11px; font-weight: 600;
+        }
+        #scheduler-meta small {
+            overflow: hidden; color: #8f96a6; font-size: 10px; font-weight: 400;
+            text-overflow: ellipsis; white-space: nowrap;
+        }
+        #scheduler-time { min-width: 92px; font: 11px Consolas, monospace; text-align: right; }
+        #scheduler-mode.active { border-color: #ffcf5c; background: rgba(181,132,26,.25); }
+        #scheduler-track { position: relative; grid-column: 3 / 5; height: 72px; min-width: 80px; }
+        #scheduler-range {
+            position: absolute; left: 0; right: 0; bottom: 0; width: 100%; height: 16px;
+            margin: 0; accent-color: #ffb43b; cursor: ew-resize;
+        }
+        .scheduler-lane-label {
+            position: absolute; left: 1px; width: 56px; color: #7f8797;
+            font: 700 8px/18px "Segoe UI", sans-serif; letter-spacing: .65px;
+        }
+        .scheduler-lane-label.expected { top: 1px; }
+        .scheduler-lane-label.runtime { top: 29px; color: #c38add; }
+        #scheduler-ranges, #scheduler-markers,
+        #scheduler-runtime-ranges, #scheduler-runtime-markers {
+            position: absolute; left: 62px; right: 8px; pointer-events: none;
+        }
+        #scheduler-ranges { top: 20px; height: 5px; }
+        #scheduler-runtime-ranges { top: 49px; height: 5px; }
+        .scheduler-range-segment {
+            position: absolute; min-width: 2px; height: 4px; border-radius: 2px;
+            background: rgba(128,137,153,.58);
+        }
+        .scheduler-range-segment.attack {
+            height: 5px; background: rgba(255,91,97,.86); box-shadow: 0 0 5px rgba(255,91,97,.42);
+        }
+        .scheduler-range-segment.runtime { background: rgba(216,124,255,.78); }
+        .scheduler-range-segment.aligned { background: rgba(80,210,151,.88); }
+        .scheduler-range-segment.drift { background: rgba(255,190,82,.9); }
+        .scheduler-range-segment.divergent, .scheduler-range-segment.missing { background: rgba(255,91,97,.9); }
+        #scheduler-markers { top: 0; height: 23px; }
+        #scheduler-runtime-markers { top: 29px; height: 23px; }
+        button.scheduler-marker {
+            position: absolute; top: 0; width: 21px; height: 21px; min-width: 21px; padding: 0;
+            transform: translateX(-50%); border-radius: 50%; pointer-events: auto;
+            color: #eef1f7; border-color: rgba(255,255,255,.3); background: #454b58;
+            font: 12px/19px "Segoe UI Symbol", "Segoe UI", sans-serif; cursor: pointer;
+        }
+        button.scheduler-marker::after {
+            content: ""; position: absolute; left: 50%; top: 20px; width: 1px; height: 8px;
+            background: currentColor; opacity: .38;
+        }
+        button.scheduler-marker.attack { background: #962f36; }
+        button.scheduler-marker.sync { background: #317096; }
+        button.scheduler-marker.sequence { background: #724e9c; }
+        button.scheduler-marker.capture { background: #236f75; }
+        button.scheduler-marker.cue { background: #555c6b; }
+        button.scheduler-marker.runtime { width: 18px; height: 18px; min-width: 18px; color: #fff; background: #8e4bab; font-size: 10px; line-height: 16px; }
+        button.scheduler-marker.runtime.aligned { background: #247b57; }
+        button.scheduler-marker.runtime.drift { background: #9a6a18; }
+        button.scheduler-marker.runtime.divergent,
+        button.scheduler-marker.runtime.missing { background: #a8323b; }
+        button.scheduler-marker.selected {
+            outline: 2px solid #ffcf5c; outline-offset: 1px; color: #fff8df;
+        }
+        .scheduler-marker-count {
+            position: absolute; right: -7px; top: -6px; min-width: 13px; height: 13px; padding: 0 2px;
+            border-radius: 7px; color: #15171d; background: #ffcf5c; font: 700 8px/13px "Segoe UI";
+        }
+        #scheduler-tooltip {
+            position: fixed; display: none; width: max-content; max-width: min(430px, calc(100% - 24px));
+            padding: 8px 10px; border: 1px solid rgba(255,255,255,.18); border-radius: 7px;
+            color: #d7dbe6; background: rgba(7,9,13,.97); box-shadow: 0 8px 26px rgba(0,0,0,.42);
+            font-size: 11px; line-height: 1.35; white-space: pre-line; pointer-events: none; z-index: 6;
+        }
+        #scheduler-tooltip strong { display: block; margin-bottom: 4px; color: #fff; font-size: 12px; }
+        @media (max-width: 650px) {
+            #scheduler { width: calc(100% - 24px); grid-template-columns: auto auto minmax(80px, 1fr) auto; }
+            #scheduler-meta small { display: none; }
+            #scheduler-time { min-width: 76px; font-size: 10px; }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="stage"></canvas>
+    <div id="toolbar" hidden>
+        <button id="zoom-out" class="zoom" type="button" title="Riduci zoom (−)">−</button>
+        <button id="reset" type="button" title="Adatta l'intera arena (0)">Adatta</button>
+        <button id="zoom-in" class="zoom" type="button" title="Aumenta zoom (+)">+</button>
+        <span class="separator"></span>
+        <button data-layer="grid" class="active" type="button" aria-pressed="true" title="Mostra o nasconde la griglia (G)">Griglia</button>
+        <button data-layer="regions" type="button" aria-pressed="false" title="Mostra o nasconde le regioni (R)">Regioni</button>
+        <button data-layer="anchors" class="active" type="button" aria-pressed="true" title="Mostra o nasconde gli anchor (A)">Anchor</button>
+        <button data-layer="roles" class="active" type="button" aria-pressed="true" title="Mostra o nasconde i ruoli">Ruoli</button>
+        <span class="separator attack-only" hidden></span>
+        <button data-layer="attackTelegraph" class="active telegraph attack-only" hidden type="button" aria-pressed="true">Telegraph</button>
+        <button data-layer="attackHitbox" class="active hitbox attack-only" hidden type="button" aria-pressed="true">Hitbox</button>
+        <button data-layer="attackTrajectory" class="active trajectory attack-only" hidden type="button" aria-pressed="true">Traiettoria</button>
+        <button data-layer="runtimeTrace" class="active runtime attack-only" hidden type="button" aria-pressed="true">Runtime</button>
+        <span class="hint">Trascina per spostare · rotella per zoom</span>
+    </div>
+    <div id="status">In attesa della scena…</div>
+    <div id="attack-info"></div>
+    <div id="scheduler" hidden>
+        <button id="scheduler-mode" type="button" title="Alterna geometria statica e simulazione temporale">Simula</button>
+        <button id="scheduler-play" class="zoom" type="button" title="Riproduci o metti in pausa">▶</button>
+        <div id="scheduler-meta"><span id="scheduler-sequence">Sequenza</span><small id="scheduler-context">hover per dettagli · click per selezionare</small></div>
+        <span id="scheduler-time">F 0 / 0</span>
+        <div id="scheduler-track">
+            <span class="scheduler-lane-label expected">PREVISTO</span>
+            <span class="scheduler-lane-label runtime">RUNTIME</span>
+            <div id="scheduler-ranges" aria-hidden="true"></div>
+            <div id="scheduler-markers"></div>
+            <div id="scheduler-runtime-ranges" aria-hidden="true"></div>
+            <div id="scheduler-runtime-markers"></div>
+            <input id="scheduler-range" type="range" min="0" max="1" step="0.1" value="0" aria-label="Frame della sequenza">
+        </div>
+    </div>
+    <div id="scheduler-tooltip" role="tooltip"></div>
+    <div id="error"></div>
+    <div id="empty"><div><strong>Nessuna mappa da mostrare</strong>Seleziona un’arena e una mappa per avviare la preview.</div></div>
+    <script src="https://project.ziap/js/libs/pixi.js"></script>
+    <script src="https://project.ziap/js/rmmz_core.js"></script>
+    <script src="arena-preview.js"></script>
+</body>
+</html>

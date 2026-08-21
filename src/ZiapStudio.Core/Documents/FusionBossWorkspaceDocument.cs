@@ -10,6 +10,14 @@ public sealed record FusionBossWorkspaceDocument : StudioDocument
 
     public IReadOnlyList<FusionBossDiagnostic> Diagnostics { get; init; } = [];
 
+    public IReadOnlyList<FusionBossEncounterDefinition> Encounters { get; init; } = [];
+
+    public IReadOnlyList<FusionBossArenaDefinition> Arenas { get; init; } = [];
+
+    public IReadOnlyList<FusionBossAttackGeometry> AttackGeometries { get; init; } = [];
+
+    public string ProjectPath { get; init; } = string.Empty;
+
     public bool PluginIsActive => Plugins.Any(plugin => plugin.IsActive);
 
     public int ErrorCount => Diagnostics.Count(diagnostic =>

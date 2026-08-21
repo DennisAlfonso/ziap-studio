@@ -1163,6 +1163,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         var wasSelected = ReferenceEquals(document, SelectedDocument);
         OpenDocuments.Remove(document);
         document.PropertyChanged -= DocumentTab_PropertyChanged;
+        document.Dispose();
         if (wasSelected)
         {
             ShowProjectOverview();
@@ -1170,6 +1171,14 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
         NotifyEditingPropertiesChanged();
         return true;
+    }
+
+    public void CloseExternalSurfaces()
+    {
+        foreach (var document in OpenDocuments)
+        {
+            document.FusionBoss?.CloseExternalSurfaces();
+        }
     }
 
     public async Task<DocumentSaveResult?> SaveSelectedDocumentAsync() =>
@@ -1345,6 +1354,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                 return;
             }
             await OpenDocumentAsync(bossExplorerItem);
+            ActiveFusionBossDocument?.NavigateTo(targetUri);
             return;
         }
 
@@ -1448,6 +1458,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         foreach (var document in OpenDocuments)
         {
             document.PropertyChanged -= DocumentTab_PropertyChanged;
+            document.Dispose();
         }
 
         OpenDocuments.Clear();

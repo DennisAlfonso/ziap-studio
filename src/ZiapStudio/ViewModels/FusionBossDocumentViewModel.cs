@@ -1,10 +1,31 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
 using ZiapStudio.Core.Documents;
 using ZiapStudio.Core.Fusion.Bosses;
+using ZiapStudio.Services.Fusion.Bosses;
 
 namespace ZiapStudio.ViewModels;
 
-public sealed class FusionBossDocumentViewModel
+public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
 {
+    private FusionBossEncounterViewModel? _selectedEncounter;
+    private FusionBossPhaseViewModel? _selectedPhase;
+    private FusionBossSequenceViewModel? _selectedSequence;
+    private FusionBossTimelineStepViewModel? _selectedTimelineStep;
+    private FusionBossArenaViewModel? _selectedArena;
+    private FusionBossMapSceneViewModel? _selectedMap;
+    private IReadOnlyList<FusionRuntimeTraceViewModel> _allRuntimeTraces = [];
+    private IReadOnlyList<FusionRuntimeTraceViewModel> _runtimeTraces = [];
+    private FusionRuntimeTraceViewModel? _selectedRuntimeTrace;
+    private FusionRuntimeSequenceAnalysis? _runtimeTraceAnalysis;
+    private IReadOnlyList<FusionRuntimeAttackComparisonViewModel> _runtimeAttackComparisons = [];
+    private FusionRuntimeAttackComparisonViewModel? _selectedRuntimeAttack;
+    private IReadOnlyList<string> _runtimeTraceErrors = [];
+    private bool _showAlignedRuntimeAttacks;
+    private bool _isArenaPreviewDetached;
+    private double _previewFrame;
+    private readonly FusionRuntimeTraceService _runtimeTraceService = new();
+
     public FusionBossDocumentViewModel(FusionBossWorkspaceDocument document)
     {
         Document = document;
@@ -17,7 +38,21 @@ public sealed class FusionBossDocumentViewModel
         Diagnostics = document.Diagnostics
             .Select(diagnostic => new FusionBossDiagnosticViewModel(diagnostic))
             .ToArray();
+        Encounters = document.Encounters
+            .Select(encounter => new FusionBossEncounterViewModel(encounter))
+            .ToArray();
+        Arenas = document.Arenas
+            .Select(arena => new FusionBossArenaViewModel(arena))
+            .ToArray();
+        SelectedEncounter = Encounters.FirstOrDefault();
+        SelectedArena ??= Arenas.FirstOrDefault();
     }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    internal event EventHandler? ExternalSurfacesCloseRequested;
+
+    internal bool ReattachArenaPreviewOnWindowClose { get; private set; } = true;
 
     public FusionBossWorkspaceDocument Document { get; }
 
@@ -26,6 +61,377 @@ public sealed class FusionBossDocumentViewModel
     public IReadOnlyList<FusionBossPluginViewModel> Plugins { get; }
 
     public IReadOnlyList<FusionBossDiagnosticViewModel> Diagnostics { get; }
+
+    public IReadOnlyList<FusionBossEncounterViewModel> Encounters { get; }
+
+    public IReadOnlyList<FusionBossArenaViewModel> Arenas { get; }
+
+    public string ProjectPath => Document.ProjectPath;
+
+    public FusionBossEncounterViewModel? SelectedEncounter
+    {
+        get => _selectedEncounter;
+        set
+        {
+            if (ReferenceEquals(_selectedEncounter, value))
+            {
+                return;
+            }
+            _selectedEncounter = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedEncounterSubtitle));
+            OnPropertyChanged(nameof(Phases));
+            SelectedPhase = value?.Phases.FirstOrDefault(phase => phase.IsInitial) ??
+                value?.Phases.FirstOrDefault();
+            SelectedArena = value is null
+                ? SelectedArena
+                : Arenas.FirstOrDefault(arena => arena.EncounterId.Equals(
+                    value.Id,
+                    StringComparison.OrdinalIgnoreCase)) ?? SelectedArena;
+            RefreshRuntimeTraceChoices();
+        }
+    }
+
+    public IReadOnlyList<FusionBossPhaseViewModel> Phases =>
+        SelectedEncounter?.Phases ?? [];
+
+    public FusionBossPhaseViewModel? SelectedPhase
+    {
+        get => _selectedPhase;
+        set
+        {
+            if (ReferenceEquals(_selectedPhase, value))
+            {
+                return;
+            }
+            _selectedPhase = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(Sequences));
+            OnPropertyChanged(nameof(PhaseSummaryText));
+            SelectedSequence = value?.Sequences.FirstOrDefault(sequence =>
+                sequence.Sequence.SourceKind == FusionBossTimelineSourceKind.Sequence) ??
+                value?.Sequences.FirstOrDefault();
+        }
+    }
+
+    public IReadOnlyList<FusionBossSequenceViewModel> Sequences =>
+        SelectedPhase?.Sequences ?? [];
+
+    public FusionBossSequenceViewModel? SelectedSequence
+    {
+        get => _selectedSequence;
+        set
+        {
+            if (ReferenceEquals(_selectedSequence, value))
+            {
+                return;
+            }
+            _selectedSequence = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(TimelineSteps));
+            OnPropertyChanged(nameof(TimelineTitle));
+            OnPropertyChanged(nameof(TimelineSubtitle));
+            OnPropertyChanged(nameof(SequenceIntentText));
+            OnPropertyChanged(nameof(TimelineDurationText));
+            OnPropertyChanged(nameof(TimelineMaximumFrame));
+            OnPropertyChanged(nameof(TimelineFirstInexactFrame));
+            OnPropertyChanged(nameof(PreviewFrameText));
+            OnPropertyChanged(nameof(TimelineStepListHeader));
+            PreviewFrame = 0;
+            SelectedTimelineStep = value?.Steps.FirstOrDefault(step => step.HasAttackGeometry) ??
+                value?.Steps.FirstOrDefault();
+            RefreshRuntimeTraceAnalysis();
+        }
+    }
+
+    public IReadOnlyList<FusionBossTimelineStepViewModel> TimelineSteps =>
+        SelectedSequence?.Steps ?? [];
+
+    public FusionBossTimelineStepViewModel? SelectedTimelineStep
+    {
+        get => _selectedTimelineStep;
+        set
+        {
+            if (ReferenceEquals(_selectedTimelineStep, value))
+            {
+                return;
+            }
+            _selectedTimelineStep = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedAttackGeometry));
+            OnPropertyChanged(nameof(SelectedAttackTarget));
+            if (value is not null)
+            {
+                PreviewFrame = value.Step.EarliestStartFrame;
+            }
+        }
+    }
+
+    public FusionBossAttackGeometry? SelectedAttackGeometry =>
+        SelectedTimelineStep?.AttackGeometry;
+
+    public FusionBossAttackTarget? SelectedAttackTarget =>
+        SelectedTimelineStep?.AttackTarget;
+
+    public FusionBossArenaViewModel? SelectedArena
+    {
+        get => _selectedArena;
+        set
+        {
+            if (ReferenceEquals(_selectedArena, value))
+            {
+                return;
+            }
+            _selectedArena = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(Maps));
+            OnPropertyChanged(nameof(ArenaSummaryText));
+            SelectedMap = value?.Maps.FirstOrDefault();
+        }
+    }
+
+    public IReadOnlyList<FusionBossMapSceneViewModel> Maps =>
+        SelectedArena?.Maps ?? [];
+
+    public FusionBossMapSceneViewModel? SelectedMap
+    {
+        get => _selectedMap;
+        set
+        {
+            if (ReferenceEquals(_selectedMap, value))
+            {
+                return;
+            }
+            _selectedMap = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(MapSummaryText));
+            OnPropertyChanged(nameof(TimelineMaximumFrame));
+            OnPropertyChanged(nameof(PreviewFrameText));
+            PreviewFrame = Math.Min(PreviewFrame, TimelineMaximumFrame);
+            RefreshRuntimeTraceChoices(preferSelectedMap: true);
+        }
+    }
+
+    public IReadOnlyList<FusionRuntimeTraceViewModel> RuntimeTraces => _runtimeTraces;
+
+    public FusionRuntimeTraceViewModel? SelectedRuntimeTrace
+    {
+        get => _selectedRuntimeTrace;
+        set
+        {
+            if (ReferenceEquals(_selectedRuntimeTrace, value))
+            {
+                return;
+            }
+            _selectedRuntimeTrace = value;
+            OnPropertyChanged();
+            AlignArenaToRuntimeTrace();
+            RefreshRuntimeTraceAnalysis();
+        }
+    }
+
+    public FusionRuntimeSequenceAnalysis? RuntimeTraceAnalysis =>
+        _runtimeTraceAnalysis;
+
+    public IReadOnlyList<FusionRuntimeAttackComparisonViewModel> RuntimeAttackComparisons =>
+        _runtimeAttackComparisons;
+
+    public FusionRuntimeAttackComparisonViewModel? SelectedRuntimeAttack
+    {
+        get => _selectedRuntimeAttack;
+        set
+        {
+            if (ReferenceEquals(_selectedRuntimeAttack, value))
+            {
+                return;
+            }
+            _selectedRuntimeAttack = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(HasSelectedRuntimeAttack));
+            OnPropertyChanged(nameof(RuntimeReviewSelectionHint));
+            if (value is null)
+            {
+                return;
+            }
+            var timelineStep = TimelineSteps.FirstOrDefault(step =>
+                step.Step.Index == value.Comparison.StepIndex);
+            if (timelineStep is not null)
+            {
+                SelectedTimelineStep = timelineStep;
+            }
+            PreviewFrame = value.FocusFrame;
+        }
+    }
+
+    public bool ShowAlignedRuntimeAttacks
+    {
+        get => _showAlignedRuntimeAttacks;
+        set
+        {
+            if (_showAlignedRuntimeAttacks == value)
+            {
+                return;
+            }
+            _showAlignedRuntimeAttacks = value;
+            OnPropertyChanged();
+            RefreshRuntimeAttackComparisons();
+        }
+    }
+
+    public int RuntimeAlignedCount => RuntimeStatusCount(FusionRuntimeFidelityStatus.Aligned);
+
+    public int RuntimeDriftCount => RuntimeStatusCount(FusionRuntimeFidelityStatus.Drift);
+
+    public int RuntimeDivergentCount => RuntimeStatusCount(FusionRuntimeFidelityStatus.Divergent);
+
+    public int RuntimeMissingCount => RuntimeStatusCount(FusionRuntimeFidelityStatus.Missing);
+
+    public string RuntimeReviewListHeader => ShowAlignedRuntimeAttacks
+        ? $"Tutti i confronti ({RuntimeAttackComparisons.Count})"
+        : $"Da verificare ({RuntimeAttackComparisons.Count})";
+
+    public string RuntimeReviewSummaryText
+    {
+        get
+        {
+            if (SelectedRuntimeTrace is null)
+            {
+                return "Scegli un trace per confrontare geometria prevista e runtime.";
+            }
+            if (RuntimeTraceAnalysis is null || RuntimeTraceAnalysis.Events.Count == 0)
+            {
+                return "La sequenza selezionata non compare nella run corrente.";
+            }
+            var total = RuntimeTraceAnalysis.Attacks.Count;
+            var problems = total - RuntimeAlignedCount;
+            return $"{RuntimeTraceAnalysis.Events.Count} eventi letti · {total} attacchi confrontati · " +
+                $"{problems} da verificare";
+        }
+    }
+
+    public string RuntimeReviewEmptyText
+    {
+        get
+        {
+            if (SelectedRuntimeTrace is null)
+            {
+                return "Nessun trace selezionato.";
+            }
+            if (RuntimeTraceAnalysis is null || RuntimeTraceAnalysis.Events.Count == 0)
+            {
+                return "Nessun evento della sequenza in questa run.";
+            }
+            if (RuntimeTraceAnalysis.Attacks.Count == 0)
+            {
+                return "La sequenza non contiene attacchi confrontabili.";
+            }
+            if (RuntimeAttackComparisons.Count == 0)
+            {
+                return "Nessuno scostamento: abilita “Mostra allineati” per vedere tutti i confronti.";
+            }
+            return "Seleziona un attacco per sincronizzare timeline e Arena Preview.";
+        }
+    }
+
+    public string RuntimeReviewSelectionHint => SelectedRuntimeAttack is null
+        ? "Seleziona un confronto per leggerne timing, geometria e identificativi runtime."
+        : string.Empty;
+
+    public bool HasSelectedRuntimeAttack => SelectedRuntimeAttack is not null;
+
+    public string RuntimeTraceStatusText
+    {
+        get
+        {
+            if (SelectedRuntimeTrace is null)
+            {
+                return RuntimeTraces.Count == 0
+                    ? "Nessun trace runtime per questa arena"
+                    : "Seleziona un trace runtime";
+            }
+            if (RuntimeTraceAnalysis is null || RuntimeTraceAnalysis.Events.Count == 0)
+            {
+                return "La sequenza selezionata non compare nel trace";
+            }
+            var attacks = RuntimeTraceAnalysis.Attacks;
+            var aligned = attacks.Count(entry =>
+                entry.Status == FusionRuntimeFidelityStatus.Aligned);
+            var problems = attacks.Count(entry =>
+                entry.Status != FusionRuntimeFidelityStatus.Aligned);
+            return problems == 0
+                ? $"Runtime · {RuntimeTraceAnalysis.Events.Count} eventi · {aligned} attacchi allineati"
+                : $"Runtime · {RuntimeTraceAnalysis.Events.Count} eventi · {problems} scostamenti";
+        }
+    }
+
+    public string RuntimeTraceErrorsText => _runtimeTraceErrors.Count == 0
+        ? string.Empty
+        : $"{_runtimeTraceErrors.Count} trace ignorati: {_runtimeTraceErrors[0]}";
+
+    public void ApplyRuntimeTraceLoadResult(FusionRuntimeTraceLoadResult result)
+    {
+        ArgumentNullException.ThrowIfNull(result);
+        _allRuntimeTraces = result.Traces
+            .Select(trace => new FusionRuntimeTraceViewModel(trace))
+            .ToArray();
+        _runtimeTraceErrors = result.Errors;
+        OnPropertyChanged(nameof(RuntimeTraceErrorsText));
+        RefreshRuntimeTraceChoices();
+    }
+
+    public double PreviewFrame
+    {
+        get => _previewFrame;
+        set
+        {
+            var normalized = Math.Clamp(value, 0, TimelineMaximumFrame);
+            if (Math.Abs(_previewFrame - normalized) < 0.01)
+            {
+                return;
+            }
+            _previewFrame = normalized;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(PreviewFrameText));
+        }
+    }
+
+    public double TimelineMaximumFrame
+    {
+        get
+        {
+            if (SelectedSequence is null)
+            {
+                return 1;
+            }
+            var maximum = (double)Math.Max(
+                1,
+                SelectedSequence.Sequence.MinimumDurationFrames);
+            foreach (var step in SelectedSequence.Steps)
+            {
+                maximum = Math.Max(maximum, CalculateStepEndFrame(step));
+            }
+            return Math.Ceiling(maximum);
+        }
+    }
+
+    public int? TimelineFirstInexactFrame => SelectedSequence?.Steps
+        .Where(step => !step.Step.IsStartExact)
+        .Select(step => (int?)step.Step.EarliestStartFrame)
+        .OrderBy(frame => frame)
+        .FirstOrDefault();
+
+    public string PreviewFrameText =>
+        TimelineFirstInexactFrame is int firstInexactFrame && PreviewFrame >= firstInexactFrame
+        ? $"≥ F {PreviewFrame:0.#} / {TimelineMaximumFrame:0}"
+        : $"F {PreviewFrame:0.#} / {TimelineMaximumFrame:0}";
+
+    public bool IsArenaPreviewDetached => _isArenaPreviewDetached;
+
+    public bool IsArenaPreviewEmbedded => !_isArenaPreviewDetached;
+
+    public string ArenaPreviewWindowButtonText => _isArenaPreviewDetached
+        ? "Mostra finestra"
+        : "Apri in una finestra";
 
     public string StatusText => Document.IsValid
         ? "Contratti validi"
@@ -39,11 +445,691 @@ public sealed class FusionBossDocumentViewModel
 
     public string ArenaCountText => $"{Document.GetRecordCount("arenas")} arene";
 
+    public string WorkspaceCountSummaryText =>
+        $"{BossCountText} · {EncounterCountText} · {ArenaCountText}";
+
     public bool HasDiagnostics => Diagnostics.Count > 0;
 
     public string DiagnosticsTitle => Diagnostics.Count == 0
         ? "Nessun problema rilevato"
         : $"Diagnostica ({Diagnostics.Count})";
+
+    public string SelectedEncounterSubtitle => SelectedEncounter is null
+        ? "Nessun encounter disponibile"
+        : $"{SelectedEncounter.BossText} · {SelectedEncounter.PhaseCountText}";
+
+    public string PhaseSummaryText => SelectedPhase is null
+        ? "Nessuna fase selezionata"
+        : $"{SelectedPhase.TransitionCountText} · {SelectedPhase.MechanicCountText}";
+
+    public string TimelineTitle => SelectedSequence is null
+        ? "Timeline"
+        : SelectedSequence.DisplayName;
+
+    public string TimelineSubtitle => SelectedSequence is null
+        ? "Nessuna sequenza selezionata"
+        : $"{SelectedSequence.Id} · {SelectedSequence.ScopeText} · {SelectedSequence.DocumentationStatusText}";
+
+    public string SequenceIntentText => SelectedSequence?.ContextText ?? string.Empty;
+
+    public string TimelineDurationText => SelectedSequence?.DurationText ??
+        "Nessuna sequenza nella fase";
+
+    public string TimelineStepListHeader => SelectedSequence is null
+        ? "Tutti gli step"
+        : $"Tutti gli step ({SelectedSequence.Steps.Count})";
+
+    public string ArenaSummaryText => SelectedArena is null
+        ? "Nessuna arena disponibile"
+        : $"Encounter {SelectedArena.EncounterId} · {SelectedArena.MapCountText}";
+
+    public string MapSummaryText => SelectedMap?.SummaryText ??
+        "Nessuna mappa disponibile";
+
+    private void RefreshRuntimeTraceChoices(bool preferSelectedMap = false)
+    {
+        var encounterId = SelectedEncounter?.Id;
+        var mapId = SelectedMap?.Scene.MapId;
+        var previousTraceId = SelectedRuntimeTrace?.Trace.TraceId;
+        _runtimeTraces = _allRuntimeTraces
+            .Where(item => string.IsNullOrWhiteSpace(encounterId) ||
+                item.Trace.EncounterId.Equals(
+                    encounterId,
+                    StringComparison.OrdinalIgnoreCase))
+            .ToArray();
+        OnPropertyChanged(nameof(RuntimeTraces));
+        var previous = _runtimeTraces.FirstOrDefault(item =>
+            item.Trace.TraceId.Equals(previousTraceId, StringComparison.OrdinalIgnoreCase));
+        SelectedRuntimeTrace = preferSelectedMap && mapId is not null
+            ? previous?.Trace.MapId == mapId
+                ? previous
+                : _runtimeTraces.FirstOrDefault(item => item.Trace.MapId == mapId)
+            : previous ?? _runtimeTraces.FirstOrDefault();
+        OnPropertyChanged(nameof(RuntimeTraceStatusText));
+    }
+
+    private void AlignArenaToRuntimeTrace()
+    {
+        var trace = SelectedRuntimeTrace?.Trace;
+        if (trace is null)
+        {
+            return;
+        }
+        var arena = Arenas.FirstOrDefault(candidate =>
+            candidate.EncounterId.Equals(trace.EncounterId, StringComparison.OrdinalIgnoreCase) &&
+            candidate.Maps.Any(map => map.Scene.MapId == trace.MapId));
+        if (arena is null)
+        {
+            return;
+        }
+        SelectedArena = arena;
+        var map = arena.Maps.FirstOrDefault(candidate => candidate.Scene.MapId == trace.MapId);
+        if (map is not null)
+        {
+            SelectedMap = map;
+        }
+    }
+
+    private void RefreshRuntimeTraceAnalysis()
+    {
+        _runtimeTraceAnalysis = SelectedRuntimeTrace is not null &&
+            SelectedSequence is not null &&
+            SelectedPhase is not null
+                ? _runtimeTraceService.AnalyzeSequence(
+                    SelectedSequence.Sequence,
+                    SelectedPhase.Id,
+                    SelectedRuntimeTrace.Trace)
+                : null;
+        OnPropertyChanged(nameof(RuntimeTraceAnalysis));
+        OnPropertyChanged(nameof(RuntimeTraceStatusText));
+        RefreshRuntimeAttackComparisons();
+    }
+
+    private void RefreshRuntimeAttackComparisons()
+    {
+        var previousCastId = SelectedRuntimeAttack?.Comparison.CastId;
+        var previousStepIndex = SelectedRuntimeAttack?.Comparison.StepIndex;
+        var previousCastIndex = SelectedRuntimeAttack?.Comparison.CastIndex;
+        _runtimeAttackComparisons = (_runtimeTraceAnalysis?.Attacks ?? [])
+            .Where(comparison => ShowAlignedRuntimeAttacks ||
+                comparison.Status != FusionRuntimeFidelityStatus.Aligned)
+            .OrderBy(comparison => RuntimeStatusSortOrder(comparison.Status))
+            .ThenBy(comparison => comparison.ExpectedExecutionFrame)
+            .ThenBy(comparison => comparison.CastIndex)
+            .Select(comparison => new FusionRuntimeAttackComparisonViewModel(comparison))
+            .ToArray();
+        OnPropertyChanged(nameof(RuntimeAttackComparisons));
+        OnPropertyChanged(nameof(RuntimeAlignedCount));
+        OnPropertyChanged(nameof(RuntimeDriftCount));
+        OnPropertyChanged(nameof(RuntimeDivergentCount));
+        OnPropertyChanged(nameof(RuntimeMissingCount));
+        OnPropertyChanged(nameof(RuntimeReviewListHeader));
+        OnPropertyChanged(nameof(RuntimeReviewSummaryText));
+        OnPropertyChanged(nameof(RuntimeReviewEmptyText));
+        SelectedRuntimeAttack = _runtimeAttackComparisons.FirstOrDefault(item =>
+            !string.IsNullOrWhiteSpace(previousCastId) &&
+            item.Comparison.CastId.Equals(previousCastId, StringComparison.OrdinalIgnoreCase)) ??
+            _runtimeAttackComparisons.FirstOrDefault(item =>
+                item.Comparison.StepIndex == previousStepIndex &&
+                item.Comparison.CastIndex == previousCastIndex) ??
+            _runtimeAttackComparisons.FirstOrDefault();
+    }
+
+    private int RuntimeStatusCount(FusionRuntimeFidelityStatus status) =>
+        _runtimeTraceAnalysis?.Attacks.Count(comparison => comparison.Status == status) ?? 0;
+
+    private static int RuntimeStatusSortOrder(FusionRuntimeFidelityStatus status) => status switch
+    {
+        FusionRuntimeFidelityStatus.Missing => 0,
+        FusionRuntimeFidelityStatus.Divergent => 1,
+        FusionRuntimeFidelityStatus.Drift => 2,
+        _ => 3,
+    };
+
+    private double CalculateStepEndFrame(FusionBossTimelineStepViewModel step)
+    {
+        var end = step.Step.EarliestStartFrame + (step.Step.DurationFrames ?? 0);
+        if (step.AttackGeometry is not { } attack)
+        {
+            return end;
+        }
+        var repeatDelayFrames = attack.RepeatDelayMilliseconds * 60d / 1000d;
+        var repeatsEnd = repeatDelayFrames * Math.Max(0, attack.RepeatOnUseCount - 1);
+        if (attack.Kind == FusionBossAttackGeometryKind.InstantCircle)
+        {
+            repeatsEnd += repeatDelayFrames * Math.Max(0, attack.HitRepeatCount - 1);
+        }
+        var travelFrames = attack.Kind == FusionBossAttackGeometryKind.ProjectileCorridor &&
+            attack.Speed > 0
+                ? attack.RangeTiles * (SelectedMap?.Scene.TileWidth ?? 48) / attack.Speed
+                : 1;
+        return step.Step.EarliestStartFrame + attack.ExecutionDelayFrames +
+            repeatsEnd + travelFrames;
+    }
+
+    public bool NavigateTo(Uri target)
+    {
+        ArgumentNullException.ThrowIfNull(target);
+        var segments = target.AbsolutePath.Trim('/').Split(
+            '/',
+            StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (segments.Length < 3 ||
+            !segments[0].Equals("encounters", StringComparison.OrdinalIgnoreCase) ||
+            !segments[1].Equals("encounters", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        var encounterId = Uri.UnescapeDataString(segments[2]);
+        var encounter = Encounters.FirstOrDefault(candidate =>
+            candidate.Id.Equals(encounterId, StringComparison.OrdinalIgnoreCase));
+        if (encounter is null)
+        {
+            return false;
+        }
+        SelectedEncounter = encounter;
+        return true;
+    }
+
+    internal void SetArenaPreviewDetached(bool value)
+    {
+        if (_isArenaPreviewDetached == value)
+        {
+            return;
+        }
+        _isArenaPreviewDetached = value;
+        OnPropertyChanged(nameof(IsArenaPreviewDetached));
+        OnPropertyChanged(nameof(IsArenaPreviewEmbedded));
+        OnPropertyChanged(nameof(ArenaPreviewWindowButtonText));
+    }
+
+    internal void PrepareArenaPreviewDetach() =>
+        ReattachArenaPreviewOnWindowClose = true;
+
+    public void CloseExternalSurfaces()
+    {
+        ReattachArenaPreviewOnWindowClose = false;
+        ExternalSurfacesCloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}
+
+public sealed class FusionRuntimeTraceViewModel
+{
+    public FusionRuntimeTraceViewModel(FusionRuntimeTrace trace)
+    {
+        Trace = trace;
+    }
+
+    public FusionRuntimeTrace Trace { get; }
+
+    public string DisplayName
+    {
+        get
+        {
+            var timestamp = Trace.StartedAtUtc?.ToLocalTime().ToString("dd/MM HH:mm:ss") ??
+                "orario sconosciuto";
+            return $"{timestamp} · {CaptureProfileText} · map {Trace.MapId:000}";
+        }
+    }
+
+    public string CaptureProfileText => Trace.CaptureProfile.ToLowerInvariant() switch
+    {
+        "balanced" => "Balanced",
+        "compact" => "Compact",
+        "custom" => "Custom",
+        _ => "Full",
+    };
+
+    public string DetailText =>
+        $"{Trace.EventCount} eventi · {CaptureProfileText} · campione ogni " +
+        $"{Math.Max(1, Trace.SampleEveryFrames)}f · {Trace.StopReason}";
+}
+
+public sealed class FusionRuntimeAttackComparisonViewModel
+{
+    public FusionRuntimeAttackComparisonViewModel(FusionRuntimeAttackComparison comparison)
+    {
+        Comparison = comparison;
+    }
+
+    public FusionRuntimeAttackComparison Comparison { get; }
+
+    public double FocusFrame => Comparison.RuntimeColliderFrame ??
+        Comparison.RuntimeExecutionFrame ??
+        Comparison.RuntimeTelegraphFrame ??
+        Comparison.ExpectedExecutionFrame;
+
+    public string StatusGlyph => Comparison.Status switch
+    {
+        FusionRuntimeFidelityStatus.Aligned => "✓",
+        FusionRuntimeFidelityStatus.Drift => "≈",
+        FusionRuntimeFidelityStatus.Divergent => "!",
+        _ => "?",
+    };
+
+    public string StatusText => Comparison.Status switch
+    {
+        FusionRuntimeFidelityStatus.Aligned => "ALLINEATO",
+        FusionRuntimeFidelityStatus.Drift => "DRIFT",
+        FusionRuntimeFidelityStatus.Divergent => "DIVERGENTE",
+        _ => "MANCANTE",
+    };
+
+    public string SkillText => $"Skill #{Comparison.SkillId} · cast {Comparison.CastIndex + 1}";
+
+    public string StepText => $"Step {Comparison.StepIndex + 1:00}";
+
+    public string FrameComparisonText =>
+        $"Previsto F {Comparison.ExpectedExecutionFrame:0.##} → " +
+        (Comparison.RuntimeExecutionFrame is { } frame
+            ? $"runtime F {frame:0.##}"
+            : "runtime non rilevato");
+
+    public string Summary => Comparison.Summary;
+
+    public string TimingDetailText => string.Join(
+        " · ",
+        new[]
+        {
+            FormatFrame("start previsto", Comparison.ExpectedStartFrame),
+            FormatOptionalFrame("richiesta", Comparison.RuntimeStartFrame),
+            FormatOptionalFrame("telegraph", Comparison.RuntimeTelegraphFrame),
+            FormatOptionalFrame("esecuzione", Comparison.RuntimeExecutionFrame),
+            FormatOptionalFrame("collider", Comparison.RuntimeColliderFrame),
+        });
+
+    public string GeometryDetailText
+    {
+        get
+        {
+            var parts = new List<string>();
+            AddDelta(parts, "centro", Comparison.TelegraphColliderOffsetTiles, "tile");
+            AddPair(
+                parts,
+                "raggio",
+                Comparison.ExpectedRadiusTiles,
+                Comparison.RuntimeRadiusTiles,
+                "tile");
+            AddPair(
+                parts,
+                "collider",
+                Comparison.ExpectedColliderRadiusPixels,
+                Comparison.RuntimeColliderRadiusPixels,
+                "px");
+            return parts.Count == 0
+                ? "Nessuna misura geometrica disponibile per questo cast."
+                : string.Join(" · ", parts);
+        }
+    }
+
+    public string IdentifierText => string.IsNullOrWhiteSpace(Comparison.CastId)
+        ? $"run {FallbackIdentifier(Comparison.SequenceRunId)}"
+        : $"cast {Comparison.CastId} · run {FallbackIdentifier(Comparison.SequenceRunId)}";
+
+    private static string FormatFrame(string label, double frame) =>
+        $"{label} F {frame:0.##}";
+
+    private static string FormatOptionalFrame(string label, double? frame) =>
+        frame is { } value ? FormatFrame(label, value) : $"{label} —";
+
+    private static void AddDelta(
+        ICollection<string> parts,
+        string label,
+        double? value,
+        string unit)
+    {
+        if (value is not null)
+        {
+            parts.Add($"{label} Δ {value:+0.###;-0.###;0} {unit}");
+        }
+    }
+
+    private static void AddPair(
+        ICollection<string> parts,
+        string label,
+        double? expected,
+        double? runtime,
+        string unit)
+    {
+        if (expected is null && runtime is null)
+        {
+            return;
+        }
+        var expectedText = expected is { } expectedValue ? $"{expectedValue:0.###}" : "—";
+        var runtimeText = runtime is { } runtimeValue ? $"{runtimeValue:0.###}" : "—";
+        parts.Add($"{label} {expectedText} → {runtimeText} {unit}");
+    }
+
+    private static string FallbackIdentifier(string value) =>
+        string.IsNullOrWhiteSpace(value) ? "—" : value;
+}
+
+public sealed class FusionBossArenaViewModel
+{
+    public FusionBossArenaViewModel(FusionBossArenaDefinition arena)
+    {
+        Arena = arena;
+        Maps = arena.Maps.Select(map => new FusionBossMapSceneViewModel(map)).ToArray();
+    }
+
+    public FusionBossArenaDefinition Arena { get; }
+
+    public IReadOnlyList<FusionBossMapSceneViewModel> Maps { get; }
+
+    public string Id => Arena.Id;
+
+    public string DisplayName => Arena.DisplayName;
+
+    public string EncounterId => Arena.EncounterId;
+
+    public string MapCountText => $"{Maps.Count} mappe";
+}
+
+public sealed class FusionBossMapSceneViewModel
+{
+    public FusionBossMapSceneViewModel(FusionBossMapScene scene)
+    {
+        Scene = scene;
+    }
+
+    public FusionBossMapScene Scene { get; }
+
+    public string DisplayName => $"#{Scene.MapId:000} · {Scene.DisplayName}";
+
+    public string SummaryText =>
+        $"{Scene.Width}×{Scene.Height} tile · {Scene.Markers.Count(marker => marker.Kind == FusionBossMapMarkerKind.Anchor)} anchor · {Scene.Markers.Count(marker => marker.Kind == FusionBossMapMarkerKind.Role)} ruoli · {Scene.TilesetName}";
+}
+
+public sealed class FusionBossEncounterViewModel
+{
+    public FusionBossEncounterViewModel(FusionBossEncounterDefinition encounter)
+    {
+        Encounter = encounter;
+        Phases = encounter.Phases
+            .Select(phase => new FusionBossPhaseViewModel(phase))
+            .ToArray();
+    }
+
+    public FusionBossEncounterDefinition Encounter { get; }
+
+    public IReadOnlyList<FusionBossPhaseViewModel> Phases { get; }
+
+    public string Id => Encounter.Id;
+
+    public string DisplayName => Encounter.DisplayName;
+
+    public string BossText => $"Boss: {Encounter.BossId}";
+
+    public string PhaseCountText => $"{Phases.Count} fasi";
+}
+
+public sealed class FusionBossPhaseViewModel
+{
+    public FusionBossPhaseViewModel(FusionBossPhaseDefinition phase)
+    {
+        Phase = phase;
+        Sequences = BuildTimelineSources(phase)
+            .Select(sequence => new FusionBossSequenceViewModel(sequence))
+            .ToArray();
+    }
+
+    public FusionBossPhaseDefinition Phase { get; }
+
+    public IReadOnlyList<FusionBossSequenceViewModel> Sequences { get; }
+
+    public string Id => Phase.Id;
+
+    public string DisplayName => string.IsNullOrWhiteSpace(Phase.DisplayName)
+        ? Phase.Id
+        : Phase.DisplayName;
+
+    public string TechnicalIdText => Phase.Id;
+
+    public string SummaryText => string.IsNullOrWhiteSpace(Phase.Summary)
+        ? "Descrizione specifica non aggiunta: la struttura resta documentata automaticamente dagli step."
+        : Phase.Summary;
+
+    public string PlayerGoalText => string.IsNullOrWhiteSpace(Phase.PlayerGoal)
+        ? "Obiettivo giocatore non specificato."
+        : $"Obiettivo: {Phase.PlayerGoal}";
+
+    public string DesignerIntentText => string.IsNullOrWhiteSpace(Phase.DesignerIntent)
+        ? string.Empty
+        : $"Intento: {Phase.DesignerIntent}";
+
+    public string DocumentationStatusText => string.IsNullOrWhiteSpace(Phase.Summary) &&
+        string.IsNullOrWhiteSpace(Phase.PlayerGoal) &&
+        string.IsNullOrWhiteSpace(Phase.DesignerIntent)
+            ? "SOLO AUTO-DOCUMENTAZIONE"
+            : "CONTESTO DOCUMENTATO";
+
+    public string ContextText => string.Join(
+        Environment.NewLine,
+        new[] { SummaryText, PlayerGoalText, DesignerIntentText }
+            .Where(text => !string.IsNullOrWhiteSpace(text)));
+
+    public bool IsInitial => Phase.IsInitial;
+
+    public string InitialMarker => IsInitial ? "INIZIALE" : string.Empty;
+
+    public string SequenceCountText => $"{Phase.Sequences.Count} sequenze";
+
+    public string HookStepCountText
+    {
+        get
+        {
+            var count = Phase.OnEnterSteps.Count + Phase.OnExitSteps.Count;
+            return count == 1 ? "1 azione fase" : $"{count} azioni fase";
+        }
+    }
+
+    public string HookSummaryText =>
+        $"Ingresso: {Phase.OnEnterSteps.Count} · uscita: {Phase.OnExitSteps.Count}";
+
+    public string TransitionCountText => $"{Phase.Transitions.Count} transizioni";
+
+    public string MechanicCountText => $"{Phase.Mechanics.Count} meccaniche";
+
+    public string MechanicsText => Phase.Mechanics.Count == 0
+        ? "Nessuna meccanica"
+        : string.Join(", ", Phase.Mechanics);
+
+    public string TransitionDetailText => Phase.Transitions.Count == 0
+        ? "Nessuna transizione in uscita"
+        : string.Join(
+            Environment.NewLine,
+            Phase.Transitions.Select(transition =>
+                $"→ {transition.TargetPhaseId} · {transition.ConditionSummary}"));
+
+    private static IEnumerable<FusionBossSequenceDefinition> BuildTimelineSources(
+        FusionBossPhaseDefinition phase)
+    {
+        if (phase.OnEnterSteps.Count > 0)
+        {
+            yield return new FusionBossSequenceDefinition
+            {
+                Id = "onEnter",
+                DisplayName = "Ingresso fase",
+                Summary = "Azioni eseguite una volta quando la fase diventa attiva.",
+                Scope = "hook di fase",
+                SourceKind = FusionBossTimelineSourceKind.PhaseEnter,
+                Steps = phase.OnEnterSteps,
+            };
+        }
+
+        foreach (var sequence in phase.Sequences)
+        {
+            yield return sequence;
+        }
+
+        if (phase.OnExitSteps.Count > 0)
+        {
+            yield return new FusionBossSequenceDefinition
+            {
+                Id = "onExit",
+                DisplayName = "Uscita fase",
+                Summary = "Azioni eseguite una volta prima di lasciare la fase.",
+                Scope = "hook di fase",
+                SourceKind = FusionBossTimelineSourceKind.PhaseExit,
+                Steps = phase.OnExitSteps,
+            };
+        }
+    }
+}
+
+public sealed class FusionBossSequenceViewModel
+{
+    public FusionBossSequenceViewModel(FusionBossSequenceDefinition sequence)
+    {
+        Sequence = sequence;
+        Steps = sequence.Steps
+            .Select(step => new FusionBossTimelineStepViewModel(step))
+            .ToArray();
+    }
+
+    public FusionBossSequenceDefinition Sequence { get; }
+
+    public IReadOnlyList<FusionBossTimelineStepViewModel> Steps { get; }
+
+    public string Id => Sequence.Id;
+
+    public string DisplayName => string.IsNullOrWhiteSpace(Sequence.DisplayName)
+        ? Sequence.Id
+        : Sequence.DisplayName;
+
+    public string TechnicalIdText => Sequence.Id;
+
+    public string SummaryText => string.IsNullOrWhiteSpace(Sequence.Summary)
+        ? "La sequenza e' spiegata automaticamente dai suoi step."
+        : Sequence.Summary;
+
+    public string PlayerGoalText => string.IsNullOrWhiteSpace(Sequence.PlayerGoal)
+        ? string.Empty
+        : $"Obiettivo giocatore: {Sequence.PlayerGoal}";
+
+    public string DesignerIntentText => string.IsNullOrWhiteSpace(Sequence.DesignerIntent)
+        ? string.Empty
+        : $"Intento: {Sequence.DesignerIntent}";
+
+    public string DocumentationStatusText => string.IsNullOrWhiteSpace(Sequence.Summary) &&
+        string.IsNullOrWhiteSpace(Sequence.PlayerGoal) &&
+        string.IsNullOrWhiteSpace(Sequence.DesignerIntent)
+            ? "AUTO"
+            : Sequence.SourceKind == FusionBossTimelineSourceKind.Sequence
+                ? "DOCUMENTATA"
+                : "HOOK DI FASE";
+
+    public string ContextText => string.Join(
+        Environment.NewLine,
+        new[] { SummaryText, PlayerGoalText, DesignerIntentText }
+            .Where(text => !string.IsNullOrWhiteSpace(text)));
+
+    public string ScopeText => Sequence.SourceKind switch
+    {
+        FusionBossTimelineSourceKind.PhaseEnter => "eseguito all'ingresso",
+        FusionBossTimelineSourceKind.PhaseExit => "eseguito all'uscita",
+        _ => Sequence.AutoStart
+            ? $"{Sequence.Scope} · auto"
+            : $"{Sequence.Scope} · manuale",
+    };
+
+    public string DurationText => Sequence.HasDynamicTiming
+        ? $"almeno {Sequence.MinimumDurationFrames} frame · durata dinamica"
+        : $"{Sequence.MinimumDurationFrames} frame";
+
+    public string StepCountText => $"{Steps.Count} step";
+}
+
+public sealed class FusionBossTimelineStepViewModel
+{
+    public FusionBossTimelineStepViewModel(FusionBossTimelineStep step)
+    {
+        Step = step;
+    }
+
+    public FusionBossTimelineStep Step { get; }
+
+    public bool HasAttackGeometry => Step.AttackGeometry is not null;
+
+    public FusionBossAttackGeometry? AttackGeometry => Step.AttackGeometry;
+
+    public FusionBossAttackTarget? AttackTarget => Step.AttackTarget;
+
+    public IReadOnlyList<FusionBossAttackTarget> AttackTargets => Step.AttackTargets;
+
+    public string PositionText => $"{Step.Index + 1:00}";
+
+    public string TimeText => Step.IsStartExact
+        ? $"F {Step.EarliestStartFrame:0000}"
+        : $"≥ F {Step.EarliestStartFrame:0000}";
+
+    public string KindText => Step.Kind switch
+    {
+        FusionBossTimelineStepKind.Action => "AZIONE",
+        FusionBossTimelineStepKind.Wait => "ATTESA",
+        FusionBossTimelineStepKind.WaitUntil => "SYNC",
+        FusionBossTimelineStepKind.Sequence => "SEQUENZA",
+        FusionBossTimelineStepKind.RepeatSequence => "LOOP",
+        FusionBossTimelineStepKind.Guard => "GUARDIA",
+        _ => "ALTRO",
+    };
+
+    public string Label => Step.AttackGeometry is { } attack
+        ? $"{Step.Label} · Skill #{attack.SkillId} {attack.SkillName}"
+        : Step.ReferencedSequenceId is null
+            ? Step.Label
+            : $"{Step.Label}: {Step.ReferencedSequenceId}";
+
+    public string Detail => Step.Detail;
+
+    public string TechnicalId => Step.TechnicalId;
+
+    public string TechnicalText => string.IsNullOrWhiteSpace(Step.TechnicalDetail)
+        ? Step.TechnicalId
+        : $"{Step.TechnicalId} · {Step.TechnicalDetail}";
+
+    public string CategoryText => string.IsNullOrWhiteSpace(Step.Category)
+        ? KindText
+        : Step.Category.ToUpperInvariant();
+
+    public string IconGlyph => string.IsNullOrWhiteSpace(Step.IconGlyph) ? "◆" : Step.IconGlyph;
+
+    public bool HasDataFlow => Step.Reads.Count > 0 || Step.Writes.Count > 0;
+
+    public string DataFlowText
+    {
+        get
+        {
+            var parts = new List<string>();
+            if (Step.Reads.Count > 0)
+            {
+                parts.Add($"usa {string.Join(", ", Step.Reads)}");
+            }
+            if (Step.Writes.Count > 0)
+            {
+                parts.Add($"produce {string.Join(", ", Step.Writes)}");
+            }
+            return string.Join(" · ", parts);
+        }
+    }
+
+    public string DurationText => Step.AttackGeometry is { } attack
+        ? attack.RepeatOnUseCount > 1
+            ? $"+{attack.ExecutionDelayFrames}f · ×{attack.RepeatOnUseCount}"
+            : $"+{attack.ExecutionDelayFrames}f"
+        : Step.DurationFrames is { } duration
+            ? $"{duration}f"
+            : Step.TimeoutFrames is { } timeout ? $"timeout {timeout}f" : "istantaneo";
+
+    public double BarWidth => Step.DurationFrames is { } duration
+        ? Math.Clamp(duration * 0.55, 14, 220)
+        : Step.Kind is FusionBossTimelineStepKind.WaitUntil or
+            FusionBossTimelineStepKind.Sequence or
+            FusionBossTimelineStepKind.RepeatSequence
+                ? 84
+                : 14;
 }
 
 public sealed class FusionBossDatabaseViewModel

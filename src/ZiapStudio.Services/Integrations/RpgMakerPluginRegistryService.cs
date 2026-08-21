@@ -46,9 +46,25 @@ public sealed class RpgMakerPluginRegistryService
                 Description = ReadString(element, "description"),
                 IsActive = element.TryGetProperty("status", out var status) &&
                     status.ValueKind == JsonValueKind.True,
+                Parameters = ReadParameters(element),
             })
             .Where(plugin => !string.IsNullOrWhiteSpace(plugin.Name))
             .ToArray();
+    }
+
+    private static IReadOnlyDictionary<string, string> ReadParameters(JsonElement element)
+    {
+        if (!element.TryGetProperty("parameters", out var parameters) ||
+            parameters.ValueKind != JsonValueKind.Object)
+        {
+            return new Dictionary<string, string>();
+        }
+        return parameters.EnumerateObject().ToDictionary(
+            parameter => parameter.Name,
+            parameter => parameter.Value.ValueKind == JsonValueKind.String
+                ? parameter.Value.GetString() ?? string.Empty
+                : parameter.Value.GetRawText(),
+            StringComparer.OrdinalIgnoreCase);
     }
 
     public async Task<bool> IsActiveAsync(
@@ -81,4 +97,7 @@ public sealed record RpgMakerPluginRegistration
     public string Description { get; init; } = string.Empty;
 
     public bool IsActive { get; init; }
+
+    public IReadOnlyDictionary<string, string> Parameters { get; init; } =
+        new Dictionary<string, string>();
 }

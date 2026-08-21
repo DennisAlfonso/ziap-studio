@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ZiapStudio.Views.FusionEncounterTimelineView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    IsTabStop="True">
+
+    <Grid
+        x:Name="TimelineRoot"
+        MinHeight="142"
+        Background="Transparent">
+        <Canvas
+            x:Name="TimelineCanvas"
+            MinHeight="142"
+            Background="Transparent"
+            PointerCanceled="TimelineCanvas_PointerCanceled"
+            PointerCaptureLost="TimelineCanvas_PointerCaptureLost"
+            PointerMoved="TimelineCanvas_PointerMoved"
+            PointerPressed="TimelineCanvas_PointerPressed"
+            PointerReleased="TimelineCanvas_PointerReleased" />
+    </Grid>
+</UserControl>
