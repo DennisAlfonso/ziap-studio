@@ -13,6 +13,7 @@ public sealed partial class FusionBossDocumentView : UserControl
     private readonly FusionRuntimeTraceService _runtimeTraceService = new();
     private CancellationTokenSource? _runtimeTraceLoadCancellation;
     private bool _isFocusMode;
+    private bool _isEditMode;
 
     public FusionBossDocumentView()
     {
@@ -153,7 +154,7 @@ public sealed partial class FusionBossDocumentView : UserControl
     {
         if (_viewModel?.SelectedRuntimeAttack is not null)
         {
-            FusionModeTabs.SelectedIndex = 1;
+            FusionModeTabs.SelectedIndex = 2;
         }
     }
 
@@ -161,18 +162,31 @@ public sealed partial class FusionBossDocumentView : UserControl
     {
         if (_viewModel?.SelectedRuntimeAttack is not null)
         {
-            FusionModeTabs.SelectedIndex = 3;
+            FusionModeTabs.SelectedIndex = 4;
+        }
+    }
+
+    private void OpenSelectedExecutionTimeline_Click(object sender, RoutedEventArgs e)
+    {
+        if (_viewModel?.CanOpenSelectedExecutionTimeline == true)
+        {
+            FusionModeTabs.SelectedIndex = 2;
         }
     }
 
     private void ToggleFocusMode_Click(object sender, RoutedEventArgs e)
     {
         _isFocusMode = !_isFocusMode;
+        ApplyFocusMode();
+    }
+
+    private void ApplyFocusMode()
+    {
         EncounterPanel.Visibility = _isFocusMode
             ? Visibility.Collapsed
             : Visibility.Visible;
         EncounterPanelColumn.Width = new GridLength(_isFocusMode ? 0 : 260);
-        WorkspaceGrid.ColumnSpacing = _isFocusMode ? 0 : 18;
+        UpdateWorkspaceSpacing();
         FocusModeButton.Content = _isFocusMode ? "Mostra contesto" : "Focus";
         ToolTipService.SetToolTip(
             FocusModeButton,
@@ -180,6 +194,40 @@ public sealed partial class FusionBossDocumentView : UserControl
                 ? "Ripristina il selettore degli encounter"
                 : "Nasconde il selettore degli encounter e amplia l'area di lavoro");
     }
+
+    private void ToggleEditMode_Click(object sender, RoutedEventArgs e)
+    {
+        _isEditMode = !_isEditMode;
+        if (_isEditMode && !_isFocusMode)
+        {
+            _isFocusMode = true;
+            ApplyFocusMode();
+        }
+        EditorPanel.Visibility = _isEditMode
+            ? Visibility.Visible
+            : Visibility.Collapsed;
+        EditorPanelColumn.Width = new GridLength(_isEditMode ? 380 : 0);
+        EditModeButton.Content = _isEditMode ? "Chiudi modifica" : "Modifica";
+        UpdateWorkspaceSpacing();
+    }
+
+    private void UpdateWorkspaceSpacing() =>
+        WorkspaceGrid.ColumnSpacing = _isFocusMode && !_isEditMode ? 0 : 18;
+
+    private void ApplyPhaseEdits_Click(object sender, RoutedEventArgs e) =>
+        _viewModel?.ApplyPhaseEdits();
+
+    private void ApplySequenceEdits_Click(object sender, RoutedEventArgs e) =>
+        _viewModel?.ApplySequenceEdits();
+
+    private void ApplyStepJson_Click(object sender, RoutedEventArgs e) =>
+        _viewModel?.ApplyStepJson();
+
+    private void UndoEditor_Click(object sender, RoutedEventArgs e) =>
+        _viewModel?.UndoEditorChange();
+
+    private void RedoEditor_Click(object sender, RoutedEventArgs e) =>
+        _viewModel?.RedoEditorChange();
 
     private async Task ReloadRuntimeTracesAsync()
     {

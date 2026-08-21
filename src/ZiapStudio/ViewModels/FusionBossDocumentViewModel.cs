@@ -1,6 +1,10 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text.Encodings.Web;
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using ZiapStudio.Core.Documents;
+using ZiapStudio.Core.Editing;
 using ZiapStudio.Core.Fusion.Bosses;
 using ZiapStudio.Services.Fusion.Bosses;
 
@@ -11,6 +15,7 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
     private FusionBossEncounterViewModel? _selectedEncounter;
     private FusionBossPhaseViewModel? _selectedPhase;
     private FusionBossSequenceViewModel? _selectedSequence;
+    private FusionBossExecutionNode? _selectedExecutionNode;
     private FusionBossTimelineStepViewModel? _selectedTimelineStep;
     private FusionBossArenaViewModel? _selectedArena;
     private FusionBossMapSceneViewModel? _selectedMap;
@@ -24,11 +29,38 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
     private bool _showAlignedRuntimeAttacks;
     private bool _isArenaPreviewDetached;
     private double _previewFrame;
+    private string _editorPhaseDisplayName = string.Empty;
+    private string _editorPhaseSummary = string.Empty;
+    private string _editorPhasePlayerGoal = string.Empty;
+    private string _editorPhaseDesignerIntent = string.Empty;
+    private string _editorSequenceDisplayName = string.Empty;
+    private string _editorSequenceSummary = string.Empty;
+    private string _editorSequencePlayerGoal = string.Empty;
+    private string _editorSequenceDesignerIntent = string.Empty;
+    private string _editorStepJson = string.Empty;
+    private string _editorStatusText = "Modifica i campi e applicali in memoria; Ctrl+S salva il file.";
     private readonly FusionRuntimeTraceService _runtimeTraceService = new();
+    private readonly FusionBossEditSession? _editSession;
+    private static readonly JsonSerializerOptions EditorJsonOptions = new()
+    {
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        WriteIndented = true,
+    };
 
-    public FusionBossDocumentViewModel(FusionBossWorkspaceDocument document)
+    public FusionBossDocumentViewModel(
+        FusionBossWorkspaceDocument document,
+        FusionBossEditSession? editSession)
     {
         Document = document;
+        _editSession = editSession;
+        if (_editSession is not null)
+        {
+            _editSession.PropertyChanged += EditSession_PropertyChanged;
+        }
+        else
+        {
+            _editorStatusText = "Sola lettura: FusionEncounters.json non è disponibile come JSON valido.";
+        }
         Databases = document.Databases
             .Select(database => new FusionBossDatabaseViewModel(database))
             .ToArray();
@@ -89,6 +121,7 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
                     value.Id,
                     StringComparison.OrdinalIgnoreCase)) ?? SelectedArena;
             RefreshRuntimeTraceChoices();
+            RefreshEditorFields();
         }
     }
 
@@ -108,9 +141,16 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             OnPropertyChanged(nameof(Sequences));
             OnPropertyChanged(nameof(PhaseSummaryText));
+            OnPropertyChanged(nameof(ExecutionGraph));
+            OnPropertyChanged(nameof(ExecutionGraphSummaryText));
+            OnPropertyChanged(nameof(ExecutionGraphWarningText));
             SelectedSequence = value?.Sequences.FirstOrDefault(sequence =>
                 sequence.Sequence.SourceKind == FusionBossTimelineSourceKind.Sequence) ??
                 value?.Sequences.FirstOrDefault();
+            SelectedExecutionNode = value?.ExecutionGraph.Nodes.FirstOrDefault(node =>
+                node.Kind == FusionBossExecutionNodeKind.PhaseEntry) ??
+                value?.ExecutionGraph.Nodes.FirstOrDefault();
+            RefreshEditorFields();
         }
     }
 
@@ -140,7 +180,68 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
             PreviewFrame = 0;
             SelectedTimelineStep = value?.Steps.FirstOrDefault(step => step.HasAttackGeometry) ??
                 value?.Steps.FirstOrDefault();
+            var executionNode = FindExecutionNode(value);
+            if (executionNode is not null && !ReferenceEquals(_selectedExecutionNode, executionNode))
+            {
+                _selectedExecutionNode = executionNode;
+                OnPropertyChanged(nameof(SelectedExecutionNode));
+                OnPropertyChanged(nameof(CanOpenSelectedExecutionTimeline));
+            }
             RefreshRuntimeTraceAnalysis();
+            RefreshEditorFields();
+        }
+    }
+
+    public FusionBossExecutionGraph? ExecutionGraph => SelectedPhase?.ExecutionGraph;
+
+    public FusionBossExecutionNode? SelectedExecutionNode
+    {
+        get => _selectedExecutionNode;
+        set
+        {
+            if (ReferenceEquals(_selectedExecutionNode, value))
+            {
+                return;
+            }
+            _selectedExecutionNode = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(CanOpenSelectedExecutionTimeline));
+            if (value?.TimelineSourceId is not { } sourceId)
+            {
+                return;
+            }
+            var sequence = Sequences.FirstOrDefault(candidate =>
+                candidate.Id.Equals(sourceId, StringComparison.OrdinalIgnoreCase) &&
+                candidate.Sequence.SourceKind == value.TimelineSourceKind);
+            if (sequence is not null && !ReferenceEquals(SelectedSequence, sequence))
+            {
+                SelectedSequence = sequence;
+            }
+        }
+    }
+
+    public bool CanOpenSelectedExecutionTimeline =>
+        SelectedExecutionNode?.CanOpenTimeline == true;
+
+    public string ExecutionGraphSummaryText => ExecutionGraph?.Summary ??
+        "Nessuna esecuzione disponibile per la fase.";
+
+    public string ExecutionGraphWarningText => ExecutionGraph?.WarningSummary ?? string.Empty;
+
+    public void SelectExecutionEdge(FusionBossExecutionEdge edge)
+    {
+        ArgumentNullException.ThrowIfNull(edge);
+        var sourceNode = ExecutionGraph?.Nodes.FirstOrDefault(node => node.Id.Equals(
+            edge.SourceNodeId,
+            StringComparison.OrdinalIgnoreCase));
+        if (sourceNode is not null)
+        {
+            SelectedExecutionNode = sourceNode;
+        }
+        if (edge.SourceStepIndex is { } stepIndex && SelectedSequence is { } sequence)
+        {
+            SelectedTimelineStep = sequence.Steps.FirstOrDefault(step =>
+                step.Step.Index == stepIndex) ?? SelectedTimelineStep;
         }
     }
 
@@ -164,6 +265,167 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
             {
                 PreviewFrame = value.Step.EarliestStartFrame;
             }
+            RefreshEditorFields();
+        }
+    }
+
+    public string EditorPhaseDisplayName
+    {
+        get => _editorPhaseDisplayName;
+        set => SetProperty(ref _editorPhaseDisplayName, value);
+    }
+
+    public string EditorPhaseSummary
+    {
+        get => _editorPhaseSummary;
+        set => SetProperty(ref _editorPhaseSummary, value);
+    }
+
+    public string EditorPhasePlayerGoal
+    {
+        get => _editorPhasePlayerGoal;
+        set => SetProperty(ref _editorPhasePlayerGoal, value);
+    }
+
+    public string EditorPhaseDesignerIntent
+    {
+        get => _editorPhaseDesignerIntent;
+        set => SetProperty(ref _editorPhaseDesignerIntent, value);
+    }
+
+    public string EditorSequenceDisplayName
+    {
+        get => _editorSequenceDisplayName;
+        set => SetProperty(ref _editorSequenceDisplayName, value);
+    }
+
+    public string EditorSequenceSummary
+    {
+        get => _editorSequenceSummary;
+        set => SetProperty(ref _editorSequenceSummary, value);
+    }
+
+    public string EditorSequencePlayerGoal
+    {
+        get => _editorSequencePlayerGoal;
+        set => SetProperty(ref _editorSequencePlayerGoal, value);
+    }
+
+    public string EditorSequenceDesignerIntent
+    {
+        get => _editorSequenceDesignerIntent;
+        set => SetProperty(ref _editorSequenceDesignerIntent, value);
+    }
+
+    public string EditorStepJson
+    {
+        get => _editorStepJson;
+        set => SetProperty(ref _editorStepJson, value);
+    }
+
+    public string EditorStatusText
+    {
+        get => _editorStatusText;
+        private set => SetProperty(ref _editorStatusText, value);
+    }
+
+    public bool CanEditSelectedSequence =>
+        CanAuthor &&
+        SelectedSequence?.Sequence.SourceKind == FusionBossTimelineSourceKind.Sequence;
+
+    public bool CanEditSelectedStep => CanAuthor && SelectedTimelineStep is not null;
+
+    public bool CanAuthor => _editSession is not null;
+
+    public bool EditorCanUndo => _editSession?.CanUndo == true;
+
+    public bool EditorCanRedo => _editSession?.CanRedo == true;
+
+    public bool EditorIsDirty => _editSession?.IsDirty == true;
+
+    public string EditorDirtyText => !CanAuthor
+        ? "Authoring non disponibile"
+        : EditorIsDirty
+            ? "Modifiche in memoria · Ctrl+S per salvare"
+            : "Nessuna modifica da salvare";
+
+    public string EditorSelectionText => SelectedPhase is null
+        ? "Nessuna fase selezionata"
+        : SelectedSequence is null
+            ? $"{SelectedEncounter?.Id} / {SelectedPhase.Id}"
+            : $"{SelectedEncounter?.Id} / {SelectedPhase.Id} / {SelectedSequence.Id}";
+
+    public void ApplyPhaseEdits()
+    {
+        if (_editSession is null || PhasePointer() is not { } pointer)
+        {
+            EditorStatusText = "Seleziona una fase prima di applicare le modifiche.";
+            return;
+        }
+        _editSession.SetValues(
+        [
+            ($"{pointer}/displayName", JsonValue.Create(EditorPhaseDisplayName)),
+            ($"{pointer}/summary", JsonValue.Create(EditorPhaseSummary)),
+            ($"{pointer}/playerGoal", JsonValue.Create(EditorPhasePlayerGoal)),
+            ($"{pointer}/designerIntent", JsonValue.Create(EditorPhaseDesignerIntent)),
+        ]);
+        EditorStatusText = "Metadati della fase applicati in memoria; timeline e preview si riallineano dopo il salvataggio.";
+    }
+
+    public void ApplySequenceEdits()
+    {
+        if (_editSession is null || !CanEditSelectedSequence || SequencePointer() is not { } pointer)
+        {
+            EditorStatusText = "Gli hook di fase si modificano attraverso i loro step.";
+            return;
+        }
+        _editSession.SetValues(
+        [
+            ($"{pointer}/displayName", JsonValue.Create(EditorSequenceDisplayName)),
+            ($"{pointer}/summary", JsonValue.Create(EditorSequenceSummary)),
+            ($"{pointer}/playerGoal", JsonValue.Create(EditorSequencePlayerGoal)),
+            ($"{pointer}/designerIntent", JsonValue.Create(EditorSequenceDesignerIntent)),
+        ]);
+        EditorStatusText = "Metadati della sequenza applicati in memoria; timeline e preview si riallineano dopo il salvataggio.";
+    }
+
+    public void ApplyStepJson()
+    {
+        if (_editSession is null || !CanEditSelectedStep || StepPointer() is not { } pointer)
+        {
+            EditorStatusText = "Seleziona uno step prima di modificarlo.";
+            return;
+        }
+        try
+        {
+            var node = JsonNode.Parse(EditorStepJson);
+            if (node is not JsonArray && node is not JsonObject)
+            {
+                EditorStatusText = "Uno step deve essere un array azione o un oggetto controllo.";
+                return;
+            }
+            _editSession.SetValue(pointer, node);
+            EditorStatusText = "Step applicato in memoria; sarà validato e riproiettato su timeline e preview al salvataggio.";
+        }
+        catch (JsonException exception)
+        {
+            EditorStatusText = $"JSON dello step non valido: {exception.Message}";
+        }
+    }
+
+    public void UndoEditorChange()
+    {
+        if (_editSession?.Undo() == true)
+        {
+            EditorStatusText = "Ultima modifica annullata.";
+        }
+    }
+
+    public void RedoEditorChange()
+    {
+        if (_editSession?.Redo() == true)
+        {
+            EditorStatusText = "Modifica ripristinata.";
         }
     }
 
@@ -607,6 +869,118 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
             repeatsEnd + travelFrames;
     }
 
+    private void EditSession_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(FusionBossEditSession.WorkingState) or
+            nameof(FusionBossEditSession.IsDirty) or
+            nameof(FusionBossEditSession.CanUndo) or
+            nameof(FusionBossEditSession.CanRedo))
+        {
+            RefreshEditorFields();
+            OnPropertyChanged(nameof(EditorCanUndo));
+            OnPropertyChanged(nameof(EditorCanRedo));
+            OnPropertyChanged(nameof(EditorIsDirty));
+            OnPropertyChanged(nameof(EditorDirtyText));
+        }
+    }
+
+    private void RefreshEditorFields()
+    {
+        var phasePointer = PhasePointer();
+        EditorPhaseDisplayName = ReadEditorText(phasePointer, "displayName");
+        EditorPhaseSummary = ReadEditorText(phasePointer, "summary");
+        EditorPhasePlayerGoal = ReadEditorText(phasePointer, "playerGoal");
+        EditorPhaseDesignerIntent = ReadEditorText(phasePointer, "designerIntent");
+
+        var sequencePointer = SequencePointer();
+        EditorSequenceDisplayName = ReadEditorText(sequencePointer, "displayName");
+        EditorSequenceSummary = ReadEditorText(sequencePointer, "summary");
+        EditorSequencePlayerGoal = ReadEditorText(sequencePointer, "playerGoal");
+        EditorSequenceDesignerIntent = ReadEditorText(sequencePointer, "designerIntent");
+
+        EditorStepJson = _editSession is not null && StepPointer() is { } stepPointer &&
+            _editSession.GetValue(stepPointer) is { } step
+                ? step.ToJsonString(EditorJsonOptions)
+                : string.Empty;
+        OnPropertyChanged(nameof(CanEditSelectedSequence));
+        OnPropertyChanged(nameof(CanEditSelectedStep));
+        OnPropertyChanged(nameof(EditorSelectionText));
+    }
+
+    private FusionBossExecutionNode? FindExecutionNode(FusionBossSequenceViewModel? sequence)
+    {
+        if (sequence is null)
+        {
+            return null;
+        }
+        return ExecutionGraph?.Nodes.FirstOrDefault(node =>
+            node.TimelineSourceId?.Equals(sequence.Id, StringComparison.OrdinalIgnoreCase) == true &&
+            node.TimelineSourceKind == sequence.Sequence.SourceKind);
+    }
+
+    private string ReadEditorText(string? parentPointer, string property)
+    {
+        if (_editSession is null || parentPointer is null ||
+            _editSession.GetValue($"{parentPointer}/{property}") is not JsonValue value ||
+            !value.TryGetValue<string>(out var text))
+        {
+            return string.Empty;
+        }
+        return text;
+    }
+
+    private string? PhasePointer()
+    {
+        if (SelectedEncounter is null || SelectedPhase is null)
+        {
+            return null;
+        }
+        return $"/encounters/{Pointer(SelectedEncounter.Id)}/phases/{Pointer(SelectedPhase.Id)}";
+    }
+
+    private string? SequencePointer()
+    {
+        if (_editSession is null || !CanEditSelectedSequence || PhasePointer() is not { } phasePointer ||
+            _editSession.GetValue($"{phasePointer}/sequences") is not JsonArray sequences)
+        {
+            return null;
+        }
+        for (var index = 0; index < sequences.Count; index++)
+        {
+            if (sequences[index] is JsonObject sequence &&
+                sequence["id"] is JsonValue idValue &&
+                idValue.TryGetValue<string>(out var id) &&
+                id.Equals(SelectedSequence!.Id, StringComparison.OrdinalIgnoreCase))
+            {
+                return $"{phasePointer}/sequences/{index}";
+            }
+        }
+        return null;
+    }
+
+    private string? StepPointer()
+    {
+        if (SelectedTimelineStep is null || PhasePointer() is not { } phasePointer ||
+            SelectedSequence is null)
+        {
+            return null;
+        }
+        var sourcePointer = SelectedSequence.Sequence.SourceKind switch
+        {
+            FusionBossTimelineSourceKind.PhaseEnter => $"{phasePointer}/onEnter",
+            FusionBossTimelineSourceKind.PhaseExit => $"{phasePointer}/onExit",
+            _ => SequencePointer() is { } sequencePointer
+                ? $"{sequencePointer}/steps"
+                : null,
+        };
+        return sourcePointer is null
+            ? null
+            : $"{sourcePointer}/{SelectedTimelineStep.Step.Index}";
+    }
+
+    private static string Pointer(string value) =>
+        FusionBossEditSession.EscapePointerSegment(value);
+
     public bool NavigateTo(Uri target)
     {
         ArgumentNullException.ThrowIfNull(target);
@@ -647,8 +1021,23 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
 
     public void CloseExternalSurfaces()
     {
+        if (_editSession is not null)
+        {
+            _editSession.PropertyChanged -= EditSession_PropertyChanged;
+        }
         ReattachArenaPreviewOnWindowClose = false;
         ExternalSurfacesCloseRequested?.Invoke(this, EventArgs.Empty);
+    }
+
+    private bool SetProperty<T>(ref T storage, T value, [CallerMemberName] string? propertyName = null)
+    {
+        if (EqualityComparer<T>.Default.Equals(storage, value))
+        {
+            return false;
+        }
+        storage = value;
+        OnPropertyChanged(propertyName);
+        return true;
     }
 
     private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
@@ -870,12 +1259,15 @@ public sealed class FusionBossPhaseViewModel
     public FusionBossPhaseViewModel(FusionBossPhaseDefinition phase)
     {
         Phase = phase;
+        ExecutionGraph = new FusionBossExecutionGraphService().Build(phase);
         Sequences = BuildTimelineSources(phase)
             .Select(sequence => new FusionBossSequenceViewModel(sequence))
             .ToArray();
     }
 
     public FusionBossPhaseDefinition Phase { get; }
+
+    public FusionBossExecutionGraph ExecutionGraph { get; }
 
     public IReadOnlyList<FusionBossSequenceViewModel> Sequences { get; }
 

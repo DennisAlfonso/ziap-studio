@@ -1,7 +1,10 @@
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text.Json;
+using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using ZiapStudio.Core.Documents;
+using ZiapStudio.Core.Editing;
 using ZiapStudio.Core.Fusion.Bosses;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Services.Integrations;
@@ -124,6 +127,9 @@ public sealed partial class FusionBossWorkspaceService
             Records(parsedDatabases, FusionBossDatabaseKind.Encounters, "encounters"),
             attackGeometriesBySkill,
             actionCatalog);
+        parsedDatabases.TryGetValue(
+            FusionBossDatabaseKind.Encounters,
+            out var encounterSource);
         var arenaDefinitions = await BuildArenaDefinitionsAsync(
             project,
             Records(parsedDatabases, FusionBossDatabaseKind.Arenas, "arenas"),
@@ -132,6 +138,8 @@ public sealed partial class FusionBossWorkspaceService
         {
             Descriptor = descriptor,
             ProjectPath = project.Path,
+            EncounterSourceRoot = encounterSource?.SourceRoot.DeepClone(),
+            EncounterSourceSnapshot = encounterSource?.SourceSnapshot,
             Plugins = plugins,
             Databases = summaries,
             Encounters = encounterDefinitions,
@@ -1239,6 +1247,16 @@ public sealed partial class FusionBossWorkspaceService
                 });
             }
 
+            var sourceRoot = JsonNode.Parse(bytes) ??
+                throw new JsonException($"{spec.FileName} non contiene una radice JSON.");
+            var sourceSnapshot = new DocumentSourceSnapshot
+            {
+                SourcePath = sourcePath,
+                LoadedAtUtc = DateTimeOffset.UtcNow,
+                LastWriteTimeUtc = _fileSystem.GetLastWriteTimeUtc(sourcePath),
+                Length = bytes.LongLength,
+                ContentHash = Convert.ToHexString(SHA256.HashData(bytes)),
+            };
             return new DatabaseLoadResult(
                 new FusionBossDatabaseSummary
                 {
@@ -1250,7 +1268,7 @@ public sealed partial class FusionBossWorkspaceService
                     DatabaseVersion = databaseVersion,
                     Collections = collectionSummaries,
                 },
-                new ParsedDatabase(collections));
+                new ParsedDatabase(collections, sourceRoot, sourceSnapshot));
         }
         catch (JsonException exception)
         {
@@ -1802,7 +1820,9 @@ public sealed partial class FusionBossWorkspaceService
     private sealed record PluginSpec(string Id, string DisplayName, bool IsRequired);
 
     private sealed record ParsedDatabase(
-        IReadOnlyDictionary<string, Dictionary<string, JsonElement>> Collections);
+        IReadOnlyDictionary<string, Dictionary<string, JsonElement>> Collections,
+        JsonNode SourceRoot,
+        DocumentSourceSnapshot SourceSnapshot);
 
     private sealed record DatabaseLoadResult(
         FusionBossDatabaseSummary Summary,

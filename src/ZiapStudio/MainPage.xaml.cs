@@ -6,6 +6,7 @@ using ZiapStudio.Core.Models;
 using ZiapStudio.Dialogs;
 using ZiapStudio.Services;
 using ZiapStudio.ViewModels;
+using ZiapStudio.Views;
 
 namespace ZiapStudio;
 
@@ -286,6 +287,30 @@ public sealed partial class MainPage : Page
 
     private void OpenPreflightDocument_Click(object sender, RoutedEventArgs e) =>
         ViewModel.OpenPreflightDocument();
+
+    private async void OpenFusionBossDocumentation_Click(object sender, RoutedEventArgs e)
+    {
+        if (ViewModel.ActiveFusionBossDocument is not { } document)
+        {
+            return;
+        }
+
+        try
+        {
+            await FusionBossDocumentationWindowCoordinator.ShowAsync(document.ProjectPath);
+        }
+        catch (Exception exception)
+        {
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "Documentazione non disponibile",
+                Content = exception.Message,
+                CloseButtonText = "Chiudi",
+            };
+            await dialog.ShowAsync();
+        }
+    }
 
     private async void AnalyzePreflight_Click(object sender, RoutedEventArgs e) =>
         await ViewModel.AnalyzePreflightAsync();

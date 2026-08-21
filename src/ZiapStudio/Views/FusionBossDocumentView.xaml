@@ -3,6 +3,7 @@
     x:Class="ZiapStudio.Views.FusionBossDocumentView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:bosses="using:ZiapStudio.Core.Fusion.Bosses"
     xmlns:viewModels="using:ZiapStudio.ViewModels"
     xmlns:views="using:ZiapStudio.Views">
 
@@ -25,6 +26,12 @@
             </StackPanel>
             <StackPanel Grid.Column="1" VerticalAlignment="Center" Orientation="Horizontal" Spacing="10">
                 <Button
+                    x:Name="EditModeButton"
+                    Click="ToggleEditMode_Click"
+                    Content="Modifica"
+                    IsEnabled="{Binding CanAuthor}"
+                    ToolTipService.ToolTip="Apre l'inspector di authoring senza nascondere la preview" />
+                <Button
                     x:Name="FocusModeButton"
                     Click="ToggleFocusMode_Click"
                     Content="Focus"
@@ -46,6 +53,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="EncounterPanelColumn" Width="260" />
                 <ColumnDefinition Width="*" />
+                <ColumnDefinition x:Name="EditorPanelColumn" Width="0" />
             </Grid.ColumnDefinitions>
 
             <Border
@@ -245,6 +253,125 @@
                     </Grid>
                 </TabViewItem>
                 <TabViewItem
+                    Header="Esecuzione"
+                    HorizontalContentAlignment="Stretch"
+                    IsClosable="False"
+                    VerticalContentAlignment="Stretch">
+                    <Grid Margin="0,10,0,0" RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="240" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="3">
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Esecuzione della fase" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="{Binding ExecutionGraphSummaryText}" />
+                                <TextBlock
+                                    FontSize="10"
+                                    Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                    Text="{Binding ExecutionGraphWarningText}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                            <ComboBox
+                                Grid.Column="1"
+                                Header="Fase"
+                                DisplayMemberPath="DisplayName"
+                                ItemsSource="{Binding Phases}"
+                                SelectedItem="{Binding SelectedPhase, Mode=TwoWay}" />
+                        </Grid>
+
+                        <Border
+                            Grid.Row="1"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10">
+                            <views:FusionExecutionGraphView DataContext="{Binding}" />
+                        </Border>
+
+                        <Border
+                            Grid.Row="2"
+                            Padding="14,11"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10">
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <ContentControl Content="{Binding SelectedExecutionNode}">
+                                    <ContentControl.ContentTemplate>
+                                        <DataTemplate x:DataType="bosses:FusionBossExecutionNode">
+                                            <Grid ColumnSpacing="16">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="240" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Spacing="3">
+                                                    <TextBlock
+                                                        FontSize="16"
+                                                        FontWeight="SemiBold"
+                                                        Text="{x:Bind DisplayName}"
+                                                        TextTrimming="CharacterEllipsis" />
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock
+                                                            FontSize="10"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                            Text="{x:Bind BadgeText}" />
+                                                        <TextBlock
+                                                            FontFamily="Consolas"
+                                                            FontSize="10"
+                                                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                            Text="{x:Bind TechnicalId}"
+                                                            TextTrimming="CharacterEllipsis" />
+                                                    </StackPanel>
+                                                    <TextBlock
+                                                        FontSize="10"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Text="{x:Bind DurationSummary}" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Spacing="5">
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        Text="{x:Bind StartReason}"
+                                                        TextWrapping="Wrap" />
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                        Text="{x:Bind CallerSummary}"
+                                                        TextWrapping="Wrap" />
+                                                    <TextBlock
+                                                        FontSize="10"
+                                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                        Text="{x:Bind OutcomeSummary}"
+                                                        TextWrapping="Wrap" />
+                                                </StackPanel>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ContentControl.ContentTemplate>
+                                </ContentControl>
+                                <Button
+                                    Grid.Column="1"
+                                    VerticalAlignment="Center"
+                                    Click="OpenSelectedExecutionTimeline_Click"
+                                    Content="Apri timeline"
+                                    IsEnabled="{Binding CanOpenSelectedExecutionTimeline}" />
+                            </Grid>
+                        </Border>
+                    </Grid>
+                </TabViewItem>
+                <TabViewItem
                     Header="Timeline"
                     HorizontalContentAlignment="Stretch"
                     IsClosable="False"
@@ -302,7 +429,7 @@
                             <ComboBox
                                 Grid.Row="1"
                                 Grid.Column="2"
-                                Header="Flusso"
+                                Header="Sequenza"
                                 DisplayMemberPath="DisplayName"
                                 ItemsSource="{Binding Sequences}"
                                 SelectedItem="{Binding SelectedSequence, Mode=TwoWay}" />
@@ -488,7 +615,7 @@
                             <ComboBox
                                 Grid.Row="1"
                                 Grid.Column="1"
-                                Header="Flusso"
+                                Header="Sequenza"
                                 DisplayMemberPath="DisplayName"
                                 ItemsSource="{Binding Sequences}"
                                 SelectedItem="{Binding SelectedSequence, Mode=TwoWay}" />
@@ -837,7 +964,7 @@
                                     SelectedItem="{Binding SelectedPhase, Mode=TwoWay}" />
                                 <ComboBox
                                     Grid.Column="1"
-                                    Header="Flusso"
+                                    Header="Sequenza"
                                     DisplayMemberPath="DisplayName"
                                     ItemsSource="{Binding Sequences}"
                                     SelectedItem="{Binding SelectedSequence, Mode=TwoWay}" />
@@ -944,6 +1071,140 @@
                     </Grid>
                 </TabViewItem>
             </TabView>
+
+            <Border
+                x:Name="EditorPanel"
+                Grid.Column="2"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="10"
+                Visibility="Collapsed">
+                <Grid Padding="14">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <StackPanel Spacing="3">
+                        <TextBlock FontSize="18" FontWeight="SemiBold" Text="Inspector modifica" />
+                        <TextBlock
+                            FontFamily="Consolas"
+                            FontSize="10"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Text="{Binding EditorSelectionText}"
+                            TextTrimming="CharacterEllipsis" />
+                    </StackPanel>
+
+                    <ScrollViewer Grid.Row="1" Margin="0,12,0,10" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Spacing="10">
+                            <Expander Header="Fase" IsExpanded="True">
+                                <StackPanel Margin="0,8,0,0" Spacing="7">
+                                    <TextBox Header="Nome leggibile" Text="{Binding EditorPhaseDisplayName, Mode=TwoWay}" />
+                                    <TextBox
+                                        AcceptsReturn="True"
+                                        Header="Riassunto"
+                                        MinHeight="68"
+                                        Text="{Binding EditorPhaseSummary, Mode=TwoWay}"
+                                        TextWrapping="Wrap" />
+                                    <TextBox
+                                        AcceptsReturn="True"
+                                        Header="Obiettivo giocatore"
+                                        MinHeight="58"
+                                        Text="{Binding EditorPhasePlayerGoal, Mode=TwoWay}"
+                                        TextWrapping="Wrap" />
+                                    <TextBox
+                                        AcceptsReturn="True"
+                                        Header="Intento di design"
+                                        MinHeight="58"
+                                        Text="{Binding EditorPhaseDesignerIntent, Mode=TwoWay}"
+                                        TextWrapping="Wrap" />
+                                    <Button
+                                        HorizontalAlignment="Right"
+                                        Click="ApplyPhaseEdits_Click"
+                                        Content="Applica fase" />
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander
+                                Header="Sequenza"
+                                IsEnabled="{Binding CanEditSelectedSequence}"
+                                IsExpanded="False">
+                                <StackPanel Margin="0,8,0,0" Spacing="7">
+                                    <TextBox Header="Nome leggibile" Text="{Binding EditorSequenceDisplayName, Mode=TwoWay}" />
+                                    <TextBox
+                                        AcceptsReturn="True"
+                                        Header="Riassunto"
+                                        MinHeight="68"
+                                        Text="{Binding EditorSequenceSummary, Mode=TwoWay}"
+                                        TextWrapping="Wrap" />
+                                    <TextBox
+                                        AcceptsReturn="True"
+                                        Header="Obiettivo giocatore"
+                                        MinHeight="58"
+                                        Text="{Binding EditorSequencePlayerGoal, Mode=TwoWay}"
+                                        TextWrapping="Wrap" />
+                                    <TextBox
+                                        AcceptsReturn="True"
+                                        Header="Intento di design"
+                                        MinHeight="58"
+                                        Text="{Binding EditorSequenceDesignerIntent, Mode=TwoWay}"
+                                        TextWrapping="Wrap" />
+                                    <Button
+                                        HorizontalAlignment="Right"
+                                        Click="ApplySequenceEdits_Click"
+                                        Content="Applica flusso" />
+                                </StackPanel>
+                            </Expander>
+
+                            <Expander Header="Step selezionato · JSON avanzato" IsExpanded="False">
+                                <StackPanel Margin="0,8,0,0" Spacing="7">
+                                    <TextBlock
+                                        FontSize="11"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="Modifica l'azione o il controllo reale. I campi non gestiti da ZIAP restano intatti."
+                                        TextWrapping="Wrap" />
+                                    <TextBox
+                                        AcceptsReturn="True"
+                                        FontFamily="Consolas"
+                                        FontSize="11"
+                                        IsEnabled="{Binding CanEditSelectedStep}"
+                                        MinHeight="190"
+                                        Text="{Binding EditorStepJson, Mode=TwoWay}"
+                                        TextWrapping="NoWrap" />
+                                    <Button
+                                        HorizontalAlignment="Right"
+                                        Click="ApplyStepJson_Click"
+                                        Content="Applica step"
+                                        IsEnabled="{Binding CanEditSelectedStep}" />
+                                </StackPanel>
+                            </Expander>
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <StackPanel Grid.Row="2" Spacing="7">
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Text="{Binding EditorStatusText}"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            FontSize="10"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="{Binding EditorDirtyText}" />
+                        <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="7">
+                            <Button
+                                Click="UndoEditor_Click"
+                                Content="Annulla"
+                                IsEnabled="{Binding EditorCanUndo}" />
+                            <Button
+                                Click="RedoEditor_Click"
+                                Content="Ripristina"
+                                IsEnabled="{Binding EditorCanRedo}" />
+                        </StackPanel>
+                    </StackPanel>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </UserControl>

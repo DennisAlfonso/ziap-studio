@@ -16,6 +16,7 @@ using ZiapStudio.Services.Editing;
 using ZiapStudio.Services.Initialization;
 using ZiapStudio.Services.Fusion.Preflight;
 using ZiapStudio.Services.Fusion.Audio;
+using ZiapStudio.Services.Fusion.Bosses;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
 using ZiapStudio.Services.Providers;
@@ -32,6 +33,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private readonly AssetPreviewService _assetPreviewService;
     private readonly DocumentEditSessionFactory _editSessionFactory;
     private readonly DocumentSaveService _documentSaveService;
+    private readonly FusionBossAuthoringService _fusionBossAuthoringService;
     private readonly IRecentProjectService _recentProjectService;
     private readonly WindowsFolderPickerService _folderPickerService;
     private readonly WindowsShellService _shellService;
@@ -68,6 +70,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         AssetPreviewService assetPreviewService,
         DocumentEditSessionFactory editSessionFactory,
         DocumentSaveService documentSaveService,
+        FusionBossAuthoringService fusionBossAuthoringService,
         IRecentProjectService recentProjectService,
         WindowsFolderPickerService folderPickerService,
         WindowsShellService shellService,
@@ -89,6 +92,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         _assetPreviewService = assetPreviewService;
         _editSessionFactory = editSessionFactory;
         _documentSaveService = documentSaveService;
+        _fusionBossAuthoringService = fusionBossAuthoringService;
         _recentProjectService = recentProjectService;
         _folderPickerService = folderPickerService;
         _shellService = shellService;
@@ -265,7 +269,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     public bool IsDatabaseDocumentSelected => ActiveDatabaseDocument is not null;
 
     public bool IsEditingDocumentSelected =>
-        IsDatabaseDocumentSelected || IsFusionAudioDocumentSelected;
+        IsDatabaseDocumentSelected ||
+        IsFusionAudioDocumentSelected ||
+        IsFusionBossDocumentSelected;
 
     public RpgMakerDatabaseDocumentViewModel? ActiveDatabaseDocument => SelectedDocument?.Database;
 
@@ -1117,9 +1123,14 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             }
             else if (document is FusionBossWorkspaceDocument fusionBossDocument)
             {
+                var editSession = fusionBossDocument is
+                    { EncounterSourceRoot: not null, EncounterSourceSnapshot: not null }
+                        ? new FusionBossEditSession(fusionBossDocument)
+                        : null;
                 tab = DocumentTabViewModel.CreateFusionBoss(
                     fusionBossDocument,
-                    new FusionBossDocumentViewModel(fusionBossDocument));
+                    new FusionBossDocumentViewModel(fusionBossDocument, editSession),
+                    editSession);
             }
             else
             {
@@ -1207,6 +1218,10 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             {
                 result = await _documentSaveService.SaveAsync(editSession);
             }
+            else if (document.FusionBossEditSession is { } fusionBossEditSession)
+            {
+                result = await _fusionBossAuthoringService.SaveAsync(fusionBossEditSession);
+            }
             else
             {
                 return null;
@@ -1214,6 +1229,10 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             ApplySaveResult(document, result);
             if (result.Status == DocumentSaveStatus.Saved)
             {
+                if (document.FusionBossEditSession is not null)
+                {
+                    await ReloadFusionBossDocumentAsync(document);
+                }
                 await AnalyzePreflightAsync();
             }
             return result;
@@ -1302,7 +1321,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public void UndoSelectedDocument()
     {
-        if (SelectedDocument?.EditSession?.Undo() == true)
+        if (SelectedDocument?.EditSession?.Undo() == true ||
+            SelectedDocument?.FusionBossEditSession?.Undo() == true)
         {
             StatusMessage = $"Annullata l'ultima modifica in {SelectedDocument.DisplayName}.";
         }
@@ -1310,7 +1330,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public void RedoSelectedDocument()
     {
-        if (SelectedDocument?.EditSession?.Redo() == true)
+        if (SelectedDocument?.EditSession?.Redo() == true ||
+            SelectedDocument?.FusionBossEditSession?.Redo() == true)
         {
             StatusMessage = $"Ripristinata l'ultima modifica in {SelectedDocument.DisplayName}.";
         }
@@ -1493,6 +1514,49 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         {
             NotifyEditingPropertiesChanged();
         }
+        if (args.PropertyName == nameof(DocumentTabViewModel.FusionBoss))
+        {
+            OnPropertyChanged(nameof(ActiveFusionBossDocument));
+        }
+    }
+
+    private async Task ReloadFusionBossDocumentAsync(DocumentTabViewModel tab)
+    {
+        if (CurrentProject is null)
+        {
+            return;
+        }
+        var previousEncounterId = tab.FusionBoss?.SelectedEncounter?.Id;
+        var previousPhaseId = tab.FusionBoss?.SelectedPhase?.Id;
+        var previousSequenceId = tab.FusionBoss?.SelectedSequence?.Id;
+        var loaded = await _documentService.OpenAsync(CurrentProject, tab.Descriptor);
+        if (loaded is not FusionBossWorkspaceDocument document)
+        {
+            throw new DocumentLoadException("Impossibile ricaricare Fusion Boss Battle dopo il salvataggio.");
+        }
+        var session = new FusionBossEditSession(document);
+        var viewModel = new FusionBossDocumentViewModel(document, session);
+        if (previousEncounterId is not null)
+        {
+            viewModel.SelectedEncounter = viewModel.Encounters.FirstOrDefault(encounter =>
+                encounter.Id.Equals(previousEncounterId, StringComparison.OrdinalIgnoreCase)) ??
+                viewModel.SelectedEncounter;
+        }
+        if (previousPhaseId is not null)
+        {
+            viewModel.SelectedPhase = viewModel.Phases.FirstOrDefault(phase =>
+                phase.Id.Equals(previousPhaseId, StringComparison.OrdinalIgnoreCase)) ??
+                viewModel.SelectedPhase;
+        }
+        if (previousSequenceId is not null)
+        {
+            viewModel.SelectedSequence = viewModel.Sequences.FirstOrDefault(sequence =>
+                sequence.Id.Equals(previousSequenceId, StringComparison.OrdinalIgnoreCase)) ??
+                viewModel.SelectedSequence;
+        }
+        tab.ReplaceFusionBoss(viewModel, session);
+        OnPropertyChanged(nameof(ActiveFusionBossDocument));
+        NotifyEditingPropertiesChanged();
     }
 
     private void ApplySaveResult(

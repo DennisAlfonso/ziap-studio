@@ -9,6 +9,7 @@ using ZiapStudio.Services.Documents;
 using ZiapStudio.Services.Editing;
 using ZiapStudio.Services.Fusion.Preflight;
 using ZiapStudio.Services.Fusion.Audio;
+using ZiapStudio.Services.Fusion.Bosses;
 using ZiapStudio.Services.Initialization;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
@@ -36,6 +37,7 @@ public sealed partial class MainWindow : Window
         AssetPreviewService assetPreviewService,
         DocumentEditSessionFactory editSessionFactory,
         DocumentSaveService documentSaveService,
+        FusionBossAuthoringService fusionBossAuthoringService,
         IRecentProjectService recentProjectService,
         WindowsShellService shellService,
         ConsoleIntegrationService consoleIntegrationService,
@@ -68,6 +70,7 @@ public sealed partial class MainWindow : Window
             assetPreviewService,
             editSessionFactory,
             documentSaveService,
+            fusionBossAuthoringService,
             recentProjectService,
             new WindowsFolderPickerService(AppWindow.Id),
             shellService,

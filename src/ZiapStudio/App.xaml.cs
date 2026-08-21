@@ -70,12 +70,19 @@ public partial class App : Application
             new AssetResolver(new RpgMakerAssetProvider(fileSystem)),
             new RpgMakerAssetPreviewProvider(fileSystem));
         var snapshotService = new DocumentSnapshotService(fileSystem);
+        var externalModificationDetector = new ExternalModificationDetector(
+            fileSystem,
+            snapshotService);
         var documentSaveService = new DocumentSaveService(
             new DocumentValidationService(),
-            new ExternalModificationDetector(fileSystem, snapshotService),
+            externalModificationDetector,
             atomicJsonWriter,
             snapshotService,
             new JsonTextPatchSerializer(fileSystem));
+        var fusionBossAuthoringService = new FusionBossAuthoringService(
+            externalModificationDetector,
+            atomicJsonWriter,
+            snapshotService);
         var shellService = new WindowsShellService();
         var consoleIntegrationService = new ConsoleIntegrationService(
             new ConsoleDeepLinkBuilder(GetConsoleBaseUri()),
@@ -130,6 +137,7 @@ public partial class App : Application
             assetPreviewService,
             new DocumentEditSessionFactory(),
             documentSaveService,
+            fusionBossAuthoringService,
             new RecentProjectService(fileSystem, settingsPath),
             shellService,
             consoleIntegrationService,

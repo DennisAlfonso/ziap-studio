@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ZiapStudio.Views.FusionExecutionGraphView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ScrollViewer
+        HorizontalScrollBarVisibility="Auto"
+        HorizontalScrollMode="Enabled"
+        VerticalScrollBarVisibility="Auto"
+        VerticalScrollMode="Enabled"
+        ZoomMode="Disabled">
+        <Canvas x:Name="GraphCanvas" MinHeight="360" MinWidth="760" />
+    </ScrollViewer>
+</UserControl>

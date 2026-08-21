@@ -688,6 +688,17 @@
                             </AppBarButton.Icon>
                         </AppBarButton>
                         <AppBarButton
+                            x:Name="FusionBossDocumentationCommand"
+                            AutomationProperties.Name="Apri documentazione Fusion Boss Battle Engine"
+                            Click="OpenFusionBossDocumentation_Click"
+                            Label="Documentazione"
+                            ToolTipService.ToolTip="Apri ZIAP Studio Docs per il Fusion Boss Battle Engine"
+                            x:Load="{x:Bind ViewModel.IsFusionBossDocumentSelected, Mode=OneWay}">
+                            <AppBarButton.Icon>
+                                <FontIcon FontSize="14" Glyph="&#xE82D;" />
+                            </AppBarButton.Icon>
+                        </AppBarButton>
+                        <AppBarButton
                             x:Name="FusionAudioRemoveEventCommand"
                             AutomationProperties.Name="Rimuovi evento Fusion Audio"
                             Click="RemoveFusionAudioEvent_Click"

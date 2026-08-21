@@ -1,4 +1,6 @@
 using ZiapStudio.Core.Fusion.Bosses;
+using System.Text.Json.Nodes;
+using ZiapStudio.Core.Editing;
 
 namespace ZiapStudio.Core.Documents;
 
@@ -17,6 +19,10 @@ public sealed record FusionBossWorkspaceDocument : StudioDocument
     public IReadOnlyList<FusionBossAttackGeometry> AttackGeometries { get; init; } = [];
 
     public string ProjectPath { get; init; } = string.Empty;
+
+    public JsonNode? EncounterSourceRoot { get; init; }
+
+    public DocumentSourceSnapshot? EncounterSourceSnapshot { get; init; }
 
     public bool PluginIsActive => Plugins.Any(plugin => plugin.IsActive);
 

@@ -15,7 +15,8 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         PreflightDocumentViewModel? preflight = null,
         FusionAudioDocumentViewModel? fusionAudio = null,
         FusionBossDocumentViewModel? fusionBoss = null,
-        DocumentEditSession? editSession = null)
+        DocumentEditSession? editSession = null,
+        FusionBossEditSession? fusionBossEditSession = null)
     {
         Descriptor = descriptor;
         Database = database;
@@ -24,6 +25,7 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         FusionAudio = fusionAudio;
         FusionBoss = fusionBoss;
         EditSession = editSession;
+        FusionBossEditSession = fusionBossEditSession;
         if (EditSession is not null)
         {
             EditSession.PropertyChanged += EditSession_PropertyChanged;
@@ -31,6 +33,10 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         if (FusionAudio is not null)
         {
             FusionAudio.PropertyChanged += FusionAudio_PropertyChanged;
+        }
+        if (FusionBossEditSession is not null)
+        {
+            FusionBossEditSession.PropertyChanged += FusionBossEditSession_PropertyChanged;
         }
     }
 
@@ -62,15 +68,21 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
 
     public FusionAudioDocumentViewModel? FusionAudio { get; }
 
-    public FusionBossDocumentViewModel? FusionBoss { get; }
+    public FusionBossDocumentViewModel? FusionBoss { get; private set; }
 
     public DocumentEditSession? EditSession { get; }
 
-    public bool IsDirty => EditSession?.IsDirty == true || FusionAudio?.IsDirty == true;
+    public FusionBossEditSession? FusionBossEditSession { get; private set; }
 
-    public bool CanUndo => EditSession?.CanUndo == true;
+    public bool IsDirty => EditSession?.IsDirty == true ||
+        FusionAudio?.IsDirty == true ||
+        FusionBossEditSession?.IsDirty == true;
 
-    public bool CanRedo => EditSession?.CanRedo == true;
+    public bool CanUndo => EditSession?.CanUndo == true ||
+        FusionBossEditSession?.CanUndo == true;
+
+    public bool CanRedo => EditSession?.CanRedo == true ||
+        FusionBossEditSession?.CanRedo == true;
 
     public static DocumentTabViewModel CreateProjectOverview(string projectId) => new(
         new DocumentDescriptor
@@ -117,10 +129,34 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
 
     public static DocumentTabViewModel CreateFusionBoss(
         FusionBossWorkspaceDocument document,
-        FusionBossDocumentViewModel fusionBoss) => new(
+        FusionBossDocumentViewModel fusionBoss,
+        FusionBossEditSession? editSession) => new(
         document.Descriptor,
         database: null,
-        fusionBoss: fusionBoss);
+        fusionBoss: fusionBoss,
+        fusionBossEditSession: editSession);
+
+    public void ReplaceFusionBoss(
+        FusionBossDocumentViewModel fusionBoss,
+        FusionBossEditSession editSession)
+    {
+        ArgumentNullException.ThrowIfNull(fusionBoss);
+        ArgumentNullException.ThrowIfNull(editSession);
+        FusionBoss?.CloseExternalSurfaces();
+        if (FusionBossEditSession is not null)
+        {
+            FusionBossEditSession.PropertyChanged -= FusionBossEditSession_PropertyChanged;
+        }
+        FusionBoss = fusionBoss;
+        FusionBossEditSession = editSession;
+        FusionBossEditSession.PropertyChanged += FusionBossEditSession_PropertyChanged;
+        OnPropertyChanged(nameof(FusionBoss));
+        OnPropertyChanged(nameof(FusionBossEditSession));
+        OnPropertyChanged(nameof(IsDirty));
+        OnPropertyChanged(nameof(Header));
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRedo));
+    }
 
     public static DocumentTabViewModel Create(
         RpgMakerDatabaseDocument document,
@@ -140,6 +176,10 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         if (FusionAudio is not null)
         {
             FusionAudio.PropertyChanged -= FusionAudio_PropertyChanged;
+        }
+        if (FusionBossEditSession is not null)
+        {
+            FusionBossEditSession.PropertyChanged -= FusionBossEditSession_PropertyChanged;
         }
         FusionBoss?.CloseExternalSurfaces();
     }
@@ -169,6 +209,23 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         {
             OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(Header));
+        }
+    }
+
+    private void FusionBossEditSession_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(FusionBossEditSession.IsDirty))
+        {
+            OnPropertyChanged(nameof(IsDirty));
+            OnPropertyChanged(nameof(Header));
+        }
+        if (args.PropertyName == nameof(FusionBossEditSession.CanUndo))
+        {
+            OnPropertyChanged(nameof(CanUndo));
+        }
+        if (args.PropertyName == nameof(FusionBossEditSession.CanRedo))
+        {
+            OnPropertyChanged(nameof(CanRedo));
         }
     }
 

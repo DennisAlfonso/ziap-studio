@@ -1,9 +1,12 @@
+using System.Text.Json.Nodes;
 using ZiapStudio.Core.Documents;
+using ZiapStudio.Core.Editing;
 using ZiapStudio.Core.Fusion.Bosses;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Core.Preflight;
 using ZiapStudio.Services;
 using ZiapStudio.Services.Fusion.Bosses;
+using ZiapStudio.Services.Editing;
 using ZiapStudio.Services.Fusion.Preflight.Bosses;
 using ZiapStudio.Services.Integrations;
 using ZiapStudio.Services.Providers;
@@ -86,6 +89,23 @@ public sealed class FusionBossIntegrationTests
         Assert.Contains(document.Diagnostics, issue => issue.Code == "arena.completion-profile-missing");
         Assert.Contains(document.Diagnostics, issue => issue.Code == "arena.anchor-count");
         Assert.False(document.IsValid);
+    }
+
+    [Fact]
+    public async Task Workspace_KeepsInvalidEncounterSourceReadOnly()
+    {
+        using var workspace = new TestWorkspace();
+        WritePlugins(workspace);
+        WriteValidWorkspace(workspace);
+        workspace.WriteFile("data/FusionEncounters.json", "{ invalid json");
+
+        var document = await CreateWorkspaceService().LoadAsync(
+            CreateProject(workspace.RootPath),
+            CreateDescriptor(workspace.RootPath));
+
+        Assert.Null(document.EncounterSourceRoot);
+        Assert.Null(document.EncounterSourceSnapshot);
+        Assert.Contains(document.Diagnostics, issue => issue.Code == "database.json-invalid");
     }
 
     [Fact]
@@ -428,6 +448,116 @@ public sealed class FusionBossIntegrationTests
     }
 
     [Fact]
+    public async Task Authoring_RoundTripsUnknownFieldsAndSupportsUndoRedo()
+    {
+        using var workspace = new TestWorkspace();
+        WritePlugins(workspace);
+        WriteValidWorkspace(workspace);
+        workspace.WriteFile(
+            "data/FusionEncounters.json",
+            """
+            {
+              "schemaVersion":1,
+              "databaseVersion":"1.0.0",
+              "futureRoot":{"keep":true},
+              "encounters":{
+                "testEncounter":{
+                  "boss":"testBoss",
+                  "initialPhase":"combat",
+                  "futureEncounter":{"token":"unchanged"},
+                  "phases":{
+                    "combat":{
+                      "futurePhase":[1,2,3],
+                      "sequences":[{
+                        "id":"main",
+                        "futureSequence":{"enabled":true},
+                        "steps":[["wait",30,{"futureStep":"keep"}]]
+                      }]
+                    }
+                  }
+                }
+              }
+            }
+            """);
+        var document = await CreateWorkspaceService().LoadAsync(
+            CreateProject(workspace.RootPath),
+            CreateDescriptor(workspace.RootPath));
+        var session = new FusionBossEditSession(document);
+        var step = Assert.IsType<JsonArray>(session.GetValue(
+            "/encounters/testEncounter/phases/combat/sequences/0/steps/0"));
+        step[1] = 45;
+
+        Assert.True(session.SetValues(
+        [
+            ("/encounters/testEncounter/phases/combat/summary", JsonValue.Create("Nuovo riassunto")),
+            ("/encounters/testEncounter/phases/combat/sequences/0/steps/0", step),
+        ]));
+        Assert.True(session.IsDirty);
+        Assert.True(session.Undo());
+        Assert.False(session.IsDirty);
+        Assert.True(session.Redo());
+
+        var result = await CreateAuthoringService().SaveAsync(session);
+
+        Assert.Equal(DocumentSaveStatus.Saved, result.Status);
+        Assert.False(session.IsDirty);
+        var saved = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(
+            workspace.RootPath,
+            "data",
+            "FusionEncounters.json")))!;
+        Assert.True(saved["futureRoot"]!["keep"]!.GetValue<bool>());
+        Assert.Equal(
+            "unchanged",
+            saved["encounters"]!["testEncounter"]!["futureEncounter"]!["token"]!.GetValue<string>());
+        Assert.Equal(
+            3,
+            saved["encounters"]!["testEncounter"]!["phases"]!["combat"]!["futurePhase"]!.AsArray().Count);
+        Assert.True(saved["encounters"]!["testEncounter"]!["phases"]!["combat"]!["sequences"]![0]!["futureSequence"]!["enabled"]!.GetValue<bool>());
+        var savedStep = saved["encounters"]!["testEncounter"]!["phases"]!["combat"]!["sequences"]![0]!["steps"]![0]!.AsArray();
+        Assert.Equal(45, savedStep[1]!.GetValue<int>());
+        Assert.Equal("keep", savedStep[2]!["futureStep"]!.GetValue<string>());
+    }
+
+    [Fact]
+    public async Task Authoring_BlocksInvalidStepBeforeWriting()
+    {
+        using var workspace = new TestWorkspace();
+        WritePlugins(workspace);
+        WriteValidWorkspace(workspace);
+        workspace.WriteFile(
+            "data/FusionEncounters.json",
+            """
+            {
+              "schemaVersion":1,
+              "databaseVersion":"1.0.0",
+              "encounters":{
+                "testEncounter":{
+                  "boss":"testBoss",
+                  "initialPhase":"combat",
+                  "phases":{"combat":{"sequences":[{"id":"main","steps":[["wait",30]]}]}}
+                }
+              }
+            }
+            """);
+        var sourcePath = Path.Combine(workspace.RootPath, "data", "FusionEncounters.json");
+        var original = await File.ReadAllTextAsync(sourcePath);
+        var document = await CreateWorkspaceService().LoadAsync(
+            CreateProject(workspace.RootPath),
+            CreateDescriptor(workspace.RootPath));
+        var session = new FusionBossEditSession(document);
+        session.SetValue(
+            "/encounters/testEncounter/phases/combat/sequences/0/steps/0",
+            JsonNode.Parse("[\"wait\",-1]"));
+
+        var result = await CreateAuthoringService().SaveAsync(session);
+
+        Assert.Equal(DocumentSaveStatus.ValidationFailed, result.Status);
+        Assert.Contains(result.Validation.Issues, issue => issue.Code == "invalid-wait");
+        Assert.Equal(original, await File.ReadAllTextAsync(sourcePath));
+        Assert.True(session.IsDirty);
+    }
+
+    [Fact]
     public async Task Preflight_MapsBossDiagnosticsToNavigableIssues()
     {
         using var workspace = new TestWorkspace();
@@ -470,6 +600,16 @@ public sealed class FusionBossIntegrationTests
         return new FusionBossWorkspaceService(
             fileSystem,
             new RpgMakerPluginRegistryService(fileSystem));
+    }
+
+    private static FusionBossAuthoringService CreateAuthoringService()
+    {
+        var fileSystem = new FileSystemService();
+        var snapshots = new DocumentSnapshotService(fileSystem);
+        return new FusionBossAuthoringService(
+            new ExternalModificationDetector(fileSystem, snapshots),
+            new AtomicJsonFileWriter(fileSystem),
+            snapshots);
     }
 
     private static DocumentDescriptor CreateDescriptor(string projectPath) => new()

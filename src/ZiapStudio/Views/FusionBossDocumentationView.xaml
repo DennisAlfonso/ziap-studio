@@ -1,0 +1,415 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ZiapStudio.Views.FusionBossDocumentationView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:bosses="using:ZiapStudio.Core.Fusion.Bosses">
+
+    <NavigationView
+        x:Name="DocumentationNavigation"
+        IsBackButtonVisible="Collapsed"
+        IsPaneOpen="True"
+        IsSettingsVisible="False"
+        ItemInvoked="DocumentationNavigation_ItemInvoked"
+        OpenPaneLength="310"
+        PaneDisplayMode="Left"
+        PaneTitle="ZIAP Studio Docs">
+        <NavigationView.MenuItems>
+            <NavigationViewItem Content="Fusion: Hexella Dive" IsExpanded="True">
+                <NavigationViewItem.Icon>
+                    <FontIcon Glyph="&#xE943;" />
+                </NavigationViewItem.Icon>
+                <NavigationViewItem.MenuItems>
+                    <NavigationViewItem Content="Fusion Boss Battle Engine" IsExpanded="True">
+                        <NavigationViewItem.Icon>
+                            <FontIcon Glyph="&#xE7FC;" />
+                        </NavigationViewItem.Icon>
+                        <NavigationViewItem.MenuItems>
+                            <NavigationViewItem
+                                x:Name="OverviewNavigationItem"
+                                Content="Overview"
+                                IsSelected="True"
+                                SelectsOnInvoked="True"
+                                Tag="overview">
+                                <NavigationViewItem.Icon>
+                                    <FontIcon Glyph="&#xE946;" />
+                                </NavigationViewItem.Icon>
+                            </NavigationViewItem>
+                            <NavigationViewItem
+                                x:Name="ActionApiNavigationItem"
+                                Content="Action API"
+                                SelectsOnInvoked="True"
+                                Tag="action-api">
+                                <NavigationViewItem.Icon>
+                                    <FontIcon Glyph="&#xE8EF;" />
+                                </NavigationViewItem.Icon>
+                            </NavigationViewItem>
+                        </NavigationViewItem.MenuItems>
+                    </NavigationViewItem>
+                </NavigationViewItem.MenuItems>
+            </NavigationViewItem>
+        </NavigationView.MenuItems>
+
+        <Grid>
+            <ScrollViewer
+                x:Name="OverviewPage"
+                HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Auto">
+                <Grid Padding="34,26" RowSpacing="22">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel MaxWidth="1080" HorizontalAlignment="Left" Spacing="6">
+                        <TextBlock
+                            FontSize="11"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Fusion: Hexella Dive  /  Fusion Boss Battle Engine  /  Overview" />
+                        <TextBlock FontSize="30" FontWeight="SemiBold" Text="Fusion Boss Battle Engine" />
+                        <TextBlock
+                            FontSize="15"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Il sistema che trasforma una boss battle in un contratto dichiarativo, ispezionabile e modificabile da ZIAP Studio."
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            Margin="0,9,0,0"
+                            FontSize="14"
+                            Text="L’engine coordina lo stato dell’encounter, decide quando cambiare fase, avvia i flussi di azioni e delega al runtime del gioco l’esecuzione concreta di movimento, combattimento, presentazione e meccaniche. La stessa struttura alimenta il grafo, la timeline, l’Arena Preview, il Pre-Flight e gli strumenti di authoring."
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <Grid Grid.Row="1" MaxWidth="1080" HorizontalAlignment="Stretch" ColumnSpacing="14" RowSpacing="14">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Border
+                            Padding="18,16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="9">
+                            <StackPanel Spacing="7">
+                                <TextBlock FontSize="10" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="01 · ENCOUNTER" />
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Definisce lo scontro" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="Collega boss, arena, ruoli, risorse e regole globali in un unico contratto identificabile."
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Column="1"
+                            Padding="18,16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="9">
+                            <StackPanel Spacing="7">
+                                <TextBlock FontSize="10" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="02 · FASI" />
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Governano lo stato" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="Stabiliscono cosa è attivo e quando una condizione o un segnale deve portare a una nuova fase."
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="1"
+                            Padding="18,16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="9">
+                            <StackPanel Spacing="7">
+                                <TextBlock FontSize="10" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="03 · FLUSSI" />
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Orchestrano il tempo" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="Raggruppano step ordinati, attese e chiamate riutilizzabili che diventano grafo e timeline."
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Grid.Row="1"
+                            Grid.Column="1"
+                            Padding="18,16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="9">
+                            <StackPanel Spacing="7">
+                                <TextBlock FontSize="10" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="04 · RUNTIME" />
+                                <TextBlock FontSize="18" FontWeight="SemiBold" Text="Esegue le azioni" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="I plugin registrano la Action API e traducono gli step dichiarativi in comportamento reale nel gioco."
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </Grid>
+
+                    <Border
+                        Grid.Row="2"
+                        MaxWidth="1080"
+                        Padding="18,15"
+                        HorizontalAlignment="Stretch"
+                        Background="{ThemeResource LayerFillColorAltBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="9">
+                        <StackPanel Spacing="12">
+                            <TextBlock FontSize="11" FontWeight="SemiBold" Text="COME LEGGERE UNA BOSS BATTLE" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock HorizontalAlignment="Center" FontWeight="SemiBold" Text="Encounter" />
+                                <TextBlock Grid.Column="1" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="→" />
+                                <TextBlock Grid.Column="2" HorizontalAlignment="Center" FontWeight="SemiBold" Text="Fase" />
+                                <TextBlock Grid.Column="3" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="→" />
+                                <TextBlock Grid.Column="4" HorizontalAlignment="Center" FontWeight="SemiBold" Text="Flusso" />
+                                <TextBlock Grid.Column="5" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="→" />
+                                <TextBlock Grid.Column="6" HorizontalAlignment="Center" FontWeight="SemiBold" Text="Step" />
+                                <TextBlock Grid.Column="7" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="→" />
+                                <TextBlock Grid.Column="8" HorizontalAlignment="Center" FontWeight="SemiBold" Text="Action API" />
+                                <TextBlock Grid.Column="9" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="→" />
+                                <TextBlock Grid.Column="10" HorizontalAlignment="Center" FontWeight="SemiBold" Text="Runtime" />
+                            </Grid>
+                        </StackPanel>
+                    </Border>
+
+                    <InfoBar
+                        Grid.Row="3"
+                        MaxWidth="1080"
+                        HorizontalAlignment="Stretch"
+                        IsClosable="False"
+                        IsOpen="True"
+                        Message="Le sezioni successive documenteranno separatamente Action API, contratti, fasi, flussi, timeline, geometria e runtime trace."
+                        Severity="Informational"
+                        Title="Documentazione modulare" />
+                </Grid>
+            </ScrollViewer>
+
+            <Grid
+                x:Name="ActionApiPage"
+                Padding="34,26"
+                RowSpacing="18"
+                Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Spacing="5">
+                    <TextBlock
+                        FontSize="11"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Fusion: Hexella Dive  /  Fusion Boss Battle Engine  /  Action API" />
+                    <TextBlock FontSize="30" FontWeight="SemiBold" Text="Action API" />
+                    <TextBlock
+                        MaxWidth="980"
+                        HorizontalAlignment="Left"
+                        FontSize="14"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="Azioni registrate dai plugin attivi e richiamabili dagli step dichiarativi del Fusion Boss Battle Engine."
+                        TextWrapping="Wrap" />
+                </StackPanel>
+
+                <InfoBar
+                    Grid.Row="1"
+                    IsClosable="False"
+                    IsOpen="True"
+                    Message="Questa prima versione censisce firme, categorie, provider e sorgenti. Descrizioni, parametri ed esempi verranno redatti nel prossimo passaggio."
+                    Severity="Informational"
+                    Title="Indice API generato dal progetto" />
+
+                <Grid Grid.Row="2" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border
+                        Padding="14,11"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                        <StackPanel Spacing="3">
+                            <TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="ACTION API" />
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="{x:Bind ViewModel.ActionCountText}" />
+                        </StackPanel>
+                    </Border>
+                    <Border
+                        Grid.Column="1"
+                        Padding="14,11"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                        <StackPanel Spacing="3">
+                            <TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="RUNTIME" />
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="{x:Bind ViewModel.ProviderCountText}" />
+                        </StackPanel>
+                    </Border>
+                    <Border
+                        Grid.Column="2"
+                        Padding="14,11"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                        <StackPanel Spacing="3">
+                            <TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="STATO EDITORIALE" />
+                            <TextBlock FontSize="18" FontWeight="SemiBold" Text="Descrizioni da redigere" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <Grid Grid.Row="3" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="260" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox
+                        Header="Cerca nella Action API"
+                        PlaceholderText="ID, firma o provider"
+                        Text="{x:Bind ViewModel.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <ComboBox
+                        Grid.Column="1"
+                        Header="Categoria"
+                        ItemsSource="{x:Bind ViewModel.Categories}"
+                        SelectedItem="{x:Bind ViewModel.SelectedCategory, Mode=TwoWay}" />
+                </Grid>
+
+                <Border
+                    Grid.Row="4"
+                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="10">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <Grid Padding="14,9" ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="36" />
+                                <ColumnDefinition Width="260" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="170" />
+                                <ColumnDefinition Width="260" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="1" FontSize="10" FontWeight="SemiBold" Text="AZIONE" />
+                            <TextBlock Grid.Column="2" FontSize="10" FontWeight="SemiBold" Text="FIRMA" />
+                            <TextBlock Grid.Column="3" FontSize="10" FontWeight="SemiBold" Text="CATEGORIA" />
+                            <TextBlock Grid.Column="4" FontSize="10" FontWeight="SemiBold" Text="PROVIDER / SORGENTE" />
+                        </Grid>
+                        <ListView
+                            Grid.Row="1"
+                            HorizontalContentAlignment="Stretch"
+                            ItemsSource="{x:Bind ViewModel.VisibleActions}">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="bosses:FusionBossActionApiEntry">
+                                    <Grid MinHeight="62" Padding="10,7" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="36" />
+                                            <ColumnDefinition Width="260" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="170" />
+                                            <ColumnDefinition Width="260" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            FontSize="18"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            Text="{x:Bind IconGlyph}" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock FontWeight="SemiBold" Text="{x:Bind DisplayName}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                FontFamily="Consolas"
+                                                FontSize="10"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="{x:Bind Id}"
+                                                TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <TextBlock
+                                            Grid.Column="2"
+                                            VerticalAlignment="Center"
+                                            FontFamily="Consolas"
+                                            FontSize="11"
+                                            Text="{x:Bind Signature}"
+                                            TextTrimming="CharacterEllipsis"
+                                            ToolTipService.ToolTip="{x:Bind Signature}" />
+                                        <TextBlock
+                                            Grid.Column="3"
+                                            VerticalAlignment="Center"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{x:Bind Category}" />
+                                        <StackPanel Grid.Column="4" VerticalAlignment="Center" Spacing="2">
+                                            <TextBlock Text="{x:Bind Provider}" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock
+                                                FontFamily="Consolas"
+                                                FontSize="9"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                Text="{x:Bind SourceLocationText}"
+                                                TextTrimming="CharacterEllipsis"
+                                                ToolTipService.ToolTip="{x:Bind SourceLocationText}" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                </Border>
+
+                <Grid Grid.Row="5" ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        FontSize="11"
+                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                        Text="{x:Bind ViewModel.DiagnosticText}"
+                        TextWrapping="Wrap" />
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12">
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="{x:Bind ViewModel.EmptyText, Mode=OneWay}" />
+                        <TextBlock
+                            FontWeight="SemiBold"
+                            Text="{x:Bind ViewModel.VisibleActionCountText, Mode=OneWay}" />
+                    </StackPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+    </NavigationView>
+</UserControl>
