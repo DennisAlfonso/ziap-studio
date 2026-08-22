@@ -51,7 +51,7 @@ public sealed class FusionRuntimeTraceTests
     }
 
     [Fact]
-    public void AnalyzeSequence_UsesLatestRunAndOffsetsVolleyCasts()
+    public void AnalyzeSequence_UsesLatestRunAndOffsetsRepeatedCasts()
     {
         var sequence = new FusionBossSequenceDefinition
         {
@@ -62,6 +62,7 @@ public sealed class FusionRuntimeTraceTests
                 {
                     Index = 3,
                     Kind = FusionBossTimelineStepKind.Action,
+                    TechnicalId = "alphaAbsSkillBurst",
                     EarliestStartFrame = 20,
                     AttackGeometry = new FusionBossAttackGeometry
                     {
@@ -132,6 +133,77 @@ public sealed class FusionRuntimeTraceTests
                 Assert.Equal(90, second.RuntimeExecutionFrame);
                 Assert.Equal(FusionRuntimeFidelityStatus.Aligned, second.Status);
             });
+    }
+
+    [Fact]
+    public void AnalyzeSequence_TreatsCastVolleyTargetsAsParallelCasts()
+    {
+        var sequence = new FusionBossSequenceDefinition
+        {
+            Id = "shieldedOpening",
+            Steps =
+            [
+                new FusionBossTimelineStep
+                {
+                    Index = 0,
+                    Kind = FusionBossTimelineStepKind.Action,
+                    TechnicalId = "combat.castVolley",
+                    EarliestStartFrame = 0,
+                    AttackGeometry = new FusionBossAttackGeometry
+                    {
+                        SkillId = 98,
+                        RadiusTiles = 3,
+                        ExecutionDelayFrames = 60,
+                        RepeatDelayMilliseconds = 120,
+                    },
+                },
+            ],
+        };
+        var events = new List<FusionRuntimeTraceEvent>
+        {
+            Event(1, "sequence.started", 300, "dark-ray-run"),
+            Event(2, "cast.requested", 300, "dark-ray-run", 0, 98, 0, "cast-0"),
+            Event(3, "cast.executed", 360, "dark-ray-run", 0, 98, 0, "cast-0"),
+            Event(4, "collider.activated", 360, "dark-ray-run", 0, 98, 0, "cast-0") with
+            {
+                Center = new FusionRuntimeTracePoint { X = 8, Y = 27 },
+                Geometry = new FusionRuntimeTraceGeometry { RadiusTiles = 3 },
+            },
+            Event(5, "cast.requested", 300, "dark-ray-run", 0, 98, 1, "cast-1"),
+            Event(6, "cast.executed", 360, "dark-ray-run", 0, 98, 1, "cast-1"),
+            Event(7, "collider.activated", 360, "dark-ray-run", 0, 98, 1, "cast-1") with
+            {
+                Center = new FusionRuntimeTracePoint { X = 15, Y = 27 },
+                Geometry = new FusionRuntimeTraceGeometry { RadiusTiles = 3 },
+            },
+            Event(8, "cast.requested", 300, "dark-ray-run", 0, 98, 2, "cast-2"),
+            Event(9, "cast.executed", 360, "dark-ray-run", 0, 98, 2, "cast-2"),
+            Event(10, "collider.activated", 360, "dark-ray-run", 0, 98, 2, "cast-2") with
+            {
+                Center = new FusionRuntimeTracePoint { X = 22, Y = 27 },
+                Geometry = new FusionRuntimeTraceGeometry { RadiusTiles = 3 },
+            },
+        };
+        var trace = new FusionRuntimeTrace
+        {
+            Schema = "ziap.fusion-runtime-trace/v1",
+            SchemaVersion = 1,
+            Fps = 60,
+            Events = events,
+        };
+
+        var analysis = new FusionRuntimeTraceService().AnalyzeSequence(
+            sequence,
+            "shielded",
+            trace);
+
+        Assert.Equal(3, analysis.Attacks.Count);
+        Assert.All(analysis.Attacks, comparison =>
+        {
+            Assert.Equal(60, comparison.ExpectedExecutionFrame);
+            Assert.Equal(60, comparison.RuntimeExecutionFrame);
+            Assert.Equal(FusionRuntimeFidelityStatus.Aligned, comparison.Status);
+        });
     }
 
     [Fact]

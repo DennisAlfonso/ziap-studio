@@ -261,6 +261,8 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedAttackGeometry));
             OnPropertyChanged(nameof(SelectedAttackTarget));
+            OnPropertyChanged(nameof(RuntimeDeclaredContractText));
+            OnPropertyChanged(nameof(RuntimeContractInterpretationText));
             if (value is not null)
             {
                 PreviewFrame = value.Step.EarliestStartFrame;
@@ -548,9 +550,12 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
 
     public int RuntimeMissingCount => RuntimeStatusCount(FusionRuntimeFidelityStatus.Missing);
 
-    public string RuntimeReviewListHeader => ShowAlignedRuntimeAttacks
-        ? $"Tutti i confronti ({RuntimeAttackComparisons.Count})"
-        : $"Da verificare ({RuntimeAttackComparisons.Count})";
+    public string RuntimeReviewListHeader => RuntimeTraceAnalysis?.Attacks.All(
+        comparison => comparison.Status == FusionRuntimeFidelityStatus.Aligned) == true
+            ? $"Confronti allineati ({RuntimeAttackComparisons.Count})"
+            : ShowAlignedRuntimeAttacks
+                ? $"Tutti i confronti ({RuntimeAttackComparisons.Count})"
+                : $"Da verificare ({RuntimeAttackComparisons.Count})";
 
     public string RuntimeReviewSummaryText
     {
@@ -600,6 +605,51 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
         : string.Empty;
 
     public bool HasSelectedRuntimeAttack => SelectedRuntimeAttack is not null;
+
+    public string RuntimeDeclaredContractText
+    {
+        get
+        {
+            var step = SelectedTimelineStep?.Step;
+            var geometry = step?.AttackGeometry;
+            if (step is null || geometry is null)
+            {
+                return "Nessun contratto d'attacco disponibile per lo step selezionato.";
+            }
+            var targetCount = Math.Max(1, step.AttackTargets.Count);
+            var targetText = step.AttackTargets.Count > 0
+                ? $"{targetCount} bersagli"
+                : "1 bersaglio";
+            var shapeText = geometry.Kind == FusionBossAttackGeometryKind.ProjectileCorridor
+                ? $"corridoio proiettile, collider {geometry.ProjectileColliderRadiusPixels:0.##} px"
+                : $"area circolare istantanea, raggio {geometry.RadiusTiles:0.##} tile";
+            var cadenceText = step.TechnicalId.Equals(
+                "combat.castVolley",
+                StringComparison.OrdinalIgnoreCase)
+                    ? "cast paralleli"
+                    : "cast sequenziali";
+            return $"{step.TechnicalId} · {targetText}, {cadenceText} · {shapeText} · " +
+                $"esecuzione dopo {geometry.ExecutionDelayFrames} frame.";
+        }
+    }
+
+    public string RuntimeContractInterpretationText
+    {
+        get
+        {
+            var step = SelectedTimelineStep?.Step;
+            if (step?.AttackGeometry?.Kind == FusionBossAttackGeometryKind.InstantCircle &&
+                step.TechnicalId.Equals("combat.castVolley", StringComparison.OrdinalIgnoreCase) &&
+                step.AttackTargets.Count > 1)
+            {
+                return "Questa dichiarazione non contiene origine, direzione o percorso: " +
+                    "la Runtime Review può confermare le aree circolari, ma non può dedurre " +
+                    "la traiettoria lineare desiderata. In questo caso il problema è nel contratto di authoring.";
+            }
+            return "La Runtime Review confronta il contratto dichiarato con il gioco reale; " +
+                "un risultato allineato non certifica un'intenzione che non compare nei dati.";
+        }
+    }
 
     public string RuntimeTraceStatusText
     {
@@ -812,8 +862,11 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
         var previousCastId = SelectedRuntimeAttack?.Comparison.CastId;
         var previousStepIndex = SelectedRuntimeAttack?.Comparison.StepIndex;
         var previousCastIndex = SelectedRuntimeAttack?.Comparison.CastIndex;
-        _runtimeAttackComparisons = (_runtimeTraceAnalysis?.Attacks ?? [])
-            .Where(comparison => ShowAlignedRuntimeAttacks ||
+        var attacks = _runtimeTraceAnalysis?.Attacks ?? [];
+        var hasProblems = attacks.Any(comparison =>
+            comparison.Status != FusionRuntimeFidelityStatus.Aligned);
+        _runtimeAttackComparisons = attacks
+            .Where(comparison => ShowAlignedRuntimeAttacks || !hasProblems ||
                 comparison.Status != FusionRuntimeFidelityStatus.Aligned)
             .OrderBy(comparison => RuntimeStatusSortOrder(comparison.Status))
             .ThenBy(comparison => comparison.ExpectedExecutionFrame)

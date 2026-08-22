@@ -740,6 +740,7 @@
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                         <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
                                     </Grid.RowDefinitions>
                                     <TextBlock FontWeight="SemiBold" Text="{Binding RuntimeReviewListHeader}" />
                                     <ListView
@@ -885,8 +886,33 @@
                                             </DataTemplate>
                                         </ContentControl.ContentTemplate>
                                     </ContentControl>
-                                    <StackPanel
+                                    <Border
                                         Grid.Row="2"
+                                        Margin="0,2,0,0"
+                                        Padding="12,10"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        CornerRadius="7"
+                                        Visibility="{Binding HasSelectedRuntimeAttack, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                        <StackPanel Spacing="5">
+                                            <TextBlock
+                                                FontSize="10"
+                                                FontWeight="SemiBold"
+                                                Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                                Text="CONTRATTO DICHIARATO" />
+                                            <TextBlock
+                                                FontFamily="Consolas"
+                                                FontSize="11"
+                                                Text="{Binding RuntimeDeclaredContractText}"
+                                                TextWrapping="Wrap" />
+                                            <TextBlock
+                                                FontSize="11"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                Text="{Binding RuntimeContractInterpretationText}"
+                                                TextWrapping="Wrap" />
+                                        </StackPanel>
+                                    </Border>
+                                    <StackPanel
+                                        Grid.Row="3"
                                         HorizontalAlignment="Right"
                                         Orientation="Horizontal"
                                         Spacing="8"
@@ -898,8 +924,9 @@
                                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             Text="{Binding PreviewFrameText}" />
                                         <Button
-                                            Click="OpenSelectedRuntimeInSequence_Click"
-                                            Content="Apri nella Sequenza" />
+                                            Click="EditSelectedRuntimeDeclaration_Click"
+                                            Content="Modifica dichiarazione"
+                                            ToolTipService.ToolTip="Apre lo step correlato nella timeline e nel pannello JSON di authoring" />
                                         <Button
                                             Click="OpenSelectedRuntimeInArena_Click"
                                             Content="Mostra nell'Arena"
@@ -930,6 +957,7 @@
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
                             <StackPanel Spacing="2">
                                 <TextBlock FontSize="18" FontWeight="SemiBold" Text="Arena Preview" />
@@ -950,6 +978,27 @@
                                     <TextBlock Text="{Binding ArenaPreviewWindowButtonText}" />
                                 </StackPanel>
                             </Button>
+                            <StackPanel
+                                Grid.Row="3"
+                                Grid.ColumnSpan="2"
+                                HorizontalAlignment="Right"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <Button
+                                    Click="ConfigureArenaPlaytest_Click"
+                                    Content="Configura Playtest"
+                                    ToolTipService.ToolTip="Modifica runtime, metodo d'ingresso e punto di spawn dell'arena" />
+                                <Button
+                                    x:Name="LaunchArenaPlaytestButton"
+                                    Click="LaunchArenaPlaytest_Click"
+                                    Style="{ThemeResource AccentButtonStyle}"
+                                    ToolTipService.ToolTip="Avvia una nuova partita direttamente nell'arena selezionata">
+                                    <StackPanel Orientation="Horizontal" Spacing="7">
+                                        <FontIcon FontSize="14" Glyph="&#xE768;" />
+                                        <TextBlock Text="Avvia arena in Playtest" />
+                                    </StackPanel>
+                                </Button>
+                            </StackPanel>
                             <Grid Grid.Row="1" Grid.ColumnSpan="2" ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="2*" />
@@ -1003,7 +1052,11 @@
                                     SelectedItem="{Binding SelectedMap, Mode=TwoWay}"
                                     ToolTipService.ToolTip="{Binding SelectedMap.DisplayName}" />
                             </Grid>
-                            <StackPanel Grid.Row="3" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
+                            <StackPanel Grid.Row="4" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10">
+                                <TextBlock
+                                    x:Name="ArenaPlaytestStatusTextBlock"
+                                    FontSize="11"
+                                    Foreground="{ThemeResource SystemFillColorSuccessBrush}" />
                                 <TextBlock
                                     FontSize="11"
                                     Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
@@ -1157,7 +1210,10 @@
                                 </StackPanel>
                             </Expander>
 
-                            <Expander Header="Step selezionato · JSON avanzato" IsExpanded="False">
+                            <Expander
+                                x:Name="StepEditorExpander"
+                                Header="Step selezionato · JSON avanzato"
+                                IsExpanded="False">
                                 <StackPanel Margin="0,8,0,0" Spacing="7">
                                     <TextBlock
                                         FontSize="11"
@@ -1165,6 +1221,7 @@
                                         Text="Modifica l'azione o il controllo reale. I campi non gestiti da ZIAP restano intatti."
                                         TextWrapping="Wrap" />
                                     <TextBox
+                                        x:Name="StepEditorTextBox"
                                         AcceptsReturn="True"
                                         FontFamily="Consolas"
                                         FontSize="11"

@@ -170,10 +170,15 @@ public sealed class FusionRuntimeTraceService
                 var collider = castEvents.FirstOrDefault(entry =>
                     entry.Type.Equals("collider.activated", StringComparison.OrdinalIgnoreCase));
                 var castIndex = request.CastIndex ?? 0;
+                var castSpacingFrames = step.TechnicalId.Equals(
+                    "combat.castVolley",
+                    StringComparison.OrdinalIgnoreCase)
+                        ? 0
+                        : castIndex * geometry.RepeatDelayMilliseconds *
+                            Math.Max(1d, framesPerSecond) / 1000d;
                 var expectedExecution = step.EarliestStartFrame +
                     geometry.ExecutionDelayFrames +
-                    castIndex * geometry.RepeatDelayMilliseconds *
-                    Math.Max(1d, framesPerSecond) / 1000d;
+                    castSpacingFrames;
                 var actualExecution = execution?.Frame - runStart.Frame;
                 var telegraphCenter = telegraph?.Center ?? telegraph?.Point;
                 var colliderCenter = collider?.Center;
