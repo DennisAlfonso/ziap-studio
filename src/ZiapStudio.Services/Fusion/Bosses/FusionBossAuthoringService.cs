@@ -206,6 +206,7 @@ public sealed class FusionBossAuthoringService
             issues.Add(Error("invalid-step-array", "Il flusso deve essere un array di step.", path));
             return;
         }
+        var preparedAttacks = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         for (var index = 0; index < steps.Count; index++)
         {
             var stepPath = $"{path}/{index}";
@@ -222,6 +223,35 @@ public sealed class FusionBossAuthoringService
                 {
                     issues.Add(Error("invalid-wait", "wait richiede un numero intero di frame non negativo.", stepPath));
                 }
+                else if (actionId.Equals("combat.prepareAttack", StringComparison.OrdinalIgnoreCase))
+                {
+                    var attackId = action.Count > 1 && action[1] is JsonObject prepareConfig
+                        ? Text(prepareConfig["attackId"]) ?? Text(prepareConfig["preparedAttackId"])
+                        : null;
+                    if (string.IsNullOrWhiteSpace(attackId))
+                    {
+                        issues.Add(Error("missing-attack-id", "combat.prepareAttack richiede attackId.", stepPath));
+                    }
+                    else if (!preparedAttacks.TryAdd(attackId, index))
+                    {
+                        issues.Add(Error("duplicate-prepared-attack", $"L'attacco preparato '{attackId}' è già attivo in questa sequenza.", stepPath));
+                    }
+                }
+                else if (actionId.Equals("combat.commitAttack", StringComparison.OrdinalIgnoreCase) ||
+                    actionId.Equals("combat.cancelAttack", StringComparison.OrdinalIgnoreCase))
+                {
+                    var attackId = action.Count > 1 && action[1] is JsonObject commitConfig
+                        ? Text(commitConfig["attackId"]) ?? Text(commitConfig["preparedAttackId"])
+                        : null;
+                    if (string.IsNullOrWhiteSpace(attackId))
+                    {
+                        issues.Add(Error("missing-attack-id", $"{actionId} richiede attackId.", stepPath));
+                    }
+                    else if (!preparedAttacks.Remove(attackId))
+                    {
+                        issues.Add(Error("unmatched-attack-lifecycle", $"L'attacco '{attackId}' viene risolto senza un prepare precedente.", stepPath));
+                    }
+                }
                 continue;
             }
             if (step is JsonObject control &&
@@ -232,6 +262,13 @@ public sealed class FusionBossAuthoringService
                 continue;
             }
             issues.Add(Error("invalid-step", "Lo step deve essere un'azione o un controllo riconosciuto.", stepPath));
+        }
+        foreach (var (attackId, prepareIndex) in preparedAttacks)
+        {
+            issues.Add(Error(
+                "unresolved-prepared-attack",
+                $"L'attacco preparato '{attackId}' non viene né risolto né annullato.",
+                $"{path}/{prepareIndex}"));
         }
     }
 

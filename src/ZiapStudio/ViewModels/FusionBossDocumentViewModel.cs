@@ -620,14 +620,25 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
             var targetText = step.AttackTargets.Count > 0
                 ? $"{targetCount} bersagli"
                 : "1 bersaglio";
-            var shapeText = geometry.Kind == FusionBossAttackGeometryKind.ProjectileCorridor
-                ? $"corridoio proiettile, collider {geometry.ProjectileColliderRadiusPixels:0.##} px"
-                : $"area circolare istantanea, raggio {geometry.RadiusTiles:0.##} tile";
+            var shapeText = geometry.Kind switch
+            {
+                FusionBossAttackGeometryKind.ProjectileCorridor =>
+                    $"corridoio proiettile, collider {geometry.ProjectileColliderRadiusPixels:0.##} px",
+                FusionBossAttackGeometryKind.DirectionalInstantChain =>
+                    $"catena direzionale di {geometry.ChainCount} collider, " +
+                    $"raggio {geometry.RadiusTiles:0.##}, passo {geometry.ChainSpacingTiles:0.##} tile",
+                _ => $"area circolare istantanea, raggio {geometry.RadiusTiles:0.##} tile",
+            };
             var cadenceText = step.TechnicalId.Equals(
                 "combat.castVolley",
                 StringComparison.OrdinalIgnoreCase)
                     ? "cast paralleli"
                     : "cast sequenziali";
+            if (step.AttackLifecycleStage.Equals("prepare", StringComparison.OrdinalIgnoreCase))
+            {
+                return $"{step.TechnicalId} · {targetText} · {shapeText} · telegraph mantenuto " +
+                    $"fino al commit “{step.AttackLifecycleId}”, poi impatto immediato.";
+            }
             return $"{step.TechnicalId} · {targetText}, {cadenceText} · {shapeText} · " +
                 $"esecuzione dopo {geometry.ExecutionDelayFrames} frame.";
         }
@@ -638,6 +649,24 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
         get
         {
             var step = SelectedTimelineStep?.Step;
+            if (step?.AttackLifecycleStage.Equals(
+                "prepare",
+                StringComparison.OrdinalIgnoreCase) == true)
+            {
+                return "Questo attacco usa un lifecycle esplicito: il telegraph viene preparato, " +
+                    "il movimento avviene mentre resta visibile e il commit applica la skill nello " +
+                    "stesso frame dell'atterraggio. Runtime Review verifica entrambi i collegamenti.";
+            }
+            if (step?.AttackGeometry?.Kind == FusionBossAttackGeometryKind.DirectionalInstantChain)
+            {
+                var directions = step.AttackTargets
+                    .Select(target => target.ExecutionDirection)
+                    .Distinct()
+                    .Select(DirectionLabel);
+                return $"Alpha ABS esegue {step.AttackGeometry.ChainCount} collider per cast " +
+                    $"lungo {step.AttackGeometry.ChainReachTiles:0.##} tile. " +
+                    $"Direzione: {string.Join(", ", directions)}. Runtime Review verifica quantità e percorso.";
+            }
             if (step?.AttackGeometry?.Kind == FusionBossAttackGeometryKind.InstantCircle &&
                 step.TechnicalId.Equals("combat.castVolley", StringComparison.OrdinalIgnoreCase) &&
                 step.AttackTargets.Count > 1)
@@ -650,6 +679,19 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
                 "un risultato allineato non certifica un'intenzione che non compare nei dati.";
         }
     }
+
+    private static string DirectionLabel(int direction) => direction switch
+    {
+        1 => "↙",
+        2 => "↓",
+        3 => "↘",
+        4 => "←",
+        6 => "→",
+        7 => "↖",
+        8 => "↑",
+        9 => "↗",
+        _ => "↓ implicita",
+    };
 
     public string RuntimeTraceStatusText
     {
@@ -910,7 +952,7 @@ public sealed class FusionBossDocumentViewModel : INotifyPropertyChanged
         }
         var repeatDelayFrames = attack.RepeatDelayMilliseconds * 60d / 1000d;
         var repeatsEnd = repeatDelayFrames * Math.Max(0, attack.RepeatOnUseCount - 1);
-        if (attack.Kind == FusionBossAttackGeometryKind.InstantCircle)
+        if (attack.Kind != FusionBossAttackGeometryKind.ProjectileCorridor)
         {
             repeatsEnd += repeatDelayFrames * Math.Max(0, attack.HitRepeatCount - 1);
         }
@@ -1164,7 +1206,8 @@ public sealed class FusionRuntimeAttackComparisonViewModel
     public string StepText => $"Step {Comparison.StepIndex + 1:00}";
 
     public string FrameComparisonText =>
-        $"Previsto F {Comparison.ExpectedExecutionFrame:0.##} → " +
+        $"Previsto {(Comparison.IsExpectedExecutionExact ? "F" : "≥ F")} " +
+        $"{Comparison.ExpectedExecutionFrame:0.##} → " +
         (Comparison.RuntimeExecutionFrame is { } frame
             ? $"runtime F {frame:0.##}"
             : "runtime non rilevato");
@@ -1178,6 +1221,9 @@ public sealed class FusionRuntimeAttackComparisonViewModel
             FormatFrame("start previsto", Comparison.ExpectedStartFrame),
             FormatOptionalFrame("richiesta", Comparison.RuntimeStartFrame),
             FormatOptionalFrame("telegraph", Comparison.RuntimeTelegraphFrame),
+            FormatOptionalFrame("movimento", Comparison.RuntimeMovementStartFrame),
+            FormatOptionalFrame("atterraggio", Comparison.RuntimeMovementCompletedFrame),
+            FormatOptionalFrame("commit", Comparison.RuntimeCommitFrame),
             FormatOptionalFrame("esecuzione", Comparison.RuntimeExecutionFrame),
             FormatOptionalFrame("collider", Comparison.RuntimeColliderFrame),
         });
@@ -1200,6 +1246,13 @@ public sealed class FusionRuntimeAttackComparisonViewModel
                 Comparison.ExpectedColliderRadiusPixels,
                 Comparison.RuntimeColliderRadiusPixels,
                 "px");
+            AddPair(
+                parts,
+                "quantità collider",
+                Comparison.ExpectedColliderCount,
+                Comparison.RuntimeColliderCount,
+                string.Empty);
+            AddDelta(parts, "percorso", Comparison.ColliderPathOffsetTiles, "tile");
             return parts.Count == 0
                 ? "Nessuna misura geometrica disponibile per questo cast."
                 : string.Join(" · ", parts);
@@ -1560,8 +1613,14 @@ public sealed class FusionBossTimelineStepViewModel
         }
     }
 
-    public string DurationText => Step.AttackGeometry is { } attack
-        ? attack.RepeatOnUseCount > 1
+    public string DurationText => Step.AttackLifecycleStage.Equals(
+        "prepare",
+        StringComparison.OrdinalIgnoreCase)
+        ? $"telegraph → step {Step.LinkedAttackStepIndex.GetValueOrDefault() + 1:00}"
+        : Step.AttackLifecycleStage.Equals("commit", StringComparison.OrdinalIgnoreCase)
+            ? "impatto immediato"
+        : Step.AttackGeometry is { } attack
+            ? attack.RepeatOnUseCount > 1
             ? $"+{attack.ExecutionDelayFrames}f · ×{attack.RepeatOnUseCount}"
             : $"+{attack.ExecutionDelayFrames}f"
         : Step.DurationFrames is { } duration

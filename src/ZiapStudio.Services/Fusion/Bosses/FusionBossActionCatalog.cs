@@ -130,6 +130,8 @@ internal sealed class FusionBossActionCatalog
             ["role"] = RoleLabel(ReadString(config, "role")),
             ["caster"] = RoleLabel(ReadString(config, "casterRole")),
             ["key"] = ReadString(config, "key") ?? "senza nome",
+            ["attack.id"] = ReadString(config, "attackId") ??
+                ReadString(config, "preparedAttackId") ?? "senza nome",
             ["cue"] = StringAt(elements, 1),
             ["sequence"] = ReadString(config, "sequence") ?? string.Empty,
             ["amount"] = config.ValueKind == JsonValueKind.Object &&
@@ -178,6 +180,17 @@ internal sealed class FusionBossActionCatalog
             ReadString(config, "key") is { } targetKey)
         {
             writes.Add($"bersaglio:{targetKey}");
+        }
+        else if (actionId.Equals("combat.prepareAttack", StringComparison.OrdinalIgnoreCase) &&
+            (ReadString(config, "attackId") ?? ReadString(config, "preparedAttackId")) is { } preparedId)
+        {
+            writes.Add($"attacco:{preparedId}");
+        }
+        else if ((actionId.Equals("combat.commitAttack", StringComparison.OrdinalIgnoreCase) ||
+            actionId.Equals("combat.cancelAttack", StringComparison.OrdinalIgnoreCase)) &&
+            (ReadString(config, "attackId") ?? ReadString(config, "preparedAttackId")) is { } consumedId)
+        {
+            reads.Add($"attacco:{consumedId}");
         }
         else if (actionId.Equals("setResource", StringComparison.OrdinalIgnoreCase))
         {
@@ -283,6 +296,9 @@ internal sealed class FusionBossActionCatalog
         yield return new("combat.moveTo", "Sposta un ruolo", "Movimento", "➜", "Sposta {role} verso {target}.");
         yield return new("combat.face", "Orienta un ruolo", "Movimento", "◉", "Orienta {role} verso {target}.");
         yield return new("combat.stopMovement", "Ferma il movimento", "Movimento", "■", "Ferma il movimento di {role}.");
+        yield return new("combat.prepareAttack", "Prepara un attacco", "Combattimento", "◌", "Mostra il telegraph di {skill} contro {target} e conserva l'istanza “{attack.id}” fino alla risoluzione.");
+        yield return new("combat.commitAttack", "Risolvi un attacco", "Combattimento", "⚡", "Esegue immediatamente l'attacco preparato “{attack.id}”.");
+        yield return new("combat.cancelAttack", "Annulla un attacco", "Combattimento", "×", "Annulla l'attacco preparato “{attack.id}” e rimuove il telegraph.");
         yield return new("combat.cast", "Esegue un attacco", "Combattimento", "⚔", "{caster} usa {skill} contro {target}, con origine {origin}.");
         yield return new("combat.castVolley", "Lancia una raffica", "Combattimento", "✦", "{caster} usa {skill} in raffica contro {targets}.");
         yield return new("alphaAbsMapSkill", "Esegue un attacco mappa", "Combattimento", "⚔", "{caster} usa {skill} contro {target}.");

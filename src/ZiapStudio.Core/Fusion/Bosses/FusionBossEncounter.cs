@@ -124,6 +124,12 @@ public sealed record FusionBossTimelineStep
 
     public string? ReferencedSequenceId { get; init; }
 
+    public string AttackLifecycleId { get; init; } = string.Empty;
+
+    public string AttackLifecycleStage { get; init; } = string.Empty;
+
+    public int? LinkedAttackStepIndex { get; init; }
+
     public FusionBossAttackGeometry? AttackGeometry { get; init; }
 
     public FusionBossAttackTarget? AttackTarget { get; init; }

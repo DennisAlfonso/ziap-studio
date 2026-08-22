@@ -83,9 +83,21 @@ public sealed record FusionRuntimeTraceEvent
 
     public string ProjectileId { get; init; } = string.Empty;
 
+    public string PreparedAttackId { get; init; } = string.Empty;
+
+    public string Role { get; init; } = string.Empty;
+
     public int? DurationFrames { get; init; }
 
     public int? TelegraphDelayFrames { get; init; }
+
+    public bool HoldUntilCommit { get; init; }
+
+    public int? AttackDirection { get; init; }
+
+    public int? ChainCount { get; init; }
+
+    public int? ColliderIndex { get; init; }
 
     public int? TargetCount { get; init; }
 
@@ -94,6 +106,10 @@ public sealed record FusionRuntimeTraceEvent
     public double? CorridorWidthPixels { get; init; }
 
     public double? ColliderRadiusPixels { get; init; }
+
+    public double? ChainSpacingTiles { get; init; }
+
+    public double? ChainReachTiles { get; init; }
 
     public FusionRuntimeTracePoint? Point { get; init; }
 
@@ -112,6 +128,8 @@ public sealed record FusionRuntimeTraceEvent
     public FusionRuntimeTracePoint? Target { get; init; }
 
     public FusionRuntimeTraceGeometry? Geometry { get; init; }
+
+    public IReadOnlyList<FusionRuntimeTracePoint> Centers { get; init; } = [];
 
     public IReadOnlyList<FusionRuntimeTracePoint> Targets { get; init; } = [];
 }
@@ -142,6 +160,16 @@ public sealed record FusionRuntimeTraceGeometry
     public double SpeedPixelsPerFrame { get; init; }
 
     public double ColliderRadiusPixels { get; init; }
+
+    public int DirectionMode { get; init; }
+
+    public int Direction { get; init; }
+
+    public int ChainCount { get; init; }
+
+    public double ChainSpacingTiles { get; init; }
+
+    public double ChainReachTiles { get; init; }
 }
 
 public enum FusionRuntimeFidelityStatus
@@ -195,6 +223,28 @@ public sealed record FusionRuntimeAttackComparison
     public double? RuntimeColliderRadiusPixels { get; init; }
 
     public double? ColliderRadiusDeltaPixels { get; init; }
+
+    public int? ExpectedColliderCount { get; init; }
+
+    public int? RuntimeColliderCount { get; init; }
+
+    public int? ColliderCountDelta { get; init; }
+
+    public double? ColliderPathOffsetTiles { get; init; }
+
+    public string AttackLifecycleId { get; init; } = string.Empty;
+
+    public bool IsExpectedExecutionExact { get; init; } = true;
+
+    public double? RuntimeCommitFrame { get; init; }
+
+    public double? RuntimeMovementStartFrame { get; init; }
+
+    public double? RuntimeMovementCompletedFrame { get; init; }
+
+    public double? CommitExecutionDeltaFrames { get; init; }
+
+    public double? LandingImpactDeltaFrames { get; init; }
 
     public FusionRuntimeFidelityStatus Status { get; init; }
 

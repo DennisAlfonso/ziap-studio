@@ -473,6 +473,13 @@
                 const entryProbe = resolveAttackTarget(entry.target, scene, entry);
                 if (geometry.kind === 1) {
                     drawProjectileGeometry(geometry, entry.target, entryProbe, scene, entry);
+                } else if (geometry.kind === 2) {
+                    drawDirectionalChainGeometry(
+                        geometry,
+                        entry.target,
+                        entryProbe,
+                        scene
+                    );
                 } else {
                     drawInstantGeometry(geometry, entryProbe, scene);
                 }
@@ -644,6 +651,111 @@
         );
     }
 
+    function attackDirectionVector(direction) {
+        switch (Number(direction) || 0) {
+            case 1: return { x: -1, y: 1 };
+            case 2: return { x: 0, y: 1 };
+            case 3: return { x: 1, y: 1 };
+            case 4: return { x: -1, y: 0 };
+            case 6: return { x: 1, y: 0 };
+            case 7: return { x: -1, y: -1 };
+            case 8: return { x: 0, y: -1 };
+            case 9: return { x: 1, y: -1 };
+            default: return { x: 0, y: 1 };
+        }
+    }
+
+    function attackDirectionLabel(direction) {
+        return ({ 1: "↙", 2: "↓", 3: "↘", 4: "←", 6: "→", 7: "↖", 8: "↑", 9: "↗" })[
+            Number(direction) || 2
+        ] || "↓";
+    }
+
+    function directionalChainPoints(geometry, target, probe, scene, offsetY) {
+        const direction = Number(target && target.executionDirection) || 2;
+        const vector = attackDirectionVector(direction);
+        const count = Math.max(1, Number(geometry.chainCount) || 1);
+        const spacing = Math.max(
+            0.5,
+            Number(geometry.chainSpacingTiles) || Number(geometry.radiusTiles) || 0.5
+        );
+        return Array.from({ length: count }, (_, zeroIndex) => {
+            const index = zeroIndex + 1;
+            const mapPoint = {
+                x: probe.x + vector.x * spacing * index,
+                y: probe.y + vector.y * spacing * index,
+            };
+            return {
+                mapPoint,
+                world: mapPointToWorld(mapPoint, scene, offsetY || 0),
+            };
+        });
+    }
+
+    function drawChainCircles(graphics, points, radius) {
+        for (const point of points) {
+            graphics.drawCircle(point.world.x, point.world.y, radius);
+        }
+    }
+
+    function drawDirectionalChainGeometry(geometry, target, probe, scene) {
+        const telegraphPoints = directionalChainPoints(
+            geometry,
+            target,
+            probe,
+            scene,
+            geometry.telegraphCenterOffsetYTiles || 0
+        );
+        const runtimePoints = directionalChainPoints(
+            geometry,
+            target,
+            probe,
+            scene,
+            geometry.runtimeCenterOffsetYTiles || 0
+        );
+        const radius = geometry.radiusTiles * scene.tileWidth;
+        if (geometry.telegraphEnabled) {
+            const telegraph = new PIXI.Graphics();
+            telegraph.lineStyle(5, 0xff4f55, 0.88);
+            telegraph.beginFill(0xff2028, 0.18);
+            drawChainCircles(telegraph, telegraphPoints, radius);
+            telegraph.endFill();
+            state.layers.attackTelegraph.addChild(telegraph);
+        }
+
+        const hitbox = new PIXI.Graphics();
+        hitbox.lineStyle(2, 0x53d9ff, 1);
+        drawChainCircles(hitbox, runtimePoints, radius);
+        for (const point of runtimePoints) {
+            drawExtraHurtboxes(
+                geometry.extraHurtboxes || [],
+                point.mapPoint,
+                scene,
+                hitbox
+            );
+        }
+        state.layers.attackHitbox.addChild(hitbox);
+
+        const trajectory = new PIXI.Graphics();
+        const origin = mapPointToWorld(probe, scene);
+        trajectory.lineStyle(2, 0xffcf5c, 0.95);
+        trajectory.moveTo(origin.x, origin.y);
+        for (const point of runtimePoints) {
+            trajectory.lineTo(point.world.x, point.world.y);
+            drawCross(trajectory, point.world.x, point.world.y, 4, 0xffcf5c);
+        }
+        drawCross(trajectory, origin.x, origin.y, 8, 0xffcf5c);
+        state.layers.attackTrajectory.addChild(trajectory);
+        const labelPoint = runtimePoints[Math.floor((runtimePoints.length - 1) / 2)];
+        addAttackLabel(
+            state.layers.attackTrajectory,
+            labelPoint.world.x,
+            labelPoint.world.y - radius - 8,
+            `Skill #${geometry.skillId} · ${geometry.chainCount} collider · ` +
+                `${attackDirectionLabel(target.executionDirection)}`
+        );
+    }
+
     function drawExtraHurtboxes(colliders, probe, scene, graphics) {
         for (const collider of colliders) {
             if (collider.kind === 0) {
@@ -803,6 +915,7 @@
     function schedulerStepClass(step) {
         const kind = String(step.kind || "").toLowerCase();
         const label = String(step.label || "").toLowerCase();
+        if (String(step.attackLifecycleStage || "").toLowerCase() === "commit") return "attack";
         if (step.attack) return "attack";
         if (kind === "waituntil") return "sync";
         if (kind === "sequence" || kind === "repeatsequence") return "sequence";
@@ -818,6 +931,7 @@
         if (category === "sequence") return String(step.kind).toLowerCase() === "repeatsequence" ? "↻" : "↳";
         if (category === "capture") return "◎";
         if (category === "cue") return "✦";
+        if (String(step.attackLifecycleStage || "").toLowerCase() === "commit") return "⚡";
         if (String(step.label || "").toLowerCase().includes("move")) return "➜";
         return "◆";
     }
@@ -852,10 +966,13 @@
                 appendSchedulerRange(step.frame, Number(step.frame) + duration, "wait");
             }
             if (step.attack) {
-                const attackEnd = Number(step.frame) + Math.max(
-                    Number(step.attack.telegraphDurationFrames) || 0,
-                    Number(step.attack.executionDelayFrames) || 0
-                );
+                const lifecycleImpact = Number(step.attack.lifecycleImpactFrame);
+                const attackEnd = Number.isFinite(lifecycleImpact)
+                    ? lifecycleImpact
+                    : Number(step.frame) + Math.max(
+                        Number(step.attack.telegraphDurationFrames) || 0,
+                        Number(step.attack.executionDelayFrames) || 0
+                    );
                 appendSchedulerRange(step.frame, attackEnd, "attack");
             }
         }
@@ -897,7 +1014,7 @@
 
     function renderRuntimeScheduler(events, comparisons) {
         for (const event of events.filter(entry => entry.type === "telegraph.started")) {
-            const endFrame = Number(event.frame) + Math.max(1, Number(event.durationFrames) || 1);
+            const endFrame = runtimeTelegraphEndFrame(event, events);
             appendSchedulerRange(event.frame, endFrame, "runtime", schedulerRuntimeRanges);
         }
         for (const comparison of comparisons) {
@@ -919,6 +1036,10 @@
         }
         const relevantTypes = new Set([
             "sequence.step.started",
+            "movement.started",
+            "movement.completed",
+            "attack.prepared",
+            "attack.commit.requested",
             "telegraph.started",
             "cast.executed",
             "collider.activated",
@@ -970,6 +1091,11 @@
             const byCast = comparisons.find(item => item.castId === event.castId);
             if (byCast) return byCast;
         }
+        if (event.preparedAttackId) {
+            const byLifecycle = comparisons.find(item =>
+                item.attackLifecycleId === event.preparedAttackId);
+            if (byLifecycle) return byLifecycle;
+        }
         return comparisons.find(item =>
             Number(item.stepIndex) === Number(event.stepIndex) &&
             (!Number.isFinite(Number(event.skillId)) || Number(item.skillId) === Number(event.skillId)) &&
@@ -977,7 +1103,23 @@
         ) || null;
     }
 
+    function runtimeTelegraphEndFrame(event, events) {
+        const fallback = Number(event.frame) + Math.max(1, Number(event.durationFrames) || 1);
+        if (event.holdUntilCommit !== true) return fallback;
+        const ended = events.find(candidate =>
+            candidate.type === "telegraph.ended" &&
+            Number(candidate.frame) >= Number(event.frame) &&
+            ((event.preparedAttackId && candidate.preparedAttackId === event.preparedAttackId) ||
+                (event.castId && candidate.castId === event.castId))
+        );
+        return ended ? Number(ended.frame) : fallback;
+    }
+
     function runtimeEventIcon(event) {
+        if (event.type === "movement.started") return "➜";
+        if (event.type === "movement.completed") return "●";
+        if (event.type === "attack.prepared") return "◌";
+        if (event.type === "attack.commit.requested") return "⚡";
         if (event.type === "telegraph.started") return "◌";
         if (event.type === "cast.executed") return "⚡";
         if (event.type === "collider.activated") return "◎";
@@ -989,6 +1131,10 @@
     function runtimeEventLabel(event) {
         const labels = {
             "sequence.step.started": event.action || "step avviato",
+            "movement.started": `movimento ${event.role || "ruolo"} iniziato`,
+            "movement.completed": `movimento ${event.role || "ruolo"} completato`,
+            "attack.prepared": `attacco ${event.preparedAttackId || ""} preparato`,
+            "attack.commit.requested": `impatto ${event.preparedAttackId || ""} richiesto`,
             "telegraph.started": "telegraph mostrato",
             "cast.executed": "skill eseguita",
             "collider.activated": "collider attivo",
@@ -1018,12 +1164,42 @@
         return lines.join("\n");
     }
 
+    function runtimeGroupDetails(group) {
+        const handledColliderCasts = new Set();
+        const details = [];
+        for (const event of group) {
+            if (event.type !== "collider.activated") {
+                details.push(runtimeEventTooltip(event));
+                continue;
+            }
+            const castKey = event.castId || `${event.skillId || "?"}:${event.castIndex || 0}`;
+            if (handledColliderCasts.has(castKey)) continue;
+            handledColliderCasts.add(castKey);
+            const colliders = group.filter(candidate =>
+                candidate.type === "collider.activated" &&
+                (candidate.castId || `${candidate.skillId || "?"}:${candidate.castIndex || 0}`) === castKey
+            );
+            if (colliders.length <= 1) {
+                details.push(runtimeEventTooltip(event));
+                continue;
+            }
+            const lines = [
+                `◎ F ${formatNumber(event.frame)} · ${colliders.length} collider attivi`,
+                `   Skill #${event.skillId || "?"} · cast ${Number(event.castIndex || 0) + 1}`,
+            ];
+            const comparison = runtimeComparisonForEvent(event);
+            if (comparison) lines.push(`   ${comparison.status}: ${comparison.summary}`);
+            details.push(lines.join("\n"));
+        }
+        return details;
+    }
+
     function showRuntimeTooltip(anchor, frame, group) {
         schedulerTooltip.replaceChildren();
         const title = document.createElement("strong");
         title.textContent = runtimeGroupTitle(frame, group);
         const content = document.createElement("span");
-        const details = group.map(runtimeEventTooltip);
+        const details = runtimeGroupDetails(group);
         content.textContent = group.length === 1
             ? details[0].split("\n").slice(1).join("\n")
             : details.join("\n\n");
@@ -1064,9 +1240,16 @@
         const lines = [`${schedulerStepIcon(step)} ${prefix} ${formatNumber(step.frame)} · ${step.label}`];
         if (step.detail) lines.push(`   ${step.detail}`);
         if (step.attack) {
-            const executionFrame = Number(step.frame) + (Number(step.attack.executionDelayFrames) || 0);
+            const lifecycleImpact = Number(step.attack.lifecycleImpactFrame);
+            const hasLifecycleImpact = Number.isFinite(lifecycleImpact);
+            const executionFrame = hasLifecycleImpact
+                ? lifecycleImpact
+                : Number(step.frame) + (Number(step.attack.executionDelayFrames) || 0);
             lines.push(
-                `   Skill #${step.attack.skillId} ${step.attack.skillName || ""} · telegraph ${step.attack.telegraphDurationFrames}f · impatto F ${formatNumber(executionFrame)}`,
+                `   Skill #${step.attack.skillId} ${step.attack.skillName || ""} · ` +
+                    (hasLifecycleImpact
+                        ? `telegraph mantenuto · impatto ${step.attack.lifecycleImpactIsExact ? "F" : "≥ F"} ${formatNumber(executionFrame)}`
+                        : `telegraph ${step.attack.telegraphDurationFrames}f · impatto F ${formatNumber(executionFrame)}`),
                 `   ${step.attack.targetCount} target · avvii ×${step.attack.repeatOnUseCount} · hit ×${step.attack.hitRepeatCount}`
             );
         } else if (Number.isFinite(Number(step.durationFrames)) && Number(step.durationFrames) > 0) {
@@ -1142,7 +1325,12 @@
         const target = entry.target || {};
         const probe = resolveAttackTarget(target, scene, entry);
         const startFrame = Number(entry.startFrame) || 0;
-        const executionFrame = startFrame + (Number(geometry.executionDelayFrames) || 0);
+        const lifecycleImpactFrame = Number(entry.lifecycleImpactFrame);
+        const hasLifecycleImpact = String(entry.attackLifecycleStage || "").toLowerCase() === "prepare" &&
+            Number.isFinite(lifecycleImpactFrame);
+        const executionFrame = hasLifecycleImpact
+            ? lifecycleImpactFrame
+            : startFrame + (Number(geometry.executionDelayFrames) || 0);
         const repeatDelayFrames = Math.max(
             0,
             (Number(geometry.repeatDelayMilliseconds) || 0) * 60 / 1000
@@ -1175,7 +1363,12 @@
             path,
             startFrame,
             executionFrame,
-            telegraphEndFrame: startFrame + (Number(geometry.telegraphDurationFrames) || 0),
+            telegraphEndFrame: hasLifecycleImpact
+                ? executionFrame
+                : startFrame + (Number(geometry.telegraphDurationFrames) || 0),
+            lifecycleImpactIsExact: hasLifecycleImpact
+                ? entry.lifecycleImpactIsExact === true
+                : true,
             repeatDelayFrames,
             hitCount,
             launches,
@@ -1198,7 +1391,7 @@
 
         for (const event of events.filter(entry => entry.type === "telegraph.started")) {
             const start = Number(event.frame) || 0;
-            const end = start + Math.max(1, Number(event.durationFrames) || 1);
+            const end = runtimeTelegraphEndFrame(event, events);
             if (frame < start || frame > end) continue;
             drawRuntimeTelegraph(layer, event, scene);
         }
@@ -1301,6 +1494,25 @@
             ));
             return;
         }
+        if (String(event.kind).toLowerCase().includes("directionalinstantchain")) {
+            const centers = Array.isArray(event.centers) ? event.centers : [];
+            if (!centers.length) return;
+            const telegraph = new PIXI.Graphics();
+            telegraph.lineStyle(2, color, .95);
+            telegraph.beginFill(color, .08);
+            for (const center of centers) {
+                if (!validRuntimePoint(center)) continue;
+                const world = mapPointToWorld(center, scene);
+                telegraph.drawCircle(
+                    world.x,
+                    world.y,
+                    Math.max(4, Number(event.radiusTiles) * scene.tileWidth || 8)
+                );
+            }
+            telegraph.endFill();
+            layer.addChild(telegraph);
+            return;
+        }
         const point = event.center || event.point;
         if (!validRuntimePoint(point)) return;
         const world = mapPointToWorld(point, scene);
@@ -1336,12 +1548,19 @@
         collider.drawCircle(world.x, world.y, radius);
         collider.endFill();
         layer.addChild(collider);
-        addAttackLabel(
-            layer,
-            world.x,
-            world.y - radius - 5,
-            `Runtime Skill #${event.skillId || "?"}${comparison ? ` · ${comparison.status}` : ""}`
-        );
+        const colliderIndex = Number(event.colliderIndex);
+        if (!Number.isFinite(colliderIndex) || colliderIndex <= 0) {
+            const chainDetail = Number(comparison && comparison.runtimeColliderCount) > 1
+                ? ` · ${comparison.runtimeColliderCount} collider`
+                : "";
+            addAttackLabel(
+                layer,
+                world.x,
+                world.y - radius - 5,
+                `Runtime Skill #${event.skillId || "?"}${chainDetail}` +
+                    `${comparison ? ` · ${comparison.status}` : ""}`
+            );
+        }
     }
 
     function drawRuntimeProjectiles(layer, events, frame, scene) {
@@ -1391,6 +1610,8 @@
                 const selected = entry.stepIndex === state.attackSequence.selectedStepIndex;
                 if (schedule.geometry.kind === 1) {
                     drawScheduledProjectile(schedule, frame, selected);
+                } else if (schedule.geometry.kind === 2) {
+                    drawScheduledDirectionalChain(schedule, frame, selected, scene);
                 } else {
                     drawScheduledInstant(schedule, frame, selected, scene);
                 }
@@ -1495,7 +1716,76 @@
                 state.layers.attackTrajectory,
                 runtimeCenter.x,
                 runtimeCenter.y - radius - 8,
-                `Skill #${geometry.skillId} · impatto F ${formatNumber(schedule.executionFrame)}`
+                `Skill #${geometry.skillId} · impatto ${schedule.lifecycleImpactIsExact ? "F" : "≥ F"} ${formatNumber(schedule.executionFrame)}`
+            );
+        }
+    }
+
+    function drawScheduledDirectionalChain(schedule, frame, selected, scene) {
+        const geometry = schedule.geometry;
+        const telegraphPoints = directionalChainPoints(
+            geometry,
+            schedule.target,
+            schedule.probe,
+            scene,
+            geometry.telegraphCenterOffsetYTiles || 0
+        );
+        const runtimePoints = directionalChainPoints(
+            geometry,
+            schedule.target,
+            schedule.probe,
+            scene,
+            geometry.runtimeCenterOffsetYTiles || 0
+        );
+        const radius = geometry.radiusTiles * scene.tileWidth;
+        if (geometry.telegraphEnabled &&
+            frame >= schedule.startFrame && frame <= schedule.telegraphEndFrame) {
+            const telegraph = new PIXI.Graphics();
+            telegraph.lineStyle(selected ? 5 : 3, 0xff4f55, selected ? 0.88 : 0.55);
+            telegraph.beginFill(0xff2028, selected ? 0.18 : 0.09);
+            drawChainCircles(telegraph, telegraphPoints, radius);
+            telegraph.endFill();
+            state.layers.attackTelegraph.addChild(telegraph);
+        }
+
+        const hitbox = new PIXI.Graphics();
+        for (const launchFrame of schedule.launches) {
+            for (let hit = 0; hit < schedule.hitCount; hit++) {
+                const hitFrame = launchFrame + schedule.repeatDelayFrames * hit;
+                if (Math.abs(frame - hitFrame) > 0.75) continue;
+                hitbox.lineStyle(2, 0x53d9ff, 1);
+                hitbox.beginFill(0x53d9ff, 0.16);
+                drawChainCircles(hitbox, runtimePoints, radius);
+                hitbox.endFill();
+                for (const point of runtimePoints) {
+                    drawExtraHurtboxes(
+                        geometry.extraHurtboxes || [],
+                        point.mapPoint,
+                        scene,
+                        hitbox
+                    );
+                }
+            }
+        }
+        state.layers.attackHitbox.addChild(hitbox);
+        if (selected) {
+            const trajectory = new PIXI.Graphics();
+            const origin = mapPointToWorld(schedule.probe, scene);
+            trajectory.lineStyle(2, 0xffcf5c, 0.95);
+            trajectory.moveTo(origin.x, origin.y);
+            for (const point of runtimePoints) {
+                trajectory.lineTo(point.world.x, point.world.y);
+                drawCross(trajectory, point.world.x, point.world.y, 4, 0xffcf5c);
+            }
+            drawCross(trajectory, origin.x, origin.y, 8, 0xffcf5c);
+            state.layers.attackTrajectory.addChild(trajectory);
+            const labelPoint = runtimePoints[Math.floor((runtimePoints.length - 1) / 2)];
+            addAttackLabel(
+                state.layers.attackTrajectory,
+                labelPoint.world.x,
+                labelPoint.world.y - radius - 8,
+                `Skill #${geometry.skillId} · ${geometry.chainCount} collider · ` +
+                    `impatto ${schedule.lifecycleImpactIsExact ? "F" : "≥ F"} ${formatNumber(schedule.executionFrame)}`
             );
         }
     }
@@ -1602,6 +1892,10 @@
             : "Telegraph non attivo: esecuzione senza ritardo aggiuntivo.";
         const repeats = document.createElement("div");
         repeats.textContent = `Avvii ×${geometry.repeatOnUseCount} · hit ×${geometry.hitRepeatCount} · intervallo ${geometry.repeatDelayMilliseconds} ms (${formatNumber(geometry.repeatDelayMilliseconds * 60 / 1000)}f @60 FPS)`;
+        const chain = document.createElement("div");
+        chain.textContent = geometry.kind === 2
+            ? `Catena ${geometry.chainCount} collider · passo ${formatNumber(geometry.chainSpacingTiles)} tile · portata ${formatNumber(geometry.chainReachTiles)} tile · direzione ${attackDirectionLabel(target.executionDirection)}${target.isExecutionDirectionExplicit ? " dichiarata" : " implicita"}`
+            : "";
         const limitation = document.createElement("div");
         limitation.textContent = geometry.limitationText;
         const placement = document.createElement("div");
@@ -1610,7 +1904,15 @@
             ? `probe ${formatNumber(probe.x)}, ${formatNumber(probe.y)} · doppio clic per spostarlo`
             : `punto ${formatNumber(probe.x)}, ${formatNumber(probe.y)}`;
         placement.textContent = `${target.displayText || "target runtime"} · origine ${origin} · ${probeAction}`;
-        attackInfo.replaceChildren(title, comparison, timing, repeats, limitation, placement);
+        attackInfo.replaceChildren(
+            title,
+            comparison,
+            timing,
+            repeats,
+            ...(geometry.kind === 2 ? [chain] : []),
+            limitation,
+            placement
+        );
     }
 
     function describeAttackOrigin(target) {

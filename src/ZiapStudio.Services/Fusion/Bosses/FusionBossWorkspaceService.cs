@@ -391,6 +391,10 @@ public sealed partial class FusionBossWorkspaceService
                 0,
                 (int)Math.Ceiling(ReadAbsDouble(parameters, "actionStartDelay", 0)));
             var isProjectile = speed > 0;
+            var isDirectionalInstantChain = !isProjectile && direction == 0 && range > 0;
+            var chainCount = isDirectionalInstantChain
+                ? Math.Max(1, (int)Math.Round(range, MidpointRounding.AwayFromZero))
+                : 0;
             var skillTelegraphEnabled = telegraphEnabled && !note.Contains(
                 "<fhdNoTelegraph>",
                 StringComparison.OrdinalIgnoreCase);
@@ -409,9 +413,13 @@ public sealed partial class FusionBossWorkspaceService
                     ? "Il corridoio usa il diametro del collider; la hitbox runtime è un cerchio mobile."
                 : extraHurtboxes.Count > 0
                     ? "Il telegraph coincide con il collider primario, ma non mostra le hurtbox aggiuntive."
+                : isDirectionalInstantChain
+                    ? "Il telegraph riproduce tutti i collider della catena direzionale Alpha ABS."
                     : "Telegraph e collider primario usano la stessa geometria.";
             var limitationText = isProjectile
                 ? "La traiettoria mostra il corridoio annunciato; ostacoli, collisioni e homing restano dipendenti dal runtime."
+                : isDirectionalInstantChain
+                    ? "La direzione effettiva appartiene al cast; se non dichiarata, Alpha ABS usa 2 (basso)."
                 : "Il contatto effettivo dipende anche dalla hitbox del bersaglio, non inclusa nel raggio visuale.";
 
             result.Add(new FusionBossAttackGeometry
@@ -420,11 +428,16 @@ public sealed partial class FusionBossWorkspaceService
                 SkillName = ReadString(skill, "name") ?? $"Skill {skillId}",
                 Kind = isProjectile
                     ? FusionBossAttackGeometryKind.ProjectileCorridor
-                    : FusionBossAttackGeometryKind.InstantCircle,
+                    : isDirectionalInstantChain
+                        ? FusionBossAttackGeometryKind.DirectionalInstantChain
+                        : FusionBossAttackGeometryKind.InstantCircle,
                 RadiusTiles = radius,
                 RangeTiles = range,
                 Speed = speed,
                 DirectionMode = direction,
+                ChainCount = chainCount,
+                ChainSpacingTiles = isDirectionalInstantChain ? radius : 0,
+                ChainReachTiles = isDirectionalInstantChain ? chainCount * radius : 0,
                 ProjectileColliderRadiusPixels = Math.Max(
                     1,
                     ReadAbsDouble(parameters, "colliderRadius", 8)),
@@ -739,7 +752,7 @@ public sealed partial class FusionBossWorkspaceService
                 }
             }
         }
-        return steps;
+        return LinkAttackLifecycleSteps(steps);
     }
 
     private static FusionBossTimelineStep BuildTimelineStep(
@@ -796,6 +809,19 @@ public sealed partial class FusionBossWorkspaceService
                 }
             }
             var semantics = actionCatalog.Describe(actionId, elements, attackGeometry);
+            var lifecycleId = elements.Length > 1 && elements[1].ValueKind == JsonValueKind.Object
+                ? ReadString(elements[1], "attackId") ??
+                    ReadString(elements[1], "preparedAttackId") ?? string.Empty
+                : string.Empty;
+            var lifecycleStage = actionId.Equals(
+                "combat.prepareAttack",
+                StringComparison.OrdinalIgnoreCase)
+                    ? "prepare"
+                    : actionId.Equals("combat.commitAttack", StringComparison.OrdinalIgnoreCase)
+                        ? "commit"
+                        : actionId.Equals("combat.cancelAttack", StringComparison.OrdinalIgnoreCase)
+                            ? "cancel"
+                            : string.Empty;
             return TimelineStep(
                 index,
                 kind,
@@ -809,6 +835,8 @@ public sealed partial class FusionBossWorkspaceService
                 iconGlyph: semantics.IconGlyph,
                 reads: semantics.Reads,
                 writes: semantics.Writes,
+                attackLifecycleId: lifecycleId,
+                attackLifecycleStage: lifecycleStage,
                 attackGeometry: attackGeometry,
                 attackTarget: attackTarget,
                 attackTargets: attackTargets);
@@ -896,6 +924,9 @@ public sealed partial class FusionBossWorkspaceService
         string iconGlyph = "",
         IReadOnlyList<string>? reads = null,
         IReadOnlyList<string>? writes = null,
+        string attackLifecycleId = "",
+        string attackLifecycleStage = "",
+        int? linkedAttackStepIndex = null,
         FusionBossAttackGeometry? attackGeometry = null,
         FusionBossAttackTarget? attackTarget = null,
         IReadOnlyList<FusionBossAttackTarget>? attackTargets = null) => new()
@@ -915,6 +946,9 @@ public sealed partial class FusionBossWorkspaceService
             DurationFrames = durationFrames,
             TimeoutFrames = timeoutFrames,
             ReferencedSequenceId = referencedSequenceId,
+            AttackLifecycleId = attackLifecycleId,
+            AttackLifecycleStage = attackLifecycleStage,
+            LinkedAttackStepIndex = linkedAttackStepIndex,
             AttackGeometry = attackGeometry,
             AttackTarget = attackTarget,
             AttackTargets = attackTargets ?? [],
@@ -923,10 +957,41 @@ public sealed partial class FusionBossWorkspaceService
     private static bool IsAttackAction(string actionId) => actionId.Equals(
         "combat.cast",
         StringComparison.OrdinalIgnoreCase) || actionId.Equals(
+        "combat.prepareAttack",
+        StringComparison.OrdinalIgnoreCase) || actionId.Equals(
         "alphaAbsMapSkill",
         StringComparison.OrdinalIgnoreCase) || actionId.Equals(
         "combat.castVolley",
         StringComparison.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<FusionBossTimelineStep> LinkAttackLifecycleSteps(
+        IReadOnlyList<FusionBossTimelineStep> rawSteps)
+    {
+        var steps = rawSteps.ToArray();
+        var prepared = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        for (var index = 0; index < steps.Length; index++)
+        {
+            var step = steps[index];
+            if (string.IsNullOrWhiteSpace(step.AttackLifecycleId))
+            {
+                continue;
+            }
+            if (step.AttackLifecycleStage.Equals("prepare", StringComparison.OrdinalIgnoreCase))
+            {
+                prepared[step.AttackLifecycleId] = index;
+                continue;
+            }
+            if (!step.AttackLifecycleStage.Equals("commit", StringComparison.OrdinalIgnoreCase) ||
+                !prepared.TryGetValue(step.AttackLifecycleId, out var prepareIndex))
+            {
+                continue;
+            }
+            steps[prepareIndex] = steps[prepareIndex] with { LinkedAttackStepIndex = step.Index };
+            steps[index] = step with { LinkedAttackStepIndex = steps[prepareIndex].Index };
+            prepared.Remove(step.AttackLifecycleId);
+        }
+        return steps;
+    }
 
     private static IReadOnlyList<FusionBossAttackTarget> BuildAttackTargets(
         JsonElement config,
@@ -983,6 +1048,10 @@ public sealed partial class FusionBossWorkspaceService
             CastMode = ReadString(config, "mode") ??
                 ReadString(config, "castMode") ?? "mapPoint",
             CasterRole = casterRole,
+            ExecutionDirection = ReadInt(config, "direction") ??
+                ReadInt(config, "executionDirection") ?? 2,
+            IsExecutionDirectionExplicit = config.TryGetProperty("direction", out _) ||
+                config.TryGetProperty("executionDirection", out _),
             TargetType = targetType,
             TargetKey = targetKey,
             TargetAnchor = targetAnchor,

@@ -167,26 +167,91 @@ public sealed class FusionRuntimeTraceService
                     entry.Type.Equals("telegraph.started", StringComparison.OrdinalIgnoreCase));
                 var execution = castEvents.FirstOrDefault(entry =>
                     entry.Type.Equals("cast.executed", StringComparison.OrdinalIgnoreCase));
-                var collider = castEvents.FirstOrDefault(entry =>
-                    entry.Type.Equals("collider.activated", StringComparison.OrdinalIgnoreCase));
+                var colliders = castEvents.Where(entry =>
+                    entry.Type.Equals("collider.activated", StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(entry => entry.ColliderIndex)
+                    .ThenBy(entry => entry.Index)
+                    .ToArray();
+                var collider = colliders.FirstOrDefault();
                 var castIndex = request.CastIndex ?? 0;
+                var isPreparedLifecycle = step.AttackLifecycleStage.Equals(
+                    "prepare",
+                    StringComparison.OrdinalIgnoreCase) &&
+                    !string.IsNullOrWhiteSpace(step.AttackLifecycleId);
+                var linkedImpactStep = isPreparedLifecycle && step.LinkedAttackStepIndex is { } impactIndex
+                    ? sequence.Steps.FirstOrDefault(candidate => candidate.Index == impactIndex)
+                    : null;
+                var expectsMovement = linkedImpactStep is not null && sequence.Steps.Any(candidate =>
+                    candidate.Index > step.Index &&
+                    candidate.Index < linkedImpactStep.Index &&
+                    candidate.TechnicalId.Equals("combat.moveTo", StringComparison.OrdinalIgnoreCase));
+                var lifecycleId = request.PreparedAttackId;
+                if (string.IsNullOrWhiteSpace(lifecycleId))
+                {
+                    lifecycleId = step.AttackLifecycleId;
+                }
+                var lifecycleCommit = isPreparedLifecycle
+                    ? events.FirstOrDefault(entry =>
+                        entry.Type.Equals("attack.commit.requested", StringComparison.OrdinalIgnoreCase) &&
+                        entry.PreparedAttackId.Equals(lifecycleId, StringComparison.OrdinalIgnoreCase))
+                    : null;
+                var movementEvents = isPreparedLifecycle && expectsMovement
+                    ? events.Where(entry =>
+                        entry.Index >= request.Index &&
+                        (lifecycleCommit is null || entry.Index <= lifecycleCommit.Index) &&
+                        (string.IsNullOrWhiteSpace(request.Role) ||
+                            entry.Role.Equals(request.Role, StringComparison.OrdinalIgnoreCase)))
+                        .ToArray()
+                    : [];
+                var movementStarted = movementEvents.FirstOrDefault(entry =>
+                    entry.Type.Equals("movement.started", StringComparison.OrdinalIgnoreCase));
+                var movementCompleted = movementEvents.LastOrDefault(entry =>
+                    entry.Type.Equals("movement.completed", StringComparison.OrdinalIgnoreCase));
+                var lifecycleIncomplete = isPreparedLifecycle &&
+                    (lifecycleCommit is null || (expectsMovement && movementCompleted is null));
                 var castSpacingFrames = step.TechnicalId.Equals(
                     "combat.castVolley",
                     StringComparison.OrdinalIgnoreCase)
                         ? 0
                         : castIndex * geometry.RepeatDelayMilliseconds *
                             Math.Max(1d, framesPerSecond) / 1000d;
-                var expectedExecution = step.EarliestStartFrame +
-                    geometry.ExecutionDelayFrames +
-                    castSpacingFrames;
+                var expectedExecution = isPreparedLifecycle
+                    ? linkedImpactStep?.EarliestStartFrame ?? step.EarliestStartFrame
+                    : step.EarliestStartFrame + geometry.ExecutionDelayFrames + castSpacingFrames;
                 var actualExecution = execution?.Frame - runStart.Frame;
+                var runtimeCommitFrame = lifecycleCommit?.Frame - runStart.Frame;
+                var runtimeMovementStartedFrame = movementStarted?.Frame - runStart.Frame;
+                var runtimeMovementCompletedFrame = movementCompleted?.Frame - runStart.Frame;
+                double? commitExecutionDelta = !isPreparedLifecycle ||
+                    actualExecution is null || runtimeCommitFrame is null
+                        ? null
+                        : actualExecution.Value - runtimeCommitFrame.Value;
+                double? landingImpactDelta = !isPreparedLifecycle || !expectsMovement ||
+                    actualExecution is null || runtimeMovementCompletedFrame is null
+                        ? null
+                        : actualExecution.Value - runtimeMovementCompletedFrame.Value;
                 var telegraphCenter = telegraph?.Center ?? telegraph?.Point;
                 var colliderCenter = collider?.Center;
                 var isProjectile = geometry.Kind ==
                     FusionBossAttackGeometryKind.ProjectileCorridor;
+                var isDirectionalChain = geometry.Kind ==
+                    FusionBossAttackGeometryKind.DirectionalInstantChain;
                 var centerOffset = isProjectile
                     ? null
                     : Distance(telegraphCenter, colliderCenter);
+                var colliderPathOffset = isDirectionalChain
+                    ? DirectionalChainOffset(request, colliders, geometry)
+                    : null;
+                var expectedColliderCount = isDirectionalChain
+                    ? geometry.ChainCount * Math.Max(1, geometry.HitRepeatCount)
+                    : (int?)null;
+                var runtimeColliderCount = isDirectionalChain
+                    ? colliders.Length
+                    : (int?)null;
+                var colliderCountDelta = expectedColliderCount is null ||
+                    runtimeColliderCount is null
+                        ? (int?)null
+                        : runtimeColliderCount.Value - expectedColliderCount.Value;
                 var runtimeRadius = isProjectile
                     ? null
                     : collider?.Geometry?.RadiusTiles;
@@ -199,7 +264,7 @@ public sealed class FusionRuntimeTraceService
                 double? colliderRadiusDelta = runtimeColliderRadius is null
                     ? null
                     : runtimeColliderRadius.Value - geometry.ProjectileColliderRadiusPixels;
-                double? executionDelta = actualExecution is null
+                double? executionDelta = isPreparedLifecycle || actualExecution is null
                     ? null
                     : actualExecution.Value - expectedExecution;
                 var status = FidelityStatus(
@@ -207,6 +272,11 @@ public sealed class FusionRuntimeTraceService
                     centerOffset,
                     radiusDelta,
                     colliderRadiusDelta,
+                    colliderCountDelta,
+                    colliderPathOffset,
+                    commitExecutionDelta,
+                    landingImpactDelta,
+                    lifecycleIncomplete,
                     execution);
                 comparisons.Add(new FusionRuntimeAttackComparison
                 {
@@ -219,6 +289,7 @@ public sealed class FusionRuntimeTraceService
                     CastId = request.CastId,
                     ExpectedStartFrame = step.EarliestStartFrame,
                     ExpectedExecutionFrame = expectedExecution,
+                    IsExpectedExecutionExact = linkedImpactStep?.IsStartExact ?? step.IsStartExact,
                     RuntimeStartFrame = request.Frame - runStart.Frame,
                     RuntimeTelegraphFrame = telegraph?.Frame - runStart.Frame,
                     RuntimeExecutionFrame = actualExecution,
@@ -235,13 +306,30 @@ public sealed class FusionRuntimeTraceService
                         : null,
                     RuntimeColliderRadiusPixels = runtimeColliderRadius,
                     ColliderRadiusDeltaPixels = colliderRadiusDelta,
+                    ExpectedColliderCount = expectedColliderCount,
+                    RuntimeColliderCount = runtimeColliderCount,
+                    ColliderCountDelta = colliderCountDelta,
+                    ColliderPathOffsetTiles = colliderPathOffset,
+                    AttackLifecycleId = lifecycleId,
+                    RuntimeCommitFrame = runtimeCommitFrame,
+                    RuntimeMovementStartFrame = runtimeMovementStartedFrame,
+                    RuntimeMovementCompletedFrame = runtimeMovementCompletedFrame,
+                    CommitExecutionDeltaFrames = commitExecutionDelta,
+                    LandingImpactDeltaFrames = landingImpactDelta,
                     Status = status,
                     Summary = BuildSummary(
                         status,
                         executionDelta,
                         centerOffset,
                         radiusDelta,
-                        colliderRadiusDelta),
+                        colliderRadiusDelta,
+                        colliderCountDelta,
+                        colliderPathOffset,
+                        expectedColliderCount,
+                        runtimeColliderCount,
+                        commitExecutionDelta,
+                        landingImpactDelta,
+                        lifecycleIncomplete),
                 });
             }
         }
@@ -262,10 +350,23 @@ public sealed class FusionRuntimeTraceService
             StepIndex = step.Index,
             SkillId = step.AttackGeometry!.SkillId,
             ExpectedStartFrame = step.EarliestStartFrame,
-            ExpectedExecutionFrame = step.EarliestStartFrame +
-                step.AttackGeometry.ExecutionDelayFrames,
-            ExpectedRadiusTiles = step.AttackGeometry.Kind ==
-                FusionBossAttackGeometryKind.InstantCircle
+            ExpectedExecutionFrame = step.AttackLifecycleStage.Equals(
+                "prepare",
+                StringComparison.OrdinalIgnoreCase) &&
+                step.LinkedAttackStepIndex is { } impactIndex
+                    ? sequence.Steps.FirstOrDefault(candidate => candidate.Index == impactIndex)?
+                        .EarliestStartFrame ?? step.EarliestStartFrame
+                    : step.EarliestStartFrame + step.AttackGeometry.ExecutionDelayFrames,
+            IsExpectedExecutionExact = step.AttackLifecycleStage.Equals(
+                "prepare",
+                StringComparison.OrdinalIgnoreCase) &&
+                step.LinkedAttackStepIndex is { } exactImpactIndex
+                    ? sequence.Steps.FirstOrDefault(candidate => candidate.Index == exactImpactIndex)?
+                        .IsStartExact == true
+                    : step.IsStartExact,
+            AttackLifecycleId = step.AttackLifecycleId,
+            ExpectedRadiusTiles = step.AttackGeometry.Kind !=
+                FusionBossAttackGeometryKind.ProjectileCorridor
                     ? step.AttackGeometry.RadiusTiles
                     : null,
             ExpectedColliderRadiusPixels = step.AttackGeometry.Kind ==
@@ -275,6 +376,63 @@ public sealed class FusionRuntimeTraceService
             Status = FusionRuntimeFidelityStatus.Missing,
             Summary = "Nessun cast runtime correlato.",
         };
+
+    private static double? DirectionalChainOffset(
+        FusionRuntimeTraceEvent request,
+        IReadOnlyList<FusionRuntimeTraceEvent> colliders,
+        FusionBossAttackGeometry geometry)
+    {
+        if (request.Point is null || colliders.Count == 0 || geometry.ChainCount <= 0)
+        {
+            return null;
+        }
+        var direction = request.AttackDirection ??
+            colliders.Select(entry => entry.Geometry?.Direction ?? 0)
+                .FirstOrDefault(value => value > 0);
+        if (direction <= 0)
+        {
+            direction = 2;
+        }
+        var (dx, dy) = DirectionVector(direction);
+        var expected = Enumerable.Range(1, geometry.ChainCount)
+            .Select(index => new FusionRuntimeTracePoint
+            {
+                X = request.Point.X + dx * geometry.ChainSpacingTiles * index,
+                Y = request.Point.Y + dy * geometry.ChainSpacingTiles * index +
+                    geometry.RuntimeCenterOffsetYTiles,
+            })
+            .ToArray();
+        var offsets = colliders
+            .Select((entry, ordinal) =>
+            {
+                if (entry.Center is null)
+                {
+                    return (double?)null;
+                }
+                var recordedIndex = entry.ColliderIndex is >= 0
+                    ? entry.ColliderIndex.Value
+                    : ordinal;
+                var expectedIndex = recordedIndex % expected.Length;
+                return Distance(expected[expectedIndex], entry.Center);
+            })
+            .Where(offset => offset is not null)
+            .Select(offset => offset!.Value)
+            .ToArray();
+        return offsets.Length == 0 ? null : offsets.Max();
+    }
+
+    private static (double X, double Y) DirectionVector(int direction) => direction switch
+    {
+        1 => (-1, 1),
+        2 => (0, 1),
+        3 => (1, 1),
+        4 => (-1, 0),
+        6 => (1, 0),
+        7 => (-1, -1),
+        8 => (0, -1),
+        9 => (1, -1),
+        _ => (0, 1),
+    };
 
     private static double? Distance(
         FusionRuntimeTracePoint? first,
@@ -294,23 +452,39 @@ public sealed class FusionRuntimeTraceService
         double? centerOffset,
         double? radiusDelta,
         double? colliderRadiusDelta,
+        int? colliderCountDelta,
+        double? colliderPathOffset,
+        double? commitExecutionDelta,
+        double? landingImpactDelta,
+        bool lifecycleIncomplete,
         FusionRuntimeTraceEvent? execution)
     {
         if (execution is null)
         {
             return FusionRuntimeFidelityStatus.Missing;
         }
+        if (lifecycleIncomplete)
+        {
+            return FusionRuntimeFidelityStatus.Divergent;
+        }
         var absoluteFrame = Math.Abs(frameDelta ?? 0);
         var absoluteCenter = Math.Abs(centerOffset ?? 0);
         var absoluteRadius = Math.Abs(radiusDelta ?? 0);
         var absoluteColliderRadius = Math.Abs(colliderRadiusDelta ?? 0);
+        var absoluteColliderCount = Math.Abs(colliderCountDelta ?? 0);
+        var absolutePathOffset = Math.Abs(colliderPathOffset ?? 0);
+        var absoluteCommitDelta = Math.Abs(commitExecutionDelta ?? 0);
+        var absoluteLandingDelta = Math.Abs(landingImpactDelta ?? 0);
         if (absoluteFrame > 3 || absoluteCenter > 0.25 || absoluteRadius > 0.1 ||
-            absoluteColliderRadius > 1)
+            absoluteColliderRadius > 1 || absoluteColliderCount > 0 ||
+            absolutePathOffset > 0.25 || absoluteCommitDelta > 1 ||
+            absoluteLandingDelta > 1)
         {
             return FusionRuntimeFidelityStatus.Divergent;
         }
         if (absoluteFrame > 1 || absoluteCenter > 0.05 || absoluteRadius > 0.05 ||
-            absoluteColliderRadius > 0.25)
+            absoluteColliderRadius > 0.25 || absolutePathOffset > 0.05 ||
+            absoluteCommitDelta > 0 || absoluteLandingDelta > 0)
         {
             return FusionRuntimeFidelityStatus.Drift;
         }
@@ -322,9 +496,20 @@ public sealed class FusionRuntimeTraceService
         double? frameDelta,
         double? centerOffset,
         double? radiusDelta,
-        double? colliderRadiusDelta)
+        double? colliderRadiusDelta,
+        int? colliderCountDelta,
+        double? colliderPathOffset,
+        int? expectedColliderCount,
+        int? runtimeColliderCount,
+        double? commitExecutionDelta,
+        double? landingImpactDelta,
+        bool lifecycleIncomplete)
     {
         var parts = new List<string>();
+        if (lifecycleIncomplete)
+        {
+            parts.Add("lifecycle incompleto");
+        }
         if (frameDelta is not null)
         {
             parts.Add($"esecuzione Δ {frameDelta:+0.##;-0.##;0}f");
@@ -340,6 +525,26 @@ public sealed class FusionRuntimeTraceService
         if (colliderRadiusDelta is not null)
         {
             parts.Add($"collider Δ {colliderRadiusDelta:+0.##;-0.##;0} px");
+        }
+        if (expectedColliderCount is not null && runtimeColliderCount is not null)
+        {
+            parts.Add($"collider {runtimeColliderCount}/{expectedColliderCount}");
+        }
+        if (colliderCountDelta is not null && colliderCountDelta != 0)
+        {
+            parts.Add($"quantità Δ {colliderCountDelta:+#;-#;0}");
+        }
+        if (colliderPathOffset is not null)
+        {
+            parts.Add($"percorso Δ {colliderPathOffset:0.###} tile");
+        }
+        if (commitExecutionDelta is not null)
+        {
+            parts.Add($"commit→hit Δ {commitExecutionDelta:+0.##;-0.##;0}f");
+        }
+        if (landingImpactDelta is not null)
+        {
+            parts.Add($"atterraggio→hit Δ {landingImpactDelta:+0.##;-0.##;0}f");
         }
         return parts.Count == 0
             ? status == FusionRuntimeFidelityStatus.Missing

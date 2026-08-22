@@ -4,6 +4,7 @@ public enum FusionBossAttackGeometryKind
 {
     InstantCircle,
     ProjectileCorridor,
+    DirectionalInstantChain,
 }
 
 public enum FusionBossAttackGeometryComparison
@@ -50,6 +51,12 @@ public sealed record FusionBossAttackGeometry
 
     public int DirectionMode { get; init; }
 
+    public int ChainCount { get; init; }
+
+    public double ChainSpacingTiles { get; init; }
+
+    public double ChainReachTiles { get; init; }
+
     public double ProjectileColliderRadiusPixels { get; init; }
 
     public double TelegraphCenterOffsetYTiles { get; init; }
@@ -88,6 +95,10 @@ public sealed record FusionBossAttackTarget
     public string CastMode { get; init; } = string.Empty;
 
     public string CasterRole { get; init; } = string.Empty;
+
+    public int ExecutionDirection { get; init; }
+
+    public bool IsExecutionDirectionExplicit { get; init; }
 
     public string TargetType { get; init; } = string.Empty;
 

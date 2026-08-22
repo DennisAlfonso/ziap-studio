@@ -431,6 +431,9 @@ public sealed partial class FusionArenaPreviewView : UserControl
                                 detail = step.Detail,
                                 durationFrames = step.Step.DurationFrames,
                                 timeoutFrames = step.Step.TimeoutFrames,
+                                attackLifecycleId = step.Step.AttackLifecycleId,
+                                attackLifecycleStage = step.Step.AttackLifecycleStage,
+                                linkedAttackStepIndex = step.Step.LinkedAttackStepIndex,
                                 attack = step.AttackGeometry is null
                                     ? null
                                     : new
@@ -442,6 +445,15 @@ public sealed partial class FusionArenaPreviewView : UserControl
                                         repeatOnUseCount = step.AttackGeometry.RepeatOnUseCount,
                                         hitRepeatCount = step.AttackGeometry.HitRepeatCount,
                                         targetCount = Math.Max(1, step.AttackTargets.Count),
+                                        lifecycleImpactFrame = step.Step.LinkedAttackStepIndex is { } impactIndex
+                                            ? viewModel.SelectedSequence.Steps
+                                                .FirstOrDefault(candidate => candidate.Step.Index == impactIndex)?
+                                                .Step.EarliestStartFrame
+                                            : null,
+                                        lifecycleImpactIsExact = step.Step.LinkedAttackStepIndex is { } exactImpactIndex &&
+                                            viewModel.SelectedSequence.Steps
+                                                .FirstOrDefault(candidate => candidate.Step.Index == exactImpactIndex)?
+                                                .Step.IsStartExact == true,
                                     },
                             })
                             .ToArray(),
@@ -452,6 +464,17 @@ public sealed partial class FusionArenaPreviewView : UserControl
                                 stepIndex = step.Step.Index,
                                 startFrame = step.Step.EarliestStartFrame,
                                 isStartExact = step.Step.IsStartExact,
+                                attackLifecycleId = step.Step.AttackLifecycleId,
+                                attackLifecycleStage = step.Step.AttackLifecycleStage,
+                                lifecycleImpactFrame = step.Step.LinkedAttackStepIndex is { } impactIndex
+                                    ? viewModel.SelectedSequence.Steps
+                                        .FirstOrDefault(candidate => candidate.Step.Index == impactIndex)?
+                                        .Step.EarliestStartFrame
+                                    : null,
+                                lifecycleImpactIsExact = step.Step.LinkedAttackStepIndex is { } exactImpactIndex &&
+                                    viewModel.SelectedSequence.Steps
+                                        .FirstOrDefault(candidate => candidate.Step.Index == exactImpactIndex)?
+                                        .Step.IsStartExact == true,
                                 geometry = step.AttackGeometry,
                                 target = step.AttackTarget,
                                 targets = step.AttackTargets,
@@ -480,11 +503,19 @@ public sealed partial class FusionArenaPreviewView : UserControl
                                         reason = projection.Event.Reason,
                                         mode = projection.Event.Mode,
                                         projectileId = projection.Event.ProjectileId,
+                                        preparedAttackId = projection.Event.PreparedAttackId,
+                                        role = projection.Event.Role,
                                         durationFrames = projection.Event.DurationFrames,
+                                        holdUntilCommit = projection.Event.HoldUntilCommit,
                                         targetCount = projection.Event.TargetCount,
+                                        attackDirection = projection.Event.AttackDirection,
+                                        chainCount = projection.Event.ChainCount,
+                                        colliderIndex = projection.Event.ColliderIndex,
                                         radiusTiles = projection.Event.RadiusTiles,
                                         corridorWidthPixels = projection.Event.CorridorWidthPixels,
                                         colliderRadiusPixels = projection.Event.ColliderRadiusPixels,
+                                        chainSpacingTiles = projection.Event.ChainSpacingTiles,
+                                        chainReachTiles = projection.Event.ChainReachTiles,
                                         point = projection.Event.Point,
                                         center = projection.Event.Center,
                                         origin = projection.Event.Origin,
@@ -494,6 +525,7 @@ public sealed partial class FusionArenaPreviewView : UserControl
                                         owner = projection.Event.Owner,
                                         target = projection.Event.Target,
                                         geometry = projection.Event.Geometry,
+                                        centers = projection.Event.Centers,
                                         targets = projection.Event.Targets,
                                     })
                                     .ToArray(),
@@ -519,6 +551,17 @@ public sealed partial class FusionArenaPreviewView : UserControl
                                         comparison.ExpectedColliderRadiusPixels,
                                         comparison.RuntimeColliderRadiusPixels,
                                         comparison.ColliderRadiusDeltaPixels,
+                                        comparison.ExpectedColliderCount,
+                                        comparison.RuntimeColliderCount,
+                                        comparison.ColliderCountDelta,
+                                        comparison.ColliderPathOffsetTiles,
+                                        comparison.AttackLifecycleId,
+                                        comparison.IsExpectedExecutionExact,
+                                        comparison.RuntimeCommitFrame,
+                                        comparison.RuntimeMovementStartFrame,
+                                        comparison.RuntimeMovementCompletedFrame,
+                                        comparison.CommitExecutionDeltaFrames,
+                                        comparison.LandingImpactDeltaFrames,
                                         status = comparison.Status.ToString(),
                                         comparison.Summary,
                                     })

@@ -196,8 +196,12 @@ public sealed partial class FusionEncounterTimelineView : UserControl
             var attack = step.AttackGeometry!;
             var startFrame = step.Step.EarliestStartFrame;
             var repeatDelay = attack.RepeatDelayMilliseconds * 60d / 1000d;
-            var endFrame = startFrame + attack.ExecutionDelayFrames +
-                repeatDelay * Math.Max(0, attack.RepeatOnUseCount - 1);
+            var lifecycleImpact = step.Step.LinkedAttackStepIndex is { } impactIndex
+                ? sequence.Steps.FirstOrDefault(candidate => candidate.Step.Index == impactIndex)
+                : null;
+            var endFrame = lifecycleImpact?.Step.EarliestStartFrame ??
+                startFrame + attack.ExecutionDelayFrames +
+                    repeatDelay * Math.Max(0, attack.RepeatOnUseCount - 1);
             var start = FrameToX(startFrame);
             var end = FrameToX(endFrame);
             var range = new Rectangle
@@ -491,9 +495,14 @@ public sealed partial class FusionEncounterTimelineView : UserControl
         if (step.AttackGeometry is { } attack)
         {
             var targetCount = Math.Max(1, step.AttackTargets.Count);
+            var geometryText = attack.Kind == FusionBossAttackGeometryKind.DirectionalInstantChain
+                ? $" · catena {attack.ChainCount}×r{attack.RadiusTiles:0.##}, passo {attack.ChainSpacingTiles:0.##}"
+                : string.Empty;
             panel.Children.Add(new TextBlock
             {
-                Text = $"Telegraph {attack.TelegraphDurationFrames}f · esecuzione +{attack.ExecutionDelayFrames}f · {targetCount} target · avvii ×{attack.RepeatOnUseCount}",
+                Text = step.Step.AttackLifecycleStage.Equals("prepare", StringComparison.OrdinalIgnoreCase)
+                    ? $"Telegraph mantenuto fino a “{step.Step.AttackLifecycleId}” · impatto allo step {step.Step.LinkedAttackStepIndex.GetValueOrDefault() + 1:00} · {targetCount} target{geometryText}"
+                    : $"Telegraph {attack.TelegraphDurationFrames}f · esecuzione +{attack.ExecutionDelayFrames}f · {targetCount} target · avvii ×{attack.RepeatOnUseCount}{geometryText}",
                 FontSize = 11,
                 Foreground = ResolveBrush("AccentTextFillColorPrimaryBrush", Colors.DeepSkyBlue),
                 TextWrapping = TextWrapping.Wrap,

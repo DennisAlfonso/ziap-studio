@@ -348,6 +348,106 @@ public sealed class FusionBossIntegrationTests
     }
 
     [Fact]
+    public async Task Workspace_ProjectsDirectionalInstantChainAndExplicitDirection()
+    {
+        using var workspace = new TestWorkspace();
+        WritePlugins(workspace);
+        WriteValidWorkspace(workspace);
+        workspace.WriteFile(
+            "data/FusionEncounters.json",
+            """
+            {
+              "schemaVersion":1,
+              "databaseVersion":"1.0.0",
+              "encounters":{
+                "testEncounter":{
+                  "boss":"testBoss",
+                  "initialPhase":"combat",
+                  "phases":{"combat":{"sequences":[{
+                    "id":"darkRayTopPulse",
+                    "steps":[["combat.castVolley",{
+                      "skillId":98,
+                      "direction":8,
+                      "targets":[{"type":"point","x":8,"y":38}]
+                    }]]
+                  }]}}
+                }
+              }
+            }
+            """);
+
+        var document = await CreateWorkspaceService().LoadAsync(
+            CreateProject(workspace.RootPath),
+            CreateDescriptor(workspace.RootPath));
+
+        var step = Assert.Single(Assert.Single(
+            Assert.Single(document.Encounters).Phases).Sequences).Steps[0];
+        var geometry = Assert.IsType<FusionBossAttackGeometry>(step.AttackGeometry);
+        Assert.Equal(FusionBossAttackGeometryKind.DirectionalInstantChain, geometry.Kind);
+        Assert.Equal(13, geometry.ChainCount);
+        Assert.Equal(3, geometry.ChainSpacingTiles);
+        Assert.Equal(39, geometry.ChainReachTiles);
+        Assert.Equal(
+            FusionBossAttackGeometryComparison.ExactPrimaryCollider,
+            geometry.Comparison);
+        var target = Assert.IsType<FusionBossAttackTarget>(step.AttackTarget);
+        Assert.Equal(8, target.ExecutionDirection);
+        Assert.True(target.IsExecutionDirectionExplicit);
+    }
+
+    [Fact]
+    public async Task Workspace_LinksPreparedAttackToImmediateCommit()
+    {
+        using var workspace = new TestWorkspace();
+        WritePlugins(workspace);
+        WriteValidWorkspace(workspace);
+        workspace.WriteFile(
+            "data/FusionEncounters.json",
+            """
+            {
+              "schemaVersion":1,
+              "databaseVersion":"1.0.0",
+              "encounters":{
+                "testEncounter":{
+                  "boss":"testBoss",
+                  "initialPhase":"combat",
+                  "phases":{"combat":{"sequences":[{
+                    "id":"mainCombatCycle",
+                    "steps":[
+                      ["combat.captureTarget",{"key":"impact","target":{"type":"playerPosition"}}],
+                      ["combat.prepareAttack",{"attackId":"chiefImpact","casterRole":"boss","skillId":95,"target":{"type":"captured","key":"impact"}}],
+                      ["wait",60],
+                      ["combat.moveTo",{"role":"boss","target":{"type":"captured","key":"impact"}}],
+                      {"waitUntil":["roleMovementComplete","boss"],"timeoutFrames":180},
+                      ["combat.commitAttack",{"attackId":"chiefImpact"}]
+                    ]
+                  }]}}
+                }
+              }
+            }
+            """);
+
+        var document = await CreateWorkspaceService().LoadAsync(
+            CreateProject(workspace.RootPath),
+            CreateDescriptor(workspace.RootPath));
+
+        var sequence = Assert.Single(Assert.Single(
+            Assert.Single(document.Encounters).Phases).Sequences);
+        var prepare = sequence.Steps[1];
+        var commit = sequence.Steps[5];
+        Assert.NotNull(prepare.AttackGeometry);
+        Assert.Equal("chiefImpact", prepare.AttackLifecycleId);
+        Assert.Equal("prepare", prepare.AttackLifecycleStage);
+        Assert.Equal(5, prepare.LinkedAttackStepIndex);
+        Assert.Contains("attacco:chiefImpact", prepare.Writes);
+        Assert.Equal("commit", commit.AttackLifecycleStage);
+        Assert.Equal(1, commit.LinkedAttackStepIndex);
+        Assert.Contains("attacco:chiefImpact", commit.Reads);
+        Assert.Equal(60, commit.EarliestStartFrame);
+        Assert.False(commit.IsStartExact);
+    }
+
+    [Fact]
     public async Task Workspace_ProjectsShieldedOpeningHighlightsAtExpectedFrames()
     {
         using var workspace = new TestWorkspace();
@@ -558,6 +658,47 @@ public sealed class FusionBossIntegrationTests
     }
 
     [Fact]
+    public async Task Authoring_BlocksPreparedAttackWithoutCommitBeforeWriting()
+    {
+        using var workspace = new TestWorkspace();
+        WritePlugins(workspace);
+        WriteValidWorkspace(workspace);
+        workspace.WriteFile(
+            "data/FusionEncounters.json",
+            """
+            {
+              "schemaVersion":1,
+              "databaseVersion":"1.0.0",
+              "encounters":{
+                "testEncounter":{
+                  "boss":"testBoss",
+                  "initialPhase":"combat",
+                  "phases":{"combat":{"sequences":[{"id":"main","steps":[["wait",30]]}]}}
+                }
+              }
+            }
+            """);
+        var sourcePath = Path.Combine(workspace.RootPath, "data", "FusionEncounters.json");
+        var original = await File.ReadAllTextAsync(sourcePath);
+        var document = await CreateWorkspaceService().LoadAsync(
+            CreateProject(workspace.RootPath),
+            CreateDescriptor(workspace.RootPath));
+        var session = new FusionBossEditSession(document);
+        session.SetValue(
+            "/encounters/testEncounter/phases/combat/sequences/0/steps/0",
+            JsonNode.Parse("[\"combat.prepareAttack\",{\"attackId\":\"impact\",\"skillId\":95}]")
+        );
+
+        var result = await CreateAuthoringService().SaveAsync(session);
+
+        Assert.Equal(DocumentSaveStatus.ValidationFailed, result.Status);
+        Assert.Contains(result.Validation.Issues, issue =>
+            issue.Code == "unresolved-prepared-attack");
+        Assert.Equal(original, await File.ReadAllTextAsync(sourcePath));
+        Assert.True(session.IsDirty);
+    }
+
+    [Fact]
     public async Task Preflight_MapsBossDiagnosticsToNavigableIssues()
     {
         using var workspace = new TestWorkspace();
@@ -696,6 +837,10 @@ public sealed class FusionBossIntegrationTests
               "id":95,
               "name":"Impatto stordente",
               "note":"<ABS>\nradius:1\nrange:0\ndirection:0\nnoContact:1\nspeed:0\nimpulseJump:1\nimpulse:1\n</ABS>"
+            },{
+              "id":98,
+              "name":"Raggi Cosmici",
+              "note":"<ABS>\nradius:3\nrange:13\ndirection:0\nnoContact:1\nspeed:0\n</ABS>"
             },{
               "id":104,
               "name":"Fulmini Umbra",
