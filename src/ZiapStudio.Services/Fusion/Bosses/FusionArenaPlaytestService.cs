@@ -30,6 +30,10 @@ public sealed record FusionArenaPlaytestProfile
     public int Direction { get; init; } = 2;
 
     public int CommonEventId { get; init; }
+
+    public int JumpValue { get; init; } = 12;
+
+    public FusionArenaPlaytestLoadout Loadout { get; init; } = new();
 }
 
 public sealed record FusionArenaPlaytestSettings
@@ -57,6 +61,22 @@ public sealed record FusionArenaPlaytestLoadout
     public IReadOnlyList<int> SkillIds { get; init; } = [7, 15, 61];
 }
 
+public sealed record FusionArenaPlaytestCatalogOption(int Id, string DisplayName)
+{
+    public override string ToString() => DisplayName;
+}
+
+public sealed record FusionArenaPlaytestCatalog
+{
+    public IReadOnlyList<FusionArenaPlaytestCatalogOption> Actors { get; init; } = [];
+
+    public IReadOnlyList<FusionArenaPlaytestCatalogOption> Weapons { get; init; } = [];
+
+    public IReadOnlyList<FusionArenaPlaytestCatalogOption> Armors { get; init; } = [];
+
+    public IReadOnlyList<FusionArenaPlaytestCatalogOption> Skills { get; init; } = [];
+}
+
 public sealed record FusionArenaPlaytestSession
 {
     public int SchemaVersion { get; init; } = 1;
@@ -82,6 +102,11 @@ public sealed record FusionArenaPlaytestSession
     public int Direction { get; init; }
 
     public int CommonEventId { get; init; }
+
+    public int JumpValue { get; init; } = 12;
+
+    public IReadOnlyDictionary<int, int> VariableOverrides { get; init; } =
+        new Dictionary<int, int> { [11] = 12 };
 
     public FusionArenaPlaytestLoadout Loadout { get; init; } = new();
 }
@@ -168,6 +193,32 @@ public sealed class FusionArenaPlaytestService
         return candidates.OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
+    public async Task<FusionArenaPlaytestCatalog> LoadCatalogAsync(
+        string projectPath,
+        CancellationToken cancellationToken = default)
+    {
+        var dataPath = Path.Combine(projectPath, "data");
+        return new FusionArenaPlaytestCatalog
+        {
+            Actors = await LoadCatalogOptionsAsync(
+                dataPath,
+                "Actors.json",
+                cancellationToken),
+            Weapons = await LoadCatalogOptionsAsync(
+                dataPath,
+                "Weapons.json",
+                cancellationToken),
+            Armors = await LoadCatalogOptionsAsync(
+                dataPath,
+                "Armors.json",
+                cancellationToken),
+            Skills = await LoadCatalogOptionsAsync(
+                dataPath,
+                "Skills.json",
+                cancellationToken),
+        };
+    }
+
     public async Task<FusionArenaPlaytestLaunchResult> LaunchAsync(
         string projectPath,
         string encounterId,
@@ -208,6 +259,9 @@ public sealed class FusionArenaPlaytestService
             PlayerY = profile.PlayerY,
             Direction = profile.Direction,
             CommonEventId = profile.CommonEventId,
+            JumpValue = profile.JumpValue,
+            VariableOverrides = new Dictionary<int, int> { [11] = profile.JumpValue },
+            Loadout = profile.Loadout,
         };
     }
 
@@ -292,6 +346,73 @@ public sealed class FusionArenaPlaytestService
         {
             candidates.Add(Path.GetFullPath(path));
         }
+    }
+
+    private static async Task<IReadOnlyList<FusionArenaPlaytestCatalogOption>> LoadCatalogOptionsAsync(
+        string dataPath,
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        var path = Path.Combine(dataPath, fileName);
+        if (!File.Exists(path))
+        {
+            return [];
+        }
+
+        await using var stream = File.OpenRead(path);
+        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
+        if (document.RootElement.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        return document.RootElement
+            .EnumerateArray()
+            .Where(element => element.ValueKind == JsonValueKind.Object)
+            .Select(CreateCatalogOption)
+            .Where(option => option is not null)
+            .Cast<FusionArenaPlaytestCatalogOption>()
+            .OrderBy(option => option.Id)
+            .ToArray();
+    }
+
+    private static FusionArenaPlaytestCatalogOption? CreateCatalogOption(JsonElement element)
+    {
+        if (!TryGetInt32(element, "id", out var id) || id <= 0)
+        {
+            return null;
+        }
+
+        var name = element.TryGetProperty("name", out var nameElement) &&
+            nameElement.ValueKind == JsonValueKind.String
+                ? nameElement.GetString()
+                : null;
+        var label = string.IsNullOrWhiteSpace(name)
+            ? $"#{id:000}"
+            : $"#{id:000} · {name.Trim()}";
+        return new FusionArenaPlaytestCatalogOption(id, label);
+    }
+
+    private static bool TryGetInt32(JsonElement element, string propertyName, out int value)
+    {
+        value = 0;
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return false;
+        }
+
+        if (property.ValueKind == JsonValueKind.Number)
+        {
+            return property.TryGetInt32(out value);
+        }
+
+        if (property.ValueKind == JsonValueKind.String &&
+            int.TryParse(property.GetString(), out value))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     private static void CleanupExpiredSessions(string sessionsPath)

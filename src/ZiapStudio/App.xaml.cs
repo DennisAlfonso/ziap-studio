@@ -8,6 +8,7 @@ using ZiapStudio.Services.Editing;
 using ZiapStudio.Services.Fusion.Preflight;
 using ZiapStudio.Services.Fusion.Audio;
 using ZiapStudio.Services.Fusion.Bosses;
+using ZiapStudio.Services.Fusion.Puzzles;
 using ZiapStudio.Services.Fusion.Preflight.Audio;
 using ZiapStudio.Services.Fusion.Preflight.Bosses;
 using ZiapStudio.Services.Fusion.Preflight.Weapons;
@@ -46,10 +47,12 @@ public partial class App : Application
         var pluginRegistry = new RpgMakerPluginRegistryService(fileSystem);
         var fusionAudioIntegrationProvider = new FusionAudioIntegrationProvider(pluginRegistry);
         var fusionBossIntegrationProvider = new FusionBossIntegrationProvider(pluginRegistry);
+        var fusionPuzzleIntegrationProvider = new FusionPuzzleIntegrationProvider(pluginRegistry);
         var projectIntegrationService = new ProjectIntegrationService(
         [
             fusionAudioIntegrationProvider,
             fusionBossIntegrationProvider,
+            fusionPuzzleIntegrationProvider,
         ]);
         var fusionAudioCatalogService = new FusionAudioCatalogService(
             fileSystem,
@@ -60,11 +63,15 @@ public partial class App : Application
         var fusionBossWorkspaceService = new FusionBossWorkspaceService(
             fileSystem,
             pluginRegistry);
+        var fusionPuzzleWorkspaceService = new FusionPuzzleWorkspaceService(
+            fileSystem,
+            pluginRegistry);
         var documentResolver = new DocumentResolver(
         [
             new RpgMakerDatabaseDocumentProvider(fileSystem),
             new FusionAudioDocumentProvider(fusionAudioCatalogService),
             new FusionBossDocumentProvider(fusionBossWorkspaceService),
+            new FusionPuzzleDocumentProvider(fusionPuzzleWorkspaceService),
         ]);
         var assetPreviewService = new AssetPreviewService(
             new AssetResolver(new RpgMakerAssetProvider(fileSystem)),

@@ -198,6 +198,7 @@ public sealed partial class FusionBossDocumentView : UserControl
             var profileKey = ArenaPlaytestProfileKey(arena.Id, selectedMap.Scene.MapId);
             settings.Profiles.TryGetValue(profileKey, out var profile);
             var runtimes = _arenaPlaytestService.DiscoverRuntimeExecutables().ToList();
+            var catalog = await _arenaPlaytestService.LoadCatalogAsync(viewModel.ProjectPath);
             if (!string.IsNullOrWhiteSpace(settings.RuntimeExecutable) &&
                 !runtimes.Contains(settings.RuntimeExecutable, StringComparer.OrdinalIgnoreCase))
             {
@@ -214,6 +215,7 @@ public sealed partial class FusionBossDocumentView : UserControl
                 arena.DisplayName,
                 mapOptions,
                 runtimes,
+                catalog,
                 settings,
                 profile,
                 launchAfterSave)

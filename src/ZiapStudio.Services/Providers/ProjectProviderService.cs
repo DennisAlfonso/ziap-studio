@@ -23,6 +23,7 @@ public sealed class ProjectProviderService
         [
             new FusionAudioIntegrationProvider(pluginRegistry),
             new FusionBossIntegrationProvider(pluginRegistry),
+            new FusionPuzzleIntegrationProvider(pluginRegistry),
         ]);
     }
 

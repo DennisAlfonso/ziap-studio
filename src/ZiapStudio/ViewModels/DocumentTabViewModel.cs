@@ -14,6 +14,7 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         RemoteLocalizationDocumentViewModel? remoteLocalization = null,
         PreflightDocumentViewModel? preflight = null,
         FusionAudioDocumentViewModel? fusionAudio = null,
+        FusionPuzzleDocumentViewModel? fusionPuzzle = null,
         FusionBossDocumentViewModel? fusionBoss = null,
         DocumentEditSession? editSession = null,
         FusionBossEditSession? fusionBossEditSession = null)
@@ -23,6 +24,7 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         RemoteLocalization = remoteLocalization;
         Preflight = preflight;
         FusionAudio = fusionAudio;
+        FusionPuzzle = fusionPuzzle;
         FusionBoss = fusionBoss;
         EditSession = editSession;
         FusionBossEditSession = fusionBossEditSession;
@@ -58,6 +60,8 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
 
     public bool IsFusionAudio => FusionAudio is not null;
 
+    public bool IsFusionPuzzle => FusionPuzzle is not null;
+
     public bool IsFusionBoss => FusionBoss is not null;
 
     public RpgMakerDatabaseDocumentViewModel? Database { get; }
@@ -67,6 +71,8 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
     public PreflightDocumentViewModel? Preflight { get; }
 
     public FusionAudioDocumentViewModel? FusionAudio { get; }
+
+    public FusionPuzzleDocumentViewModel? FusionPuzzle { get; }
 
     public FusionBossDocumentViewModel? FusionBoss { get; private set; }
 
@@ -135,6 +141,13 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         database: null,
         fusionBoss: fusionBoss,
         fusionBossEditSession: editSession);
+
+    public static DocumentTabViewModel CreateFusionPuzzle(
+        FusionPuzzleWorkspaceDocument document,
+        FusionPuzzleDocumentViewModel fusionPuzzle) => new(
+        document.Descriptor,
+        database: null,
+        fusionPuzzle: fusionPuzzle);
 
     public void ReplaceFusionBoss(
         FusionBossDocumentViewModel fusionBoss,

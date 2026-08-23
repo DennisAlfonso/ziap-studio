@@ -244,11 +244,13 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(IsRemoteLocalizationDocumentSelected));
                 OnPropertyChanged(nameof(IsPreflightDocumentSelected));
                 OnPropertyChanged(nameof(IsFusionAudioDocumentSelected));
+                OnPropertyChanged(nameof(IsFusionPuzzleDocumentSelected));
                 OnPropertyChanged(nameof(IsFusionBossDocumentSelected));
                 OnPropertyChanged(nameof(IsDatabaseDocumentSelected));
                 OnPropertyChanged(nameof(IsEditingDocumentSelected));
                 OnPropertyChanged(nameof(ActiveDatabaseDocument));
                 OnPropertyChanged(nameof(ActiveFusionAudioDocument));
+                OnPropertyChanged(nameof(ActiveFusionPuzzleDocument));
                 OnPropertyChanged(nameof(ActiveFusionBossDocument));
                 NotifyEditingPropertiesChanged();
             }
@@ -264,6 +266,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public bool IsFusionAudioDocumentSelected => SelectedDocument?.IsFusionAudio == true;
 
+    public bool IsFusionPuzzleDocumentSelected => SelectedDocument?.IsFusionPuzzle == true;
+
     public bool IsFusionBossDocumentSelected => SelectedDocument?.IsFusionBoss == true;
 
     public bool IsDatabaseDocumentSelected => ActiveDatabaseDocument is not null;
@@ -271,12 +275,16 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     public bool IsEditingDocumentSelected =>
         IsDatabaseDocumentSelected ||
         IsFusionAudioDocumentSelected ||
+        IsFusionPuzzleDocumentSelected ||
         IsFusionBossDocumentSelected;
 
     public RpgMakerDatabaseDocumentViewModel? ActiveDatabaseDocument => SelectedDocument?.Database;
 
     public FusionAudioDocumentViewModel? ActiveFusionAudioDocument =>
         SelectedDocument?.FusionAudio;
+
+    public FusionPuzzleDocumentViewModel? ActiveFusionPuzzleDocument =>
+        SelectedDocument?.FusionPuzzle;
 
     public FusionBossDocumentViewModel? ActiveFusionBossDocument =>
         SelectedDocument?.FusionBoss;
@@ -1131,6 +1139,12 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                     fusionBossDocument,
                     new FusionBossDocumentViewModel(fusionBossDocument, editSession),
                     editSession);
+            }
+            else if (document is FusionPuzzleWorkspaceDocument fusionPuzzleDocument)
+            {
+                tab = DocumentTabViewModel.CreateFusionPuzzle(
+                    fusionPuzzleDocument,
+                    new FusionPuzzleDocumentViewModel(fusionPuzzleDocument));
             }
             else
             {

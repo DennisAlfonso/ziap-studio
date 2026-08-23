@@ -1759,6 +1759,11 @@
                         Grid.Row="2"
                         DataContext="{x:Bind ViewModel.ActiveFusionBossDocument, Mode=OneWay}"
                         x:Load="{x:Bind ViewModel.IsFusionBossDocumentSelected, Mode=OneWay}" />
+                    <views:FusionPuzzleDocumentView
+                        x:Name="FusionPuzzleDocument"
+                        Grid.Row="2"
+                        DataContext="{x:Bind ViewModel.ActiveFusionPuzzleDocument, Mode=OneWay}"
+                        x:Load="{x:Bind ViewModel.IsFusionPuzzleDocumentSelected, Mode=OneWay}" />
                     <Grid
                         x:Name="DatabaseDocument"
                         Grid.Row="2"

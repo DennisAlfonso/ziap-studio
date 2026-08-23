@@ -37,91 +37,161 @@
                 PlaceholderText="Percorso di nw.exe"
                 ToolTipService.ToolTip="Runtime NW.js incluso in RPG Maker MZ. Puoi incollare manualmente un altro percorso." />
 
-            <Border
-                Padding="14"
-                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                CornerRadius="8">
-                <StackPanel Spacing="12">
-                    <ComboBox
-                        x:Name="ModeComboBox"
-                        HorizontalAlignment="Stretch"
-                        DisplayMemberPath="DisplayName"
-                        Header="Metodo d'ingresso"
-                        SelectionChanged="ModeComboBox_SelectionChanged" />
-                    <TextBlock
-                        x:Name="ModeDescriptionTextBlock"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+            <TabView>
+                <TabViewItem Header="Ingresso arena">
+                    <StackPanel Padding="0,12,0,0" Spacing="16">
+                        <Border
+                            Padding="14"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                            <StackPanel Spacing="12">
+                                <ComboBox
+                                    x:Name="ModeComboBox"
+                                    HorizontalAlignment="Stretch"
+                                    DisplayMemberPath="DisplayName"
+                                    Header="Metodo d'ingresso"
+                                    SelectionChanged="ModeComboBox_SelectionChanged" />
+                                <TextBlock
+                                    x:Name="ModeDescriptionTextBlock"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
 
-            <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="2*" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <ComboBox
-                    x:Name="MapComboBox"
-                    HorizontalAlignment="Stretch"
-                    DisplayMemberPath="DisplayName"
-                    Header="Mappa"
-                    SelectionChanged="MapComboBox_SelectionChanged" />
-                <NumberBox
-                    x:Name="PlayerXNumberBox"
-                    Grid.Column="1"
-                    Header="Spawn X"
-                    Minimum="0"
-                    SpinButtonPlacementMode="Compact" />
-                <NumberBox
-                    x:Name="PlayerYNumberBox"
-                    Grid.Column="2"
-                    Header="Spawn Y"
-                    Minimum="0"
-                    SpinButtonPlacementMode="Compact" />
-            </Grid>
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ComboBox
+                                x:Name="MapComboBox"
+                                HorizontalAlignment="Stretch"
+                                DisplayMemberPath="DisplayName"
+                                Header="Mappa"
+                                SelectionChanged="MapComboBox_SelectionChanged" />
+                            <NumberBox
+                                x:Name="PlayerXNumberBox"
+                                Grid.Column="1"
+                                Header="Spawn X"
+                                Minimum="0"
+                                SpinButtonPlacementMode="Compact" />
+                            <NumberBox
+                                x:Name="PlayerYNumberBox"
+                                Grid.Column="2"
+                                Header="Spawn Y"
+                                Minimum="0"
+                                SpinButtonPlacementMode="Compact" />
+                        </Grid>
 
-            <Grid ColumnSpacing="12">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <ComboBox
-                    x:Name="DirectionComboBox"
-                    HorizontalAlignment="Stretch"
-                    DisplayMemberPath="DisplayName"
-                    Header="Direzione iniziale" />
-                <NumberBox
-                    x:Name="CommonEventNumberBox"
-                    Grid.Column="1"
-                    Header="Evento comune d'ingresso (opzionale)"
-                    Minimum="0"
-                    SpinButtonPlacementMode="Compact" />
-            </Grid>
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ComboBox
+                                x:Name="DirectionComboBox"
+                                HorizontalAlignment="Stretch"
+                                DisplayMemberPath="DisplayName"
+                                Header="Direzione iniziale" />
+                            <NumberBox
+                                x:Name="CommonEventNumberBox"
+                                Grid.Column="1"
+                                Header="Evento comune d'ingresso (opzionale)"
+                                Minimum="0"
+                                SpinButtonPlacementMode="Compact" />
+                        </Grid>
 
-            <TextBlock
-                x:Name="MapHintTextBlock"
-                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                FontSize="12"
-                TextWrapping="Wrap" />
+                        <TextBlock
+                            x:Name="MapHintTextBlock"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            FontSize="12"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+                </TabViewItem>
 
-            <Border
-                Padding="14"
-                Background="#142333"
-                BorderBrush="#31506C"
-                BorderThickness="1"
-                CornerRadius="8">
-                <StackPanel Spacing="5">
-                    <TextBlock FontWeight="SemiBold" Text="Loadout fisso del playtest" />
-                    <TextBlock Text="Yato · livello 50 · arma #132" />
-                    <TextBlock
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="Armature: #1, #2, #3, #4, #26, #24, #24, #28 · Skill apprese: #7, #15, #61"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
+                <TabViewItem Header="Equipaggiamento iniziale">
+                    <StackPanel Padding="0,12,0,0" Spacing="16">
+                        <Border
+                            Padding="14"
+                            Background="#142333"
+                            BorderBrush="#31506C"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                            <StackPanel Spacing="5">
+                                <TextBlock FontWeight="SemiBold" Text="Preset di testing predefinito" />
+                                <TextBlock Text="Yato · livello 50 · arma #132" />
+                                <TextBlock
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    Text="Armature: #1, #2, #3, #4, #26, #24, #24, #28 · Skill apprese: #7, #15, #61 · Salto (var 11): 12"
+                                    TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="2*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <ComboBox
+                                x:Name="ActorComboBox"
+                                HorizontalAlignment="Stretch"
+                                Header="Attore"
+                                DisplayMemberPath="DisplayName" />
+                            <NumberBox
+                                x:Name="LevelNumberBox"
+                                Grid.Column="1"
+                                Header="Livello"
+                                Minimum="1"
+                                SpinButtonPlacementMode="Compact" />
+                        </Grid>
+
+                        <ComboBox
+                            x:Name="WeaponComboBox"
+                            HorizontalAlignment="Stretch"
+                            Header="Arma"
+                            DisplayMemberPath="DisplayName" />
+
+                        <Grid ColumnSpacing="12" RowSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
+                            <ComboBox x:Name="Armor1ComboBox" Header="Armatura slot 1" DisplayMemberPath="DisplayName" />
+                            <ComboBox x:Name="Armor2ComboBox" Grid.Column="1" Header="Armatura slot 2" DisplayMemberPath="DisplayName" />
+                            <ComboBox x:Name="Armor3ComboBox" Grid.Row="1" Header="Armatura slot 3" DisplayMemberPath="DisplayName" />
+                            <ComboBox x:Name="Armor4ComboBox" Grid.Row="1" Grid.Column="1" Header="Armatura slot 4" DisplayMemberPath="DisplayName" />
+                            <ComboBox x:Name="Armor5ComboBox" Grid.Row="2" Header="Armatura slot 5" DisplayMemberPath="DisplayName" />
+                            <ComboBox x:Name="Armor6ComboBox" Grid.Row="2" Grid.Column="1" Header="Armatura slot 6" DisplayMemberPath="DisplayName" />
+                            <ComboBox x:Name="Armor7ComboBox" Grid.Row="3" Header="Armatura slot 7" DisplayMemberPath="DisplayName" />
+                            <ComboBox x:Name="Armor8ComboBox" Grid.Row="3" Grid.Column="1" Header="Armatura slot 8" DisplayMemberPath="DisplayName" />
+                        </Grid>
+
+                        <StackPanel Spacing="8">
+                            <TextBlock FontWeight="SemiBold" Text="Skill apprese" />
+                            <ListView
+                                x:Name="SkillsListView"
+                                Height="180"
+                                SelectionMode="Multiple"
+                                DisplayMemberPath="DisplayName" />
+                        </StackPanel>
+
+                        <NumberBox
+                            x:Name="JumpNumberBox"
+                            Header="Salto (var 11)"
+                            Minimum="0"
+                            SpinButtonPlacementMode="Compact" />
+                    </StackPanel>
+                </TabViewItem>
+            </TabView>
         </StackPanel>
     </ScrollViewer>
 </ContentDialog>
