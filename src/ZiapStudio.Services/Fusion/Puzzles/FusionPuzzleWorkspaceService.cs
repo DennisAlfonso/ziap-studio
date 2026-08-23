@@ -103,12 +103,43 @@ public sealed partial class FusionPuzzleWorkspaceService
         var mapNames = await LoadMapNamesAsync(project, cancellationToken);
         var components = await ScanMapComponentsAsync(project, mapNames, diagnostics, cancellationToken);
         var usages = await LoadArenaUsagesAsync(project, diagnostics, cancellationToken);
+        var providerMetadata = ReadProviderMetadata(root);
+        plugins = plugins
+            .Concat(providerMetadata.Values.SelectMany(metadata =>
+            {
+                var providerPlugins = string.IsNullOrWhiteSpace(metadata.PluginId)
+                    ? Array.Empty<FusionPuzzlePluginStatus>()
+                    :
+                    [
+                        new FusionPuzzlePluginStatus
+                        {
+                            Id = metadata.PluginId,
+                            DisplayName = metadata.DisplayName,
+                            IsRequired = false,
+                            IsActive = IsPluginActive(registrations, metadata.PluginId),
+                        },
+                    ];
+                return providerPlugins.Concat(metadata.Dependencies.Select(id =>
+                    new FusionPuzzlePluginStatus
+                    {
+                        Id = id,
+                        DisplayName = id,
+                        IsRequired = false,
+                        IsActive = IsPluginActive(registrations, id),
+                    }));
+            }))
+            .GroupBy(plugin => plugin.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
         var puzzles = new List<FusionPuzzleDefinition>();
         foreach (var property in puzzleCollection.EnumerateObject())
         {
+            var providerId = ReadString(property.Value, "type") ??
+                ReadString(property.Value, "provider") ?? string.Empty;
             puzzles.Add(BuildPuzzle(
                 property.Name,
                 property.Value,
+                providerMetadata.GetValueOrDefault(providerId),
                 registrations,
                 components.Where(component => component.PuzzleId.Equals(
                     property.Name,
@@ -169,6 +200,7 @@ public sealed partial class FusionPuzzleWorkspaceService
     private FusionPuzzleDefinition BuildPuzzle(
         string puzzleId,
         JsonElement source,
+        ProviderMetadata? metadata,
         IReadOnlyList<RpgMakerPluginRegistration> registrations,
         IReadOnlyList<FusionPuzzleMapComponent> components,
         IReadOnlyList<FusionPuzzleArenaUsage> usages)
@@ -185,19 +217,42 @@ public sealed partial class FusionPuzzleWorkspaceService
                 $"Il ruolo '{role.Role}' richiede {role.RequirementText}, ma ne sono stati trovati {role.Found}.",
                 "I componenti vengono cercati nei note tag e nei commenti evento delle mappe."));
         }
+        foreach (var role in roles.Where(role => metadata?.Roles.Count > 0 &&
+            !metadata.Roles.ContainsKey(role.Role)))
+        {
+            diagnostics.Add(Issue(
+                "provider.role-unsupported",
+                FusionPuzzleDiagnosticSeverity.Error,
+                puzzleId,
+                $"Il provider '{providerId}' non dichiara il ruolo '{role.Role}'.",
+                "Allineare la definizione del puzzle con providers.<id>.roles."));
+        }
+        foreach (var component in components.Where(component => !roles.Any(role =>
+            role.Role.Equals(component.Role, StringComparison.OrdinalIgnoreCase))))
+        {
+            diagnostics.Add(Issue(
+                "component.role-undeclared",
+                FusionPuzzleDiagnosticSeverity.Error,
+                puzzleId,
+                $"L'evento #{component.EventId} usa il ruolo non dichiarato '{component.Role}'.",
+                component.EventText,
+                component.MapId));
+        }
 
         var sources = ReadSources(source);
-        foreach (var item in sources.Where(item => item.Budget is null))
+        foreach (var item in sources.Where(item => metadata?.RequiresSourceBudgets == true &&
+            item.Budget is null))
         {
             diagnostics.Add(Issue(
                 "source.budget-missing",
                 FusionPuzzleDiagnosticSeverity.Error,
                 puzzleId,
                 $"La sorgente '{item.Key}' non definisce un budget.",
-                "Il provider Hexella Weight usa questo valore per inizializzare i passi disponibili."));
+                $"Il provider {metadata!.DisplayName} richiede un budget per ogni sorgente."));
         }
-        foreach (var item in sources.Where(item => !components.Any(component =>
-            component.Role.Equals("source", StringComparison.OrdinalIgnoreCase) &&
+        foreach (var item in sources.Where(item => metadata?.RequiresSourceBudgets == true &&
+            !components.Any(component =>
+            component.Role.Equals(metadata!.SourceRole, StringComparison.OrdinalIgnoreCase) &&
             component.Key?.Equals(item.Key, StringComparison.OrdinalIgnoreCase) == true)))
         {
             diagnostics.Add(Issue(
@@ -209,7 +264,8 @@ public sealed partial class FusionPuzzleWorkspaceService
         }
 
         foreach (var duplicate in components
-            .Where(component => component.Role.Equals("source", StringComparison.OrdinalIgnoreCase) &&
+            .Where(_ => metadata?.RequiresSourceBudgets == true)
+            .Where(component => component.Role.Equals(metadata!.SourceRole, StringComparison.OrdinalIgnoreCase) &&
                 !string.IsNullOrWhiteSpace(component.Key))
             .GroupBy(component => component.Key!, StringComparer.OrdinalIgnoreCase)
             .Where(group => group.Count() > 1))
@@ -232,7 +288,17 @@ public sealed partial class FusionPuzzleWorkspaceService
                 "Puo comunque essere avviato tramite FusionPuzzle.prepare o il plugin command Prepare."));
         }
 
-        var dependencies = BuildDependencies(providerId, registrations);
+        if (metadata is null)
+        {
+            diagnostics.Add(Issue(
+                "provider.metadata-missing",
+                FusionPuzzleDiagnosticSeverity.Warning,
+                puzzleId,
+                $"Il provider '{providerId}' non dichiara metadata nel database.",
+                "Il puzzle resta leggibile, ma Studio non puo descrivere dipendenze, segnali e completamento specifici."));
+        }
+
+        var dependencies = BuildDependencies(metadata, registrations);
         foreach (var dependency in dependencies.Where(item => item.IsRequired && !item.IsAvailable))
         {
             diagnostics.Add(Issue(
@@ -243,8 +309,8 @@ public sealed partial class FusionPuzzleWorkspaceService
                 dependency.Purpose));
         }
 
-        var calls = BuildCalls(providerId, usages);
-        var graph = BuildGraph(puzzleId, providerId, roles, usages, dependencies);
+        var calls = BuildCalls(metadata, roles, usages);
+        var graph = BuildGraph(puzzleId, providerId, metadata, roles, usages, dependencies);
         return new FusionPuzzleDefinition
         {
             Id = puzzleId,
@@ -310,25 +376,99 @@ public sealed partial class FusionPuzzleWorkspaceService
 
     private static IReadOnlyList<FusionPuzzleSetting> ReadSettings(JsonElement source)
     {
-        var settings = new List<FusionPuzzleSetting>();
-        foreach (var groupName in new[] { "carry", "legacyBridge" })
+        var reserved = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
         {
-            if (!source.TryGetProperty(groupName, out var group) || group.ValueKind != JsonValueKind.Object)
+            "definitionVersion",
+            "displayName",
+            "type",
+            "provider",
+            "scope",
+            "budgetPolicy",
+            "repeatable",
+            "roles",
+            "sources",
+        };
+        var settings = new List<FusionPuzzleSetting>();
+        foreach (var property in source.EnumerateObject().Where(property => !reserved.Contains(property.Name)))
+        {
+            if (property.Value.ValueKind == JsonValueKind.Object)
             {
-                continue;
+                settings.AddRange(property.Value.EnumerateObject().Select(value => new FusionPuzzleSetting
+                {
+                    Group = property.Name,
+                    Name = value.Name,
+                    Value = FormatValue(value.Value),
+                }));
             }
-            settings.AddRange(group.EnumerateObject().Select(property => new FusionPuzzleSetting
+            else
             {
-                Group = groupName,
-                Name = property.Name,
-                Value = FormatValue(property.Value),
-            }));
+                settings.Add(new FusionPuzzleSetting
+                {
+                    Group = "definition",
+                    Name = property.Name,
+                    Value = FormatValue(property.Value),
+                });
+            }
         }
         return settings;
     }
 
+    private static IReadOnlyDictionary<string, ProviderMetadata> ReadProviderMetadata(JsonElement root)
+    {
+        if (!root.TryGetProperty("providers", out var providers) || providers.ValueKind != JsonValueKind.Object)
+        {
+            return new Dictionary<string, ProviderMetadata>(StringComparer.OrdinalIgnoreCase);
+        }
+        return providers.EnumerateObject().ToDictionary(
+            provider => provider.Name,
+            provider =>
+            {
+                var roles = new Dictionary<string, ProviderRoleMetadata>(StringComparer.OrdinalIgnoreCase);
+                if (provider.Value.TryGetProperty("roles", out var roleCollection) &&
+                    roleCollection.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (var role in roleCollection.EnumerateObject())
+                    {
+                        roles[role.Name] = new ProviderRoleMetadata(
+                            role.Name,
+                            ReadString(role.Value, "displayName") ?? role.Name,
+                            ReadString(role.Value, "interaction") ?? $"provider.interact('{role.Name}')");
+                    }
+                }
+                var signals = new List<ProviderSignalMetadata>();
+                if (provider.Value.TryGetProperty("signals", out var signalCollection) &&
+                    signalCollection.ValueKind == JsonValueKind.Array)
+                {
+                    signals.AddRange(signalCollection.EnumerateArray()
+                        .Where(signal => !string.IsNullOrWhiteSpace(ReadString(signal, "name")))
+                        .Select(signal => new ProviderSignalMetadata(
+                            ReadString(signal, "name")!,
+                            ReadString(signal, "role"),
+                            ReadString(signal, "phase") ?? "execution")));
+                }
+                var completion = provider.Value.TryGetProperty("completion", out var completionValue) &&
+                    completionValue.ValueKind == JsonValueKind.Object
+                        ? new ProviderCompletionMetadata(
+                            ReadString(completionValue, "role"),
+                            ReadString(completionValue, "signal") ?? "puzzle:completed",
+                            ReadString(completionValue, "description") ?? "Il provider completa il puzzle.")
+                        : null;
+                return new ProviderMetadata(
+                    provider.Name,
+                    ReadString(provider.Value, "displayName") ?? provider.Name,
+                    ReadString(provider.Value, "plugin"),
+                    ReadStringArray(provider.Value, "dependencies"),
+                    roles,
+                    signals,
+                    completion,
+                    ReadBool(provider.Value, "requiresSourceBudgets"),
+                    ReadString(provider.Value, "sourceRole") ?? "source");
+            },
+            StringComparer.OrdinalIgnoreCase);
+    }
+
     private static IReadOnlyList<FusionPuzzleDependency> BuildDependencies(
-        string providerId,
+        ProviderMetadata? metadata,
         IReadOnlyList<RpgMakerPluginRegistration> registrations)
     {
         var result = new List<FusionPuzzleDependency>
@@ -340,33 +480,28 @@ public sealed partial class FusionPuzzleWorkspaceService
                 "Carica il database, esegue lo scanner e gestisce il lifecycle.",
                 registrations),
         };
-        if (providerId.Equals("hexellaWeight", StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(metadata?.PluginId))
         {
             result.Add(Dependency(
-                FusionPuzzleIntegrationProvider.HexellaWeightPluginName,
-                "Provider Hexella Weight",
+                metadata.PluginId,
+                metadata.DisplayName,
                 true,
-                "Registra il provider, le interazioni e i segnali di consegna.",
-                registrations));
-            result.Add(Dependency(
-                FusionPuzzleIntegrationProvider.MovementPluginName,
-                "Movement bridge",
-                true,
-                "Conta i passi e applica i lock di dash e salto.",
+                $"Registra il provider '{metadata.Id}' e il relativo runtime.",
                 registrations));
         }
-        else
+        foreach (var dependencyId in metadata?.Dependencies ?? [])
         {
-            result.Add(new FusionPuzzleDependency
-            {
-                Id = $"provider:{providerId}",
-                DisplayName = string.IsNullOrWhiteSpace(providerId) ? "Provider non dichiarato" : providerId,
-                IsRequired = true,
-                IsAvailable = false,
-                Purpose = "Il provider custom non puo essere associato automaticamente a un plugin registrato.",
-            });
+            result.Add(Dependency(
+                dependencyId,
+                dependencyId,
+                true,
+                $"Dipendenza runtime dichiarata dal provider '{metadata!.Id}'.",
+                registrations));
         }
-        return result;
+        return result
+            .GroupBy(item => item.Id, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.First())
+            .ToArray();
     }
 
     private static FusionPuzzleDependency Dependency(
@@ -384,7 +519,8 @@ public sealed partial class FusionPuzzleWorkspaceService
     };
 
     private static IReadOnlyList<FusionPuzzleCall> BuildCalls(
-        string providerId,
+        ProviderMetadata? metadata,
+        IReadOnlyList<FusionPuzzleRoleRequirement> roles,
         IReadOnlyList<FusionPuzzleArenaUsage> usages)
     {
         var startupCaller = usages.Count == 0 ? "Plugin command / script" : "FusionArena";
@@ -397,11 +533,38 @@ public sealed partial class FusionPuzzleWorkspaceService
             Call(5, FusionPuzzleCallKind.Execution, startupCaller, "FusionPuzzle.activate(id)", "Avvia il provider dopo l'avvio dell'arena.", "provider.start() ed evento puzzle:activated."),
             Call(6, FusionPuzzleCallKind.Execution, "Game_Event.start", "FusionPuzzle.interactEvent(event)", "Instrada l'interazione del giocatore al provider attivo.", "Il ruolo dell'evento decide l'operazione."),
         };
-        if (providerId.Equals("hexellaWeight", StringComparison.OrdinalIgnoreCase))
+        foreach (var role in roles)
         {
-            calls.Add(Call(7, FusionPuzzleCallKind.Execution, "Game_Player.increaseSteps", "FusionPuzzleMovement.emitPlayerStep", "Notifica ogni passo mentre il peso e trasportato.", "Il budget residuo viene decrementato o il trasporto scade."));
-            calls.Add(Call(8, FusionPuzzleCallKind.Signal, "HexellaWeight provider", "puzzle:carryUpdated", "Pubblica lo stato di trasporto dopo source, extension, jump e step.", "HUD e bridge legacy possono sincronizzarsi."));
-            calls.Add(Call(9, FusionPuzzleCallKind.Completion, "goal.interact", "puzzle:deliveryCompleted", "Consegna il peso al componente goal.", "Emette puzzle:completed e rilascia i lock."));
+            var roleMetadata = metadata?.Roles.GetValueOrDefault(role.Role);
+            calls.Add(Call(
+                calls.Count + 1,
+                FusionPuzzleCallKind.Execution,
+                $"Evento ruolo '{role.Role}'",
+                roleMetadata?.Interaction ?? $"provider.interact('{role.Role}')",
+                "Il provider riceve il componente e i relativi tag key/value.",
+                "Lo stato risultante dipende dal contratto del provider."));
+        }
+        foreach (var signal in metadata?.Signals ?? [])
+        {
+            calls.Add(Call(
+                calls.Count + 1,
+                signal.Phase.Equals("completion", StringComparison.OrdinalIgnoreCase)
+                    ? FusionPuzzleCallKind.Completion
+                    : FusionPuzzleCallKind.Signal,
+                string.IsNullOrWhiteSpace(signal.Role) ? metadata!.DisplayName : $"Ruolo '{signal.Role}'",
+                signal.Name,
+                "Segnale dichiarato nei metadata del provider.",
+                "I binding e gli altri sistemi possono consumare il payload."));
+        }
+        if (metadata?.Completion is { } completion)
+        {
+            calls.Add(Call(
+                calls.Count + 1,
+                FusionPuzzleCallKind.Completion,
+                string.IsNullOrWhiteSpace(completion.Role) ? metadata.DisplayName : $"Ruolo '{completion.Role}'",
+                "context.complete(payload, options)",
+                completion.Description,
+                $"Emette {completion.Signal} e aggiorna lo stato dell'istanza."));
         }
         foreach (var binding in usages.SelectMany(usage => usage.Bindings))
         {
@@ -442,6 +605,7 @@ public sealed partial class FusionPuzzleWorkspaceService
     private static FusionPuzzleGraph BuildGraph(
         string puzzleId,
         string providerId,
+        ProviderMetadata? metadata,
         IReadOnlyList<FusionPuzzleRoleRequirement> roles,
         IReadOnlyList<FusionPuzzleArenaUsage> usages,
         IReadOnlyList<FusionPuzzleDependency> dependencies)
@@ -453,7 +617,7 @@ public sealed partial class FusionPuzzleWorkspaceService
         AddNode(nodes, "scan", "Scanner componenti", "FusionPuzzleMapScanner", FusionPuzzleGraphNodeKind.Validation, 2, "SCAN", "Legge note e commenti di tutti gli eventi mappa.", "scanMap()", "Ruoli e metadati associati agli eventi.");
         AddNode(nodes, "validate", "Validazione", "provider.validate", FusionPuzzleGraphNodeKind.Validation, 3, "CHECK", "Confronta i componenti con i requisiti della definizione.", "validate(context)", "Preparazione consentita o bloccata.", roles.Any(role => !role.IsSatisfied));
         var providerMissing = dependencies.Any(item => item.IsRequired && !item.IsAvailable);
-        AddNode(nodes, "provider", string.IsNullOrWhiteSpace(providerId) ? "Provider mancante" : providerId, $"registerProvider('{providerId}')", providerMissing ? FusionPuzzleGraphNodeKind.Missing : FusionPuzzleGraphNodeKind.Provider, 4, "PROVIDER", "Implementa prepare, start, interact e abort.", "provider.prepare() / provider.start()", "Puzzle attivo.", providerMissing);
+        AddNode(nodes, "provider", metadata?.DisplayName ?? (string.IsNullOrWhiteSpace(providerId) ? "Provider non dichiarato" : providerId), $"registerProvider('{providerId}')", providerMissing ? FusionPuzzleGraphNodeKind.Missing : FusionPuzzleGraphNodeKind.Provider, 4, "PROVIDER", "Implementa prepare, start, interact, snapshot e abort.", "provider.prepare() / provider.start()", "Puzzle attivo.", providerMissing);
         AddNode(nodes, "active", "Istanza attiva", "puzzle:activated", FusionPuzzleGraphNodeKind.State, 5, "ACTIVE", "Riceve le interazioni degli eventi associati.", "FusionPuzzle.interactEvent", "Il provider aggiorna il proprio stato.");
         Edge(edges, "database", "startup", "id", "L'host risolve il record del puzzle.");
         Edge(edges, "startup", "scan", "prepare", "La preparazione crea lo scanner della mappa corrente.");
@@ -464,35 +628,65 @@ public sealed partial class FusionPuzzleWorkspaceService
         foreach (var role in roles)
         {
             var roleId = $"role-{NormalizeId(role.Role)}";
-            AddNode(nodes, roleId, $"Ruolo: {role.Role}", role.RequirementText, FusionPuzzleGraphNodeKind.Component, 6, role.FoundText, "Game_Event.start inoltra l'evento e i relativi tag.", $"provider.interact('{role.Role}')", role.IsSatisfied ? "Interazione disponibile." : "Requisito non soddisfatto.", !role.IsSatisfied);
+            var roleMetadata = metadata?.Roles.GetValueOrDefault(role.Role);
+            AddNode(nodes, roleId, roleMetadata?.DisplayName ?? $"Ruolo: {role.Role}", role.Role, FusionPuzzleGraphNodeKind.Component, 6, role.FoundText, "Game_Event.start inoltra l'evento e i relativi tag.", roleMetadata?.Interaction ?? $"provider.interact('{role.Role}')", role.IsSatisfied ? "Interazione disponibile." : "Requisito non soddisfatto.", !role.IsSatisfied);
             Edge(edges, "active", roleId, "interact", $"Evento con <FusionPuzzleRole:{role.Role}>.");
         }
 
-        var goal = nodes.FirstOrDefault(node => node.Id == "role-goal");
-        AddNode(nodes, "completed", "Completamento", "puzzle:completed", FusionPuzzleGraphNodeKind.Completion, 8, "DONE", "Il provider dichiara concluso il puzzle.", "provider completion", "L'host riceve i segnali finali.");
-        if (goal is not null)
+        var signalNodes = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var signalIndex = 0;
+        foreach (var signal in metadata?.Signals ?? [])
         {
-            Edge(edges, goal.Id, "completed", "complete", "L'interazione goal completa la consegna.");
+            var signalId = $"signal-{signalIndex++}";
+            signalNodes[signal.Name] = signalId;
+            AddNode(nodes, signalId, signal.Name, signal.Phase, FusionPuzzleGraphNodeKind.Signal, 7, "SIGNAL", "Segnale pubblicato dal provider.", $"context.signal('{signal.Name}')", "I consumer registrati ricevono il payload.");
+            var sourceId = string.IsNullOrWhiteSpace(signal.Role)
+                ? "active"
+                : $"role-{NormalizeId(signal.Role)}";
+            if (!nodes.Any(node => node.Id.Equals(sourceId, StringComparison.OrdinalIgnoreCase)))
+            {
+                sourceId = "active";
+            }
+            Edge(edges, sourceId, signalId, "emit", "Il provider pubblica il segnale dichiarato.");
+        }
+
+        var completion = metadata?.Completion;
+        var completionSignal = completion?.Signal ?? "puzzle:completed";
+        AddNode(nodes, "completed", "Completamento", completionSignal, FusionPuzzleGraphNodeKind.Completion, 8, "DONE", completion?.Description ?? "Il provider dichiara concluso il puzzle.", "context.complete(payload, options)", "L'host riceve il segnale finale.");
+        if (signalNodes.TryGetValue(completionSignal, out var completionSignalId))
+        {
+            Edge(edges, completionSignalId, "completed", "complete", "Il segnale chiude il lifecycle dichiarato.");
         }
         else
         {
-            Edge(edges, "active", "completed", "provider", "Percorso di completamento definito dal provider.");
+            var completionSourceId = string.IsNullOrWhiteSpace(completion?.Role)
+                ? "active"
+                : $"role-{NormalizeId(completion.Role)}";
+            if (!nodes.Any(node => node.Id.Equals(completionSourceId, StringComparison.OrdinalIgnoreCase)))
+            {
+                completionSourceId = "active";
+            }
+            Edge(edges, completionSourceId, "completed", "complete", completion?.Description ?? "Percorso di completamento definito dal provider.");
         }
 
         var bindingIndex = 0;
         foreach (var binding in usages.SelectMany(usage => usage.Bindings))
         {
-            var signalId = $"signal-{bindingIndex++}";
-            AddNode(nodes, signalId, binding.Signal, binding.Id, FusionPuzzleGraphNodeKind.Signal, 9, "SIGNAL", $"Binding dichiarato nell'arena {binding.ArenaId}.", binding.Signal, binding.ActionsText);
-            Edge(edges, "completed", signalId, "emit", "Il segnale viene pubblicato sul bus Fusion Puzzle.");
+            if (!signalNodes.TryGetValue(binding.Signal, out var signalId))
+            {
+                signalId = $"binding-signal-{bindingIndex++}";
+                signalNodes[binding.Signal] = signalId;
+                AddNode(nodes, signalId, binding.Signal, binding.Id, FusionPuzzleGraphNodeKind.Signal, 7, "SIGNAL", $"Segnale consumato dall'arena {binding.ArenaId}.", binding.Signal, binding.ActionsText);
+                Edge(edges, "provider", signalId, "emit", "Il provider pubblica il segnale usato dal binding.");
+            }
             foreach (var action in binding.Actions)
             {
                 var actionId = $"action-{bindingIndex++}";
-                AddNode(nodes, actionId, action, action, FusionPuzzleGraphNodeKind.Signal, 10, "CALL", $"Consumer configurato dal binding per {binding.ProviderInstanceId}.", action, "L'arena o l'encounter prosegue.");
+                AddNode(nodes, actionId, action, action, FusionPuzzleGraphNodeKind.Signal, 9, "CALL", $"Consumer configurato dal binding per {binding.ProviderInstanceId}.", action, "L'arena o l'encounter prosegue.");
                 Edge(edges, signalId, actionId, "dispatch", "Il binding converte il segnale in una chiamata host.");
             }
         }
-        AddNode(nodes, "cleanup", "Cleanup", "FusionPuzzle.abort", FusionPuzzleGraphNodeKind.Cleanup, bindingIndex == 0 ? 9 : 11, "END", "Rilascia lock, self-switch e istanza runtime.", "provider.abort()", "Stato ripristinato e istanza rimossa.");
+        AddNode(nodes, "cleanup", "Cleanup", "FusionPuzzle.abort", FusionPuzzleGraphNodeKind.Cleanup, 10, "END", "Rilascia le risorse possedute dall'istanza runtime.", "provider.abort()", "Stato ripristinato e istanza rimossa.");
         Edge(edges, "completed", "cleanup", "release", "La chiusura arena elimina eventuali istanze residue.");
         return new FusionPuzzleGraph
         {
@@ -831,4 +1025,26 @@ public sealed partial class FusionPuzzleWorkspaceService
 
     private sealed record PluginSpec(string Id, string DisplayName, bool IsRequired);
     private sealed record ParsedArenaUsage(string PuzzleId, FusionPuzzleArenaUsage Usage);
+    private sealed record ProviderMetadata(
+        string Id,
+        string DisplayName,
+        string? PluginId,
+        IReadOnlyList<string> Dependencies,
+        IReadOnlyDictionary<string, ProviderRoleMetadata> Roles,
+        IReadOnlyList<ProviderSignalMetadata> Signals,
+        ProviderCompletionMetadata? Completion,
+        bool RequiresSourceBudgets,
+        string SourceRole);
+    private sealed record ProviderRoleMetadata(
+        string Id,
+        string DisplayName,
+        string Interaction);
+    private sealed record ProviderSignalMetadata(
+        string Name,
+        string? Role,
+        string Phase);
+    private sealed record ProviderCompletionMetadata(
+        string? Role,
+        string Signal,
+        string Description);
 }

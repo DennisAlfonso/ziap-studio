@@ -103,6 +103,83 @@ public sealed class FusionPuzzleIntegrationTests
         Assert.Contains(puzzle.Graph.Nodes, node => node.Kind == FusionPuzzleGraphNodeKind.Missing);
     }
 
+    [Fact]
+    public async Task Workspace_UsesProviderMetadataForCustomRolesSignalsAndCompletion()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WriteFile(
+            "js/plugins.js",
+            """
+            var $plugins = [
+              {"name":"zenkaiDevPlugins/ZDP_FusionPuzzle","status":true,"description":"","parameters":{}},
+              {"name":"zenkaiDevPlugins/ZDP_FusionPuzzle_SwitchCircuit","status":true,"description":"","parameters":{}}
+            ];
+            """);
+        workspace.WriteFile(
+            "data/FusionPuzzles.json",
+            """
+            {
+              "schemaVersion":1,
+              "databaseVersion":"1.0.0",
+              "providers":{
+                "switchCircuit":{
+                  "displayName":"Circuito interruttori",
+                  "plugin":"ZDP_FusionPuzzle_SwitchCircuit",
+                  "roles":{
+                    "lever":{"displayName":"Leva","interaction":"toggleLever"},
+                    "door":{"displayName":"Porta","interaction":"openDoor"}
+                  },
+                  "signals":[
+                    {"name":"puzzle:circuitPowered","role":"lever","phase":"execution"},
+                    {"name":"puzzle:circuitCompleted","role":"door","phase":"completion"}
+                  ],
+                  "completion":{"role":"door","signal":"puzzle:circuitCompleted","description":"La porta si apre."}
+                }
+              },
+              "puzzles":{
+                "switchRoom":{
+                  "definitionVersion":1,
+                  "displayName":"Stanza interruttori",
+                  "type":"switchCircuit",
+                  "scope":"map",
+                  "roles":{"lever":{"count":1},"door":{"count":1}},
+                  "reset":{"when":"mapExit"}
+                }
+              }
+            }
+            """);
+        workspace.WriteFile("data/MapInfos.json", "[null,{\"id\":1,\"name\":\"Circuito\"}]");
+        workspace.WriteFile(
+            "data/Map001.json",
+            """
+            {"events":[null,
+              {"id":1,"name":"Leva","note":"<FusionPuzzle:switchRoom>\n<FusionPuzzleRole:lever>","pages":[]},
+              {"id":2,"name":"Porta","note":"<FusionPuzzle:switchRoom>\n<FusionPuzzleRole:door>","pages":[]}
+            ]}
+            """);
+
+        var document = await CreateService().LoadAsync(
+            CreateProject(workspace.RootPath),
+            CreateDescriptor(workspace.RootPath));
+
+        var puzzle = Assert.Single(document.Puzzles);
+        Assert.True(puzzle.IsValid);
+        Assert.All(puzzle.Roles, role => Assert.True(role.IsSatisfied));
+        Assert.DoesNotContain(puzzle.Diagnostics, issue => issue.Code == "provider.metadata-missing");
+        Assert.Contains(document.Plugins, plugin =>
+            plugin.Id == "ZDP_FusionPuzzle_SwitchCircuit" && plugin.IsActive);
+        Assert.Contains(puzzle.Dependencies, dependency =>
+            dependency.Id == "ZDP_FusionPuzzle_SwitchCircuit" && dependency.IsAvailable);
+        Assert.Contains(puzzle.Calls, call => call.Api == "toggleLever");
+        Assert.Contains(puzzle.Calls, call => call.Api == "context.complete(payload, options)");
+        Assert.Contains(puzzle.Graph.Nodes, node => node.TechnicalId == "puzzle:circuitCompleted");
+        Assert.Contains(puzzle.Graph.Edges, edge =>
+            edge.SourceNodeId.StartsWith("signal-", StringComparison.Ordinal) &&
+            edge.TargetNodeId == "completed");
+        Assert.Contains(puzzle.Settings, setting =>
+            setting.Group == "reset" && setting.Name == "when" && setting.Value == "mapExit");
+    }
+
     private static FusionPuzzleWorkspaceService CreateService()
     {
         var fileSystem = new FileSystemService();
@@ -154,6 +231,23 @@ public sealed class FusionPuzzleIntegrationTests
         {
           "schemaVersion":1,
           "databaseVersion":"0.2.0",
+          "providers":{
+            "hexellaWeight":{
+              "displayName":"Peso di Hexella",
+              "plugin":"ZDP_FusionPuzzle_HexellaWeight",
+              "dependencies":["ZDP_FusionPuzzle_Movement"],
+              "requiresSourceBudgets":true,
+              "sourceRole":"source",
+              "roles":{
+                "source":{"interaction":"beginCarry"},
+                "goal":{"interaction":"deliver"},
+                "extension":{"interaction":"extendCarry"},
+                "jumpModifier":{"interaction":"setJumpModifier"}
+              },
+              "signals":[{"name":"puzzle:deliveryCompleted","role":"goal","phase":"completion"}],
+              "completion":{"role":"goal","signal":"puzzle:completed","description":"Consegna completata."}
+            }
+          },
           "puzzles":{
             "weights":{
               "definitionVersion":1,
