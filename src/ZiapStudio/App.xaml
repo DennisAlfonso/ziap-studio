@@ -3,6 +3,7 @@
     x:Class="ZiapStudio.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:converters="using:ZiapStudio.Converters"
+    xmlns:numberFormatting="using:Windows.Globalization.NumberFormatting"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
@@ -11,6 +12,10 @@
             </ResourceDictionary.MergedDictionaries>
 
             <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <numberFormatting:DecimalFormatter
+                x:Key="TwoDecimalFormatter"
+                FractionDigits="2"
+                IntegerDigits="1" />
 
             <Style x:Key="MetadataLabelStyle" TargetType="TextBlock">
                 <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />

@@ -99,8 +99,12 @@ public sealed class DocumentServiceTests
             ["ID", "Nome", "Tipo arma", "Prezzo"],
             database.Definition.Columns.Select(column => column.DisplayName));
         var fields = database.Definition.Sections.SelectMany(section => section.Fields).ToArray();
-        Assert.False(Assert.Single(fields, field => field.Key == "name").IsEditable);
-        Assert.False(Assert.Single(fields, field => field.Key == "description").IsEditable);
+        Assert.Equal(
+            RpgMakerEditorKind.Text,
+            Assert.Single(fields, field => field.Key == "name").EditorKind);
+        Assert.Equal(
+            RpgMakerEditorKind.MultilineText,
+            Assert.Single(fields, field => field.Key == "description").EditorKind);
         Assert.Equal(
             RpgMakerEditorKind.ReferenceComboBox,
             Assert.Single(fields, field => field.Key == "animationId").EditorKind);

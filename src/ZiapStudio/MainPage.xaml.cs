@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using ZiapStudio.Core.Models;
+using ZiapStudio.Core.Fusion.Weapons;
 using ZiapStudio.Dialogs;
 using ZiapStudio.Services;
 using ZiapStudio.ViewModels;
@@ -97,6 +98,36 @@ public sealed partial class MainPage : Page
 
     private void DatabaseDocument_Loaded(object sender, RoutedEventArgs e) =>
         DatabaseListColumn.Width = new GridLength(_databaseListWidth);
+
+    private async void CreateWeapon_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: RpgMakerDatabaseDocumentViewModel database })
+        {
+            return;
+        }
+
+        var dialog = new WeaponCreationDialog(database.WeaponCatalog)
+        {
+            XamlRoot = XamlRoot,
+        };
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary && dialog.Draft is { } draft)
+        {
+            try
+            {
+                database.CreateWeapon(draft);
+            }
+            catch (Exception exception)
+            {
+                await new ContentDialog
+                {
+                    XamlRoot = XamlRoot,
+                    Title = "Impossibile creare l'arma",
+                    Content = exception.Message,
+                    CloseButtonText = "Chiudi",
+                }.ShowAsync();
+            }
+        }
+    }
 
     private void ApplyPersistedPanelWidths()
     {
@@ -797,6 +828,15 @@ public sealed partial class MainPage : Page
         if (sender is FrameworkElement { DataContext: WeaponAdvancedEditorViewModel editor })
         {
             editor.AddCustomParameter();
+        }
+    }
+
+    private async void OpenWeaponAttackSkill_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { DataContext: WeaponAdvancedEditorViewModel editor })
+        {
+            await ViewModel.NavigateToReferenceAsync(
+                $"rpgmaker://database/skills/{checked((int)editor.AttackSkillId)}");
         }
     }
 

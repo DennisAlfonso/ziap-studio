@@ -8,6 +8,7 @@ using ZiapStudio.Core.Editing;
 using ZiapStudio.Core.Fusion.Weapons;
 using ZiapStudio.Core.Localization;
 using ZiapStudio.Core.Preflight;
+using ZiapStudio.Services.Fusion.Weapons;
 
 namespace ZiapStudio.ViewModels;
 
@@ -18,6 +19,7 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
     private readonly IReadOnlyDictionary<AssetPreviewKey, AssetPreviewResult> _assetPreviews;
     private readonly DocumentEditSession _editSession;
     private readonly WeaponNotetagCatalog? _documentWeaponCatalog;
+    private readonly WeaponCreationService _weaponCreationService = new();
     private string _searchText = string.Empty;
     private RpgMakerDatabaseRowViewModel? _selectedEntry;
     private IReadOnlyList<PreflightIssue> _preflightIssues = [];
@@ -57,6 +59,15 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
     public WeaponAdvancedEditorViewModel? AdvancedEditor { get; private set; }
 
     public bool HasAdvancedEditor => AdvancedEditor is not null;
+
+    public WeaponNotetagCatalog WeaponCatalog =>
+        _documentWeaponCatalog ?? WeaponNotetagCatalog.Empty;
+
+    public bool IsWeaponDatabase =>
+        _definition.ResourceName.Equals("weapons", StringComparison.OrdinalIgnoreCase);
+
+    public bool CanCreateWeapon => IsWeaponDatabase &&
+        _weaponCreationService.FindAvailableSlot(_editSession) is not null;
 
     public string SearchText
     {
@@ -123,6 +134,15 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
         {
             SelectedEntry = entry;
         }
+    }
+
+    public int CreateWeapon(WeaponCreationDraft draft)
+    {
+        var recordId = _weaponCreationService.Create(_editSession, draft);
+        ApplyFilter();
+        SelectEntryById(recordId);
+        OnPropertyChanged(nameof(CanCreateWeapon));
+        return recordId;
     }
 
     public void ApplyPreflightIssues(IEnumerable<PreflightIssue> issues)
@@ -232,6 +252,7 @@ public sealed class RpgMakerDatabaseDocumentViewModel : INotifyPropertyChanged
         AdvancedEditor?.RefreshFromSession();
 
         OnPropertyChanged(nameof(ChangeCountText));
+        OnPropertyChanged(nameof(CanCreateWeapon));
     }
 
     private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
@@ -365,6 +386,7 @@ public sealed class RpgMakerDatabaseInspectorFieldViewModel : INotifyPropertyCha
     private readonly DocumentEditSession _editSession;
     private readonly AssetPreviewResult? _assetResult;
     private double _numericValue;
+    private string _textValue = string.Empty;
     private RpgMakerReferenceOption? _selectedReferenceOption;
     private AssetPreviewViewModel? _assetPreview;
     private int? _currentPreviewIconIndex;
@@ -432,6 +454,10 @@ public sealed class RpgMakerDatabaseInspectorFieldViewModel : INotifyPropertyCha
 
     public bool IsNumberEditor => _definition.EditorKind == RpgMakerEditorKind.Number;
 
+    public bool IsTextEditor => _definition.EditorKind == RpgMakerEditorKind.Text;
+
+    public bool IsMultilineTextEditor => _definition.EditorKind == RpgMakerEditorKind.MultilineText;
+
     public bool IsReferenceEditor =>
         _definition.EditorKind == RpgMakerEditorKind.ReferenceComboBox;
 
@@ -471,6 +497,23 @@ public sealed class RpgMakerDatabaseInspectorFieldViewModel : INotifyPropertyCha
 
             _numericValue = value;
             _editSession.SetValue(_entryId, _definition.Key, JsonValue.Create(integerValue));
+            OnPropertyChanged();
+        }
+    }
+
+    public string TextValue
+    {
+        get => _textValue;
+        set
+        {
+            if ((!IsTextEditor && !IsMultilineTextEditor) ||
+                string.Equals(_textValue, value ?? string.Empty, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            _textValue = value ?? string.Empty;
+            _editSession.SetValue(_entryId, _definition.Key, JsonValue.Create(_textValue));
             OnPropertyChanged();
         }
     }
@@ -522,6 +565,14 @@ public sealed class RpgMakerDatabaseInspectorFieldViewModel : INotifyPropertyCha
             _numericValue = numericValue;
             OnPropertyChanged(nameof(NumericValue));
             RefreshIconPreview(numericValue);
+        }
+
+
+        if ((IsTextEditor || IsMultilineTextEditor) && node is JsonValue textNode &&
+            textNode.TryGetValue<string>(out var textValue))
+        {
+            _textValue = textValue;
+            OnPropertyChanged(nameof(TextValue));
         }
 
         if (IsReferenceEditor && TryGetInteger(node, out var referenceValue))

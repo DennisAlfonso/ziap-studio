@@ -23,8 +23,8 @@ internal static class RpgMakerDatabaseDefinitions
                 [
                     Section("Generale",
                         Field("id", "ID"),
-                        Field("name", "Nome", RpgMakerValuePresentation.Text),
-                        Field("description", "Descrizione", RpgMakerValuePresentation.Text)),
+                        Field("name", "Nome", RpgMakerValuePresentation.Text, editorKind: RpgMakerEditorKind.Text),
+                        Field("description", "Descrizione", RpgMakerValuePresentation.Text, editorKind: RpgMakerEditorKind.MultilineText)),
                     Section("Equipaggiamento",
                         Field("wtypeId", "Tipo arma", RpgMakerValuePresentation.SystemReference, "weaponTypes", RpgMakerEditorKind.ReferenceComboBox),
                         Field("etypeId", "Slot equipaggiamento", RpgMakerValuePresentation.SystemReference, "equipTypes", RpgMakerEditorKind.ReferenceComboBox),

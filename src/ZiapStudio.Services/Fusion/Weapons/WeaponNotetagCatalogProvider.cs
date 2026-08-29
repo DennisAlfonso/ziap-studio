@@ -42,14 +42,154 @@ public sealed partial class WeaponNotetagCatalogProvider
         var perks = await LoadPerksAsync(project.Path, cancellationToken);
         var lore = await LoadLoreAsync(project.Path, cancellationToken);
         var resources = await LoadDisassemblyResourcesAsync(project.Path, cancellationToken);
+        var attackSkills = await LoadAttackSkillsAsync(project.Path, cancellationToken);
+        var systemOptions = await LoadSystemOptionsAsync(project.Path, cancellationToken);
         return new WeaponNotetagCatalog
         {
             Perks = perks,
             LoreEntries = lore,
             DisassemblyResources = resources,
+            AttackSkills = attackSkills,
+            WeaponTypes = systemOptions.WeaponTypes,
+            EquipTypes = systemOptions.EquipTypes,
+            Elements = systemOptions.Elements,
             CustomParameters = [new WeaponCustomParameterOption(1, "Maestria Hex")],
         };
     }
+
+    private async Task<IReadOnlyList<WeaponAttackSkillOption>> LoadAttackSkillsAsync(
+        string projectPath,
+        CancellationToken cancellationToken)
+    {
+        var path = Path.Combine(projectPath, "data", "Skills.json");
+        if (!_fileSystem.FileExists(path))
+        {
+            return [];
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(
+                await _fileSystem.ReadAllTextAsync(path, cancellationToken));
+            var skills = new List<WeaponAttackSkillOption>();
+            foreach (var element in document.RootElement.EnumerateArray())
+            {
+                if (element.ValueKind != JsonValueKind.Object ||
+                    !element.TryGetProperty("id", out var idNode) || !idNode.TryGetInt32(out var id) ||
+                    !element.TryGetProperty("name", out var nameNode) || nameNode.ValueKind != JsonValueKind.String)
+                {
+                    continue;
+                }
+
+                var note = element.TryGetProperty("note", out var noteNode) &&
+                    noteNode.ValueKind == JsonValueKind.String
+                        ? noteNode.GetString() ?? string.Empty
+                        : string.Empty;
+                if (!note.Contains("<ABS>", StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var rawName = nameNode.GetString() ?? $"Abilità {id}";
+                var resolution = await _localizationService.ResolveAsync(
+                    projectPath,
+                    rawName,
+                    cancellationToken: cancellationToken);
+                skills.Add(new WeaponAttackSkillOption(
+                    id,
+                    resolution?.ResolvedValue ?? rawName,
+                    ReadAbsNumber(note, "reloadTime"),
+                    ReadAbsNumber(note, "range"),
+                    ReadAbsNumber(note, "radius"),
+                    ReadAbsNumber(note, "speed"),
+                    ReadAbsNumber(note, "colliderRadius")));
+            }
+
+            return skills.OrderBy(skill => skill.Id).ToArray();
+        }
+        catch (Exception exception) when (
+            exception is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return [];
+        }
+    }
+
+    private async Task<WeaponSystemOptions> LoadSystemOptionsAsync(
+        string projectPath,
+        CancellationToken cancellationToken)
+    {
+        var path = Path.Combine(projectPath, "data", "System.json");
+        if (!_fileSystem.FileExists(path))
+        {
+            return new([], [], []);
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(
+                await _fileSystem.ReadAllTextAsync(path, cancellationToken));
+            return new WeaponSystemOptions(
+                await ReadSystemArrayAsync(document.RootElement, "weaponTypes", projectPath, cancellationToken),
+                await ReadSystemArrayAsync(document.RootElement, "equipTypes", projectPath, cancellationToken),
+                await ReadSystemArrayAsync(document.RootElement, "elements", projectPath, cancellationToken));
+        }
+        catch (Exception exception) when (
+            exception is JsonException or IOException or UnauthorizedAccessException)
+        {
+            return new([], [], []);
+        }
+    }
+
+    private async Task<IReadOnlyList<WeaponDatabaseOption>> ReadSystemArrayAsync(
+        JsonElement root,
+        string propertyName,
+        string projectPath,
+        CancellationToken cancellationToken)
+    {
+        if (!root.TryGetProperty(propertyName, out var array) || array.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+
+        var options = new List<WeaponDatabaseOption>();
+        var id = 0;
+        foreach (var element in array.EnumerateArray())
+        {
+            if (element.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(element.GetString()))
+            {
+                var raw = element.GetString()!;
+                var resolution = await _localizationService.ResolveAsync(
+                    projectPath,
+                    raw,
+                    cancellationToken: cancellationToken);
+                options.Add(new WeaponDatabaseOption(id, resolution?.ResolvedValue ?? raw));
+            }
+
+            id++;
+        }
+
+        return options;
+    }
+
+    private static double? ReadAbsNumber(string note, string key)
+    {
+        var match = Regex.Match(
+            note,
+            $@"(?im)^\s*{Regex.Escape(key)}\s*:\s*(?<value>[+-]?(?:\d+(?:\.\d+)?|\.\d+))\s*$",
+            RegexOptions.CultureInvariant);
+        return match.Success && double.TryParse(
+            match.Groups["value"].Value,
+            System.Globalization.NumberStyles.Float,
+            System.Globalization.CultureInfo.InvariantCulture,
+            out var value)
+                ? value
+                : null;
+    }
+
+    private sealed record WeaponSystemOptions(
+        IReadOnlyList<WeaponDatabaseOption> WeaponTypes,
+        IReadOnlyList<WeaponDatabaseOption> EquipTypes,
+        IReadOnlyList<WeaponDatabaseOption> Elements);
 
     public static bool TryResolveLegacyLoreAlias(string rawValue, out int id)
     {

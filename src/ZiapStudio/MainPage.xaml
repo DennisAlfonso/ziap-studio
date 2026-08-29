@@ -219,7 +219,7 @@
                         Margin="4,0,0,0"
                         FontSize="12"
                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="ZIAP Studio 0.1.9" />
+                        Text="ZIAP Studio 0.2.0" />
                 </StackPanel>
             </Grid>
 
@@ -391,7 +391,7 @@
                     HorizontalAlignment="Center"
                     FontSize="10"
                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                    Text="0.1.9" />
+                    Text="0.2.0" />
             </Grid>
             </Grid>
         </Border>
@@ -1794,6 +1794,13 @@
                                 Margin="20,7,0,0"
                                 HorizontalAlignment="Right"
                                 Spacing="2">
+                                <Button
+                                    Margin="0,0,0,6"
+                                    HorizontalAlignment="Right"
+                                    Click="CreateWeapon_Click"
+                                    Content="+ Nuova arma"
+                                    IsEnabled="{Binding CanCreateWeapon}"
+                                    Visibility="{Binding IsWeaponDatabase, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 <TextBlock
                                     FontWeight="SemiBold"
                                     Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
@@ -1818,7 +1825,7 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition
                                     x:Name="DatabaseListColumn"
-                                    Width="620"
+                                    Width="460"
                                     MinWidth="360" />
                                 <ColumnDefinition Width="6" />
                                 <ColumnDefinition Width="*" MinWidth="300" />
@@ -1964,6 +1971,21 @@
                                                                                 SpinButtonPlacementMode="Inline"
                                                                                 Value="{x:Bind NumericValue, Mode=TwoWay}"
                                                                                 x:Load="{x:Bind IsNumberEditor}" />
+                                                                            <TextBox
+                                                                                x:Name="TextEditor"
+                                                                                HorizontalAlignment="Stretch"
+                                                                                AutomationProperties.Name="{x:Bind EditorAutomationName}"
+                                                                                Text="{x:Bind TextValue, Mode=TwoWay}"
+                                                                                x:Load="{x:Bind IsTextEditor}" />
+                                                                            <TextBox
+                                                                                x:Name="MultilineTextEditor"
+                                                                                MinHeight="88"
+                                                                                HorizontalAlignment="Stretch"
+                                                                                AcceptsReturn="True"
+                                                                                AutomationProperties.Name="{x:Bind EditorAutomationName}"
+                                                                                Text="{x:Bind TextValue, Mode=TwoWay}"
+                                                                                TextWrapping="Wrap"
+                                                                                x:Load="{x:Bind IsMultilineTextEditor}" />
                                                                             <ComboBox
                                                                                 x:Name="ReferenceEditor"
                                                                                 HorizontalAlignment="Stretch"
@@ -2076,6 +2098,9 @@
                                              <StackPanel
                                                  DataContext="{Binding AdvancedEditor}"
                                                  Spacing="18">
+                                                 <Pivot>
+                                                     <PivotItem Header="Panoramica">
+                                                         <StackPanel Spacing="18">
                                                  <Border
                                                      Padding="12"
                                                      Background="{ThemeResource LayerFillColorDefaultBrush}"
@@ -2096,6 +2121,145 @@
                                                          </ItemsControl>
                                                      </StackPanel>
                                                  </Border>
+                                                 <StackPanel Spacing="9">
+                                                     <TextBlock FontWeight="SemiBold" Text="Identità e attacco" />
+                                                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                     <Grid ColumnSpacing="12" RowSpacing="8">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="132" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <Grid.RowDefinitions>
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                         </Grid.RowDefinitions>
+                                                         <TextBlock VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Famiglia" />
+                                                         <ComboBox
+                                                             Grid.Column="1"
+                                                             HorizontalAlignment="Stretch"
+                                                             DisplayMemberPath="DisplayName"
+                                                             ItemsSource="{Binding WeaponFamilyOptions}"
+                                                             SelectedItem="{Binding SelectedWeaponFamily, Mode=TwoWay}" />
+                                                         <TextBlock Grid.Row="1" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Sottotipo" />
+                                                         <ComboBox
+                                                             Grid.Row="1"
+                                                             Grid.Column="1"
+                                                             HorizontalAlignment="Stretch"
+                                                             DisplayMemberPath="DisplayName"
+                                                             ItemsSource="{Binding WeaponSubtypeOptions}"
+                                                             SelectedItem="{Binding SelectedWeaponSubtype, Mode=TwoWay}" />
+                                                         <TextBlock Grid.Row="2" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Impugnatura" />
+                                                         <NumberBox Grid.Row="2" Grid.Column="1" Minimum="1" Maximum="2" SmallChange="1" SpinButtonPlacementMode="Inline" Value="{Binding Handedness, Mode=TwoWay}" />
+                                                         <TextBlock Grid.Row="3" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Abilità attacco" />
+                                                         <ComboBox
+                                                             Grid.Row="3"
+                                                             Grid.Column="1"
+                                                             HorizontalAlignment="Stretch"
+                                                             DisplayMemberPath="Label"
+                                                             IsTextSearchEnabled="True"
+                                                             ItemsSource="{Binding AttackSkillOptions}"
+                                                             SelectedItem="{Binding SelectedAttackSkill, Mode=TwoWay}" />
+                                                         <TextBlock Grid.Row="4" VerticalAlignment="Center" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Elemento attacco" />
+                                                         <ComboBox
+                                                             Grid.Row="4"
+                                                             Grid.Column="1"
+                                                             HorizontalAlignment="Stretch"
+                                                             DisplayMemberPath="Label"
+                                                             IsTextSearchEnabled="True"
+                                                             ItemsSource="{Binding AttackElementOptions}"
+                                                             SelectedItem="{Binding SelectedAttackElement, Mode=TwoWay}" />
+                                                     </Grid>
+                                                 </StackPanel>
+
+                                                         </StackPanel>
+                                                     </PivotItem>
+                                                     <PivotItem Header="Combattimento">
+                                                         <StackPanel Spacing="18">
+                                                 <StackPanel Spacing="9">
+                                                     <TextBlock FontWeight="SemiBold" Text="Profilo di combattimento" />
+                                                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                     <Border Padding="12" Background="{ThemeResource LayerFillColorDefaultBrush}" CornerRadius="8">
+                                                         <StackPanel Spacing="4">
+                                                             <TextBlock FontWeight="SemiBold" Text="ATTACCO BASE" />
+                                                             <TextBlock Text="{Binding AttackSkillOriginText}" TextWrapping="Wrap" />
+                                                             <TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorTertiaryBrush}" Text="{Binding SkillAttackBehaviorText}" TextWrapping="Wrap" />
+                                                             <Button
+                                                                 Margin="0,5,0,0"
+                                                                 HorizontalAlignment="Left"
+                                                                 Click="OpenWeaponAttackSkill_Click"
+                                                                 Content="Apri abilità →" />
+                                                         </StackPanel>
+                                                     </Border>
+                                                     <ToggleSwitch Header="Sovrascrivi la formula danno per quest'arma" IsOn="{Binding HasDamageOverrides, Mode=TwoWay}" />
+                                                     <Grid
+                                                         ColumnSpacing="12"
+                                                         RowSpacing="8"
+                                                         Visibility="{Binding HasDamageOverrides, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="*" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <NumberBox Header="Potenza · moltiplicatore" Minimum="0" SmallChange="0.05" Value="{Binding DamageRate, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Column="1" Header="Potenza · bonus piatto" SmallChange="1" Value="{Binding FlatDamage, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Row="1" Header="Penetrazione difesa" Minimum="0" SmallChange="0.05" Value="{Binding DefenseRate, Mode=TwoWay}" />
+                                                     </Grid>
+                                                     <ToggleSwitch Header="Sovrascrivi cadenza e balistica per quest'arma" IsOn="{Binding HasAttackBehaviorOverrides, Mode=TwoWay}" />
+                                                     <Grid
+                                                         ColumnSpacing="12"
+                                                         RowSpacing="8"
+                                                         Visibility="{Binding HasAttackBehaviorOverrides, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="*" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <NumberBox Header="Cadenza · intervallo (s)" Minimum="0.01" NumberFormatter="{StaticResource TwoDecimalFormatter}" SmallChange="0.05" Value="{Binding AttackInterval, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Column="1" Header="Balistica · portata (tile)" Minimum="0.01" NumberFormatter="{StaticResource TwoDecimalFormatter}" SmallChange="0.25" Value="{Binding AttackRange, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Row="1" Header="Balistica · raggio impatto" Minimum="0" NumberFormatter="{StaticResource TwoDecimalFormatter}" SmallChange="0.05" Value="{Binding AttackRadius, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Row="1" Grid.Column="1" Header="Balistica · velocità" Minimum="0" NumberFormatter="{StaticResource TwoDecimalFormatter}" SmallChange="0.25" Value="{Binding ProjectileSpeed, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Row="2" Header="Balistica · raggio collider (px)" Minimum="0.01" SmallChange="1" Value="{Binding ProjectileColliderRadius, Mode=TwoWay}" />
+                                                     </Grid>
+                                                 </StackPanel>
+
+                                                         </StackPanel>
+                                                     </PivotItem>
+                                                     <PivotItem
+                                                         Header="Arma da fuoco"
+                                                         Visibility="{Binding IsFirearm, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                         <StackPanel Spacing="18">
+                                                 <StackPanel
+                                                     Spacing="9"
+                                                     Visibility="{Binding IsFirearm, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                                     <TextBlock FontWeight="SemiBold" Text="Arma da fuoco" />
+                                                     <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                                                     <Grid ColumnSpacing="12" RowSpacing="8">
+                                                         <Grid.ColumnDefinitions>
+                                                             <ColumnDefinition Width="*" />
+                                                             <ColumnDefinition Width="*" />
+                                                         </Grid.ColumnDefinitions>
+                                                         <Grid.RowDefinitions>
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                             <RowDefinition Height="Auto" />
+                                                         </Grid.RowDefinitions>
+                                                         <NumberBox Header="Caricatore" Minimum="1" SmallChange="1" SpinButtonPlacementMode="Compact" Value="{Binding MagazineSize, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Column="1" Header="Ricarica (s)" Minimum="0" NumberFormatter="{StaticResource TwoDecimalFormatter}" SmallChange="0.05" Value="{Binding ReloadDuration, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Row="1" Header="Precisione %" Minimum="0" Maximum="100" SmallChange="1" Value="{Binding FirearmAccuracy, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Row="1" Grid.Column="1" Header="Stabilità %" Minimum="0" Maximum="100" SmallChange="1" Value="{Binding FirearmStability, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Row="2" Header="Maneggevolezza %" Minimum="0" Maximum="100" SmallChange="1" Value="{Binding FirearmHandling, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Row="2" Grid.Column="1" Header="Distanza mira min (tile)" Minimum="1" NumberFormatter="{StaticResource TwoDecimalFormatter}" SmallChange="0.25" Value="{Binding AimMinimumDistance, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Row="3" Header="Distanza mira max (tile)" Minimum="1" NumberFormatter="{StaticResource TwoDecimalFormatter}" SmallChange="0.25" Value="{Binding AimMaximumDistance, Mode=TwoWay}" />
+                                                         <NumberBox Grid.Row="3" Grid.Column="1" Header="Movimento in mira ×" Minimum="0.01" Maximum="1" NumberFormatter="{StaticResource TwoDecimalFormatter}" SmallChange="0.05" Value="{Binding AimMovementMultiplier, Mode=TwoWay}" />
+                                                     </Grid>
+                                                 </StackPanel>
+
+                                                         </StackPanel>
+                                                     </PivotItem>
+                                                     <PivotItem Header="Progressione">
+                                                         <StackPanel Spacing="18">
                                                  <StackPanel Spacing="9">
                                                      <TextBlock FontWeight="SemiBold" Text="Progressione" />
                                                      <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -2155,6 +2319,10 @@
                                                      </Grid>
                                                  </StackPanel>
 
+                                                         </StackPanel>
+                                                     </PivotItem>
+                                                     <PivotItem Header="Perk">
+                                                         <StackPanel Spacing="18">
                                                  <StackPanel Spacing="9">
                                                      <TextBlock FontWeight="SemiBold" Text="Perk" />
                                                      <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -2236,6 +2404,10 @@
                                                          Content="+ Aggiungi parametro" />
                                                  </StackPanel>
 
+                                                         </StackPanel>
+                                                     </PivotItem>
+                                                     <PivotItem Header="Recupero">
+                                                         <StackPanel Spacing="18">
                                                  <StackPanel Spacing="9">
                                                      <TextBlock FontWeight="SemiBold" Text="Lore arma" />
                                                      <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -2310,6 +2482,10 @@
                                                          Content="+ Aggiungi risultato" />
                                                  </StackPanel>
 
+                                                         </StackPanel>
+                                                     </PivotItem>
+                                                     <PivotItem Header="Avanzate">
+                                                         <StackPanel Spacing="18">
                                                  <StackPanel Spacing="9">
                                                      <TextBlock FontWeight="SemiBold" Text="Comportamento" />
                                                      <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
@@ -2353,6 +2529,9 @@
                                                              TextWrapping="NoWrap" />
                                                      </Expander>
                                                  </StackPanel>
+                                                         </StackPanel>
+                                                     </PivotItem>
+                                                 </Pivot>
                                              </StackPanel>
                                          </Expander>
                                      </StackPanel>

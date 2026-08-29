@@ -1,0 +1,63 @@
+<ContentDialog
+    x:Class="ZiapStudio.Dialogs.WeaponCreationDialog"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="Crea arma"
+    PrimaryButtonText="Crea e apri"
+    CloseButtonText="Annulla"
+    DefaultButton="Primary"
+    PrimaryButtonClick="ContentDialog_PrimaryButtonClick">
+    <ScrollViewer MaxHeight="650" HorizontalScrollBarVisibility="Disabled">
+        <StackPanel Width="620" Spacing="20">
+            <TextBlock
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="Crea l'identità dell'arma. I valori tecnici verranno configurati nel Weapon Editor."
+                TextWrapping="Wrap" />
+
+            <StackPanel Spacing="9">
+                <TextBlock FontWeight="SemiBold" Text="IDENTITÀ" />
+                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <TextBox x:Name="WeaponNameBox" Header="Nome" PlaceholderText="Nome dell'arma" />
+                <TextBox x:Name="DescriptionBox" MinHeight="76" AcceptsReturn="True" Header="Descrizione" TextWrapping="Wrap" />
+                <NumberBox x:Name="IconBox" Width="180" HorizontalAlignment="Left" Header="Icona ID" Minimum="0" SmallChange="1" Value="0" />
+            </StackPanel>
+
+            <StackPanel Spacing="9">
+                <TextBlock FontWeight="SemiBold" Text="CLASSIFICAZIONE" />
+                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="FamilyBox" Header="Famiglia" DisplayMemberPath="DisplayName" SelectionChanged="FamilyBox_SelectionChanged" />
+                    <ComboBox x:Name="SubtypeBox" Grid.Column="1" Header="Sottotipo" DisplayMemberPath="DisplayName" />
+                </Grid>
+                <ComboBox x:Name="HandednessBox" Header="Impugnatura" DisplayMemberPath="DisplayName" />
+            </StackPanel>
+
+            <StackPanel Spacing="9">
+                <TextBlock FontWeight="SemiBold" Text="RPG MAKER" />
+                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <ComboBox x:Name="WeaponTypeBox" Header="Tipo arma" DisplayMemberPath="Label" IsTextSearchEnabled="True" />
+                <ComboBox x:Name="AttackElementBox" Header="Elemento" DisplayMemberPath="Label" IsTextSearchEnabled="True" />
+                <ComboBox x:Name="AttackSkillBox" Header="Abilità attacco" DisplayMemberPath="Label" IsTextSearchEnabled="True" />
+            </StackPanel>
+
+            <StackPanel Spacing="9">
+                <TextBlock FontWeight="SemiBold" Text="PROGRESSIONE" />
+                <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="RarityBox" Header="Rarità" DisplayMemberPath="DisplayName" />
+                    <NumberBox x:Name="RequiredLevelBox" Grid.Column="1" Header="Livello richiesto" Minimum="1" SmallChange="1" Value="1" />
+                </Grid>
+            </StackPanel>
+
+            <InfoBar x:Name="ValidationInfoBar" IsClosable="False" IsOpen="False" Severity="Error" Title="Controlla lo schema" />
+        </StackPanel>
+    </ScrollViewer>
+</ContentDialog>

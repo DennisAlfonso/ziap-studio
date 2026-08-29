@@ -59,7 +59,11 @@ semantico e un browser con preview per `ZDP_FusionAudio`.
 - filtri per categoria nella surface di confronto JSON;
 - definizioni dichiarative di colonne, campi e sezioni degli inspector;
 - editor dichiarativo per Armi; Attori, Nemici e fallback generico restano read-only;
-- sezione `Avanzate` delle armi chiusa di default, dedicata ai sistemi Fusion/plugin;
+- quick-create `+ Nuova arma` che raccoglie identità, classificazione, riferimenti RPG Maker e progressione, quindi apre il Weapon Editor;
+- schema autorevole per spada, stocco, pugnale, doppia lama, ascia e arma da fuoco;
+- Weapon Editor a schede (`Panoramica`, `Combattimento`, profilo famiglia, `Progressione`, `Perk`, `Recupero`, `Avanzate`);
+- picker semantici e ricercabili per tipo arma, elemento e abilità d'attacco, con ID tecnico secondario;
+- origine visibile dei valori ABS: ereditati dalla skill oppure sovrascritti esplicitamente dall'arma;
 - editor semantico per `perk`, `itemRare`, `lvReq`, `maxLevel` e `fhd:no_itemicon`;
 - picker perk posizionali per colonna I/II/III, alimentati da `ZDP_WeaponPerks.js`;
 - collezione modificabile dei parametri `cp[n]`, con `cp[1]` risolto come Maestria Hex;
@@ -71,7 +75,7 @@ semantico e un browser con preview per `ZDP_FusionAudio`.
 - validazioni pre-save per colonne perk, rarità, livelli, parametri, lore e disassemblaggio;
 - `NumberBox` per prezzo, Icon ID e parametri delle armi;
 - `ComboBox` semantiche per tipo, slot e animazione, salvando sempre l'ID raw;
-- Nome e Descrizione localizzati intenzionalmente protetti dalla modifica diretta;
+- Nome e Descrizione delle armi modificabili direttamente; i valori raw di localizzazione restano preservati finché non vengono intenzionalmente sostituiti;
 - risoluzione di riferimenti database (`Classe`, `Animazione`) e System enum;
 - modello separato `RawValue / ResolvedValue / DisplayValue`;
 - `Kind`, `Target` e stato `Resolved / MissingTarget` per i valori risolti;
@@ -148,11 +152,32 @@ La logica di progetto è C# normale e non dipende da WinUI. L'applicazione è
 intenzionalmente Windows-first; non contiene implementazioni preventive per altri
 sistemi operativi.
 
-Nella `0.1.2` soltanto i campi strutturali sicuri di Armi sono editabili. Nome e Descrizione
-restano read-only quando possono contenere chiavi di localizzazione; gli altri database
-continuano a essere consultabili senza possibilità di modifica.
+Gli altri database continuano a essere consultabili senza possibilità di modifica.
 Il metadata `.ziap/project.json` è pensato per essere versionato insieme al
 repository; preferenze personali e recenti restano in `%LOCALAPPDATA%`.
+
+## Schema di creazione armi
+
+`+ Nuova arma` crea un record completo nel primo slot vuoto predisposto da RPG Maker.
+La finestra iniziale resta deliberatamente breve: identità, famiglia/sottotipo,
+impugnatura, tipo arma, elemento, abilità d'attacco, rarità e livello richiesto.
+Subito dopo la creazione ZIAP seleziona il record e apre il Weapon Editor contestuale.
+Lo schema genera inoltre categorie Fusion, progressione, perk, pool di
+disassemblaggio e valori iniziali specifici della famiglia.
+
+Il `Weapon Editor` permette di rifinire gli stessi valori dopo la creazione.
+Il profilo comune comprende `attackDamageRate`, `attackFlatDamage`,
+`attackDefenseRate`, `attackInterval`, `attackRange`, `attackRadius`,
+`projectileSpeed` e `projectileColliderRadius`; questi valori non vengono duplicati
+automaticamente: l'editor mostra la skill d'origine e li salva sull'arma soltanto
+quando viene attivato `Sovrascrivi cadenza e balistica`. Le firearm aggiungono
+`magazineSize`, `reloadDuration`, `firearmAccuracy`, `firearmStability`,
+`firearmHandling` e gli override di mira. Il Pre-Flight usa lo stesso parser dello
+schema e impedisce il salvataggio di combinazioni incomplete o fuori intervallo.
+
+ZIAP non inserisce o rinumera record nell'array: se non esistono slot liberi, chiede
+di aumentare prima il massimo nel database RPG Maker. Le patch restano conservative
+anche per l'array `traits`, quindi campi e notetag sconosciuti non vengono riserializzati.
 
 ## Requisiti
 

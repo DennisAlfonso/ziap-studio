@@ -214,6 +214,34 @@ public sealed class NotetagFoundationTests
     }
 
     [Fact]
+    public void WeaponEditor_ChangingFamilyPreservesCustomCategoriesAndClearsFirearmOnlyTags()
+    {
+        const string source =
+            "<weaponFamily:firearm>\n" +
+            "<weaponSubtype:pistol>\n" +
+            "<magazineSize:12>\n" +
+            "<reloadDuration:1.4>\n" +
+            "<firearmAccuracy:65>\n" +
+            "<custom:keep>\n" +
+            "<Categories>\n" +
+            "AllWeapons\n" +
+            "Firearms\n" +
+            "QuestRewards\n" +
+            "</Categories>";
+
+        var changed = new WeaponAdvancedNoteEditor().ApplyFamilyDefaults(source, "axe");
+
+        Assert.Contains("<weaponFamily:axe>", changed);
+        Assert.Contains("<weaponSubtype:axe>", changed);
+        Assert.Contains("Axes", changed);
+        Assert.Contains("QuestRewards", changed);
+        Assert.Contains("<custom:keep>", changed);
+        Assert.DoesNotContain("Firearms", changed);
+        Assert.DoesNotContain("magazineSize", changed);
+        Assert.DoesNotContain("firearmAccuracy", changed);
+    }
+
+    [Fact]
     public async Task CatalogProvider_LoadsProjectPerksLoreAndLocalizedResources()
     {
         using var workspace = new TestWorkspace();
@@ -246,6 +274,12 @@ public sealed class NotetagFoundationTests
         workspace.WriteFile(
             "data/Items.json",
             "[null,{\"id\":1,\"name\":\"{db[0].partiArmamento}\"}]");
+        workspace.WriteFile(
+            "data/System.json",
+            "{\"weaponTypes\":[\"\",\"Arma\",\"\",\"Arma da fuoco\"],\"equipTypes\":[\"\",\"Arma\"],\"elements\":[\"\",\"Fisico\"]}");
+        workspace.WriteFile(
+            "data/Skills.json",
+            "[null,{\"id\":1,\"name\":\"Colpo test\",\"note\":\"<ABS>\\nrange:10\\nradius:0.2\\nspeed:8\\nreloadTime:0.35\\n</ABS>\"}]");
 
         var catalog = await new WeaponNotetagCatalogProvider(new FileSystemService()).LoadAsync(
             new ZiapProject
@@ -264,5 +298,13 @@ public sealed class NotetagFoundationTests
         Assert.Contains(catalog.DisassemblyResources, option =>
             option.RawValue == "{db[0].partiArmamento}" &&
             option.DisplayName == "Parti Armamento");
+        Assert.Contains(catalog.WeaponTypes, option =>
+            option.Id == 3 && option.DisplayName == "Arma da fuoco");
+        Assert.Contains(catalog.Elements, option =>
+            option.Id == 1 && option.DisplayName == "Fisico");
+        var attackSkill = Assert.Single(catalog.AttackSkills);
+        Assert.Equal("Colpo test", attackSkill.DisplayName);
+        Assert.Equal(0.35, attackSkill.AttackInterval);
+        Assert.Equal(10, attackSkill.AttackRange);
     }
 }

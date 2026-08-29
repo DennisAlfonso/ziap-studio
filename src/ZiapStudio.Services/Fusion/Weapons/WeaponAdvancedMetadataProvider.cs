@@ -24,6 +24,116 @@ public sealed partial class WeaponAdvancedMetadataProvider
         var diagnostics = new List<WeaponNotetagDiagnostic>();
         var recognized = new HashSet<NotetagNode>();
 
+        var family = ReadText(document, "weaponFamily", recognized);
+        var subtype = ReadText(document, "weaponSubtype", recognized);
+        var handedness = ReadInteger(
+            document, "handedness", "weapon.handedness.invalid", recognized, diagnostics, 1, 2);
+        var familyDefinition = WeaponAuthoringSchema.FindFamily(family);
+        if (!string.IsNullOrWhiteSpace(family) && familyDefinition is null)
+        {
+            diagnostics.Add(Error(
+                "weapon.family.unknown",
+                $"Famiglia arma non riconosciuta: {family}."));
+        }
+
+        if (familyDefinition is not null)
+        {
+            if (string.IsNullOrWhiteSpace(subtype))
+            {
+                diagnostics.Add(Error("weapon.subtype.missing", "weaponSubtype non è definito."));
+            }
+
+            if (handedness is null)
+            {
+                diagnostics.Add(Error("weapon.handedness.missing", "handedness non è definito."));
+            }
+        }
+
+        if (familyDefinition?.IsFirearm == true &&
+            !WeaponAuthoringSchema.IsKnownFirearmSubtype(subtype))
+        {
+            diagnostics.Add(Error(
+                "weapon.firearm.subtype.invalid",
+                $"Sottotipo firearm non riconosciuto: {subtype ?? "(mancante)"}."));
+        }
+
+        var combatProfileEnabled = ReadBoolean(
+            document,
+            "weaponCombatProfile",
+            "weapon.combat-profile.invalid",
+            recognized,
+            diagnostics);
+        var damageRate = ReadDouble(
+            document, "attackDamageRate", "weapon.damage-rate.invalid", recognized, diagnostics, 0);
+        var flatDamage = ReadDouble(
+            document, "attackFlatDamage", "weapon.flat-damage.invalid", recognized, diagnostics);
+        var defenseRate = ReadDouble(
+            document, "attackDefenseRate", "weapon.defense-rate.invalid", recognized, diagnostics, 0);
+        var attackInterval = ReadDouble(
+            document, "attackInterval", "weapon.attack-interval.invalid", recognized, diagnostics, 0, exclusiveMinimum: true);
+        var attackRange = ReadDouble(
+            document, "attackRange", "weapon.attack-range.invalid", recognized, diagnostics, 0, exclusiveMinimum: true);
+        var attackRadius = ReadDouble(
+            document, "attackRadius", "weapon.attack-radius.invalid", recognized, diagnostics, 0);
+        var projectileSpeed = ReadDouble(
+            document, "projectileSpeed", "weapon.projectile-speed.invalid", recognized, diagnostics, 0);
+        var projectileColliderRadius = ReadDouble(
+            document,
+            "projectileColliderRadius",
+            "weapon.projectile-collider.invalid",
+            recognized,
+            diagnostics,
+            0,
+            exclusiveMinimum: true);
+
+        var hasCombatProfileTag = FindInline(document, "weaponCombatProfile") is not null;
+        if (familyDefinition is not null && !hasCombatProfileTag)
+        {
+            diagnostics.Add(Warning(
+                "weapon.combat-profile.missing",
+                "weaponCombatProfile non è definito; i valori tecnici dipendono dal fallback dell'abilità."));
+        }
+
+        var magazineSize = ReadInteger(
+            document, "magazineSize", "weapon.firearm.magazine.invalid", recognized, diagnostics, 1);
+        var reloadDuration = ReadDouble(
+            document, "reloadDuration", "weapon.firearm.reload.invalid", recognized, diagnostics, 0);
+        var accuracy = ReadDouble(
+            document, "firearmAccuracy", "weapon.firearm.accuracy.invalid", recognized, diagnostics, 0, 100);
+        var stability = ReadDouble(
+            document, "firearmStability", "weapon.firearm.stability.invalid", recognized, diagnostics, 0, 100);
+        var handling = ReadDouble(
+            document, "firearmHandling", "weapon.firearm.handling.invalid", recognized, diagnostics, 0, 100);
+        var aimMinimumDistance = ReadDouble(
+            document, "firearmAimMinDistance", "weapon.firearm.aim-min.invalid", recognized, diagnostics, 1);
+        var aimMaximumDistance = ReadDouble(
+            document, "firearmAimMaxDistance", "weapon.firearm.aim-max.invalid", recognized, diagnostics, 1);
+        var aimMovementMultiplier = ReadDouble(
+            document,
+            "firearmAimMovementMultiplier",
+            "weapon.firearm.aim-movement.invalid",
+            recognized,
+            diagnostics,
+            0,
+            1,
+            exclusiveMinimum: true);
+
+        if (familyDefinition?.IsFirearm == true)
+        {
+            Require(magazineSize, "weapon.firearm.magazine.missing", "magazineSize non è definito.", diagnostics);
+            Require(reloadDuration, "weapon.firearm.reload.missing", "reloadDuration non è definito.", diagnostics);
+            Require(accuracy, "weapon.firearm.accuracy.missing", "firearmAccuracy non è definito.", diagnostics);
+            Require(stability, "weapon.firearm.stability.missing", "firearmStability non è definito.", diagnostics);
+            Require(handling, "weapon.firearm.handling.missing", "firearmHandling non è definito.", diagnostics);
+            if (aimMinimumDistance is not null && aimMaximumDistance is not null &&
+                aimMinimumDistance > aimMaximumDistance)
+            {
+                diagnostics.Add(Error(
+                    "weapon.firearm.aim-range.invalid",
+                    "La distanza minima di mira supera la distanza massima."));
+            }
+        }
+
         var perkNode = FindInline(document, "perk");
         IReadOnlyList<string> perks = ["random", "random", "nullo"];
         if (perkNode is not null)
@@ -265,6 +375,36 @@ public sealed partial class WeaponAdvancedMetadataProvider
             DisassemblyResults = disassembly,
             HasDisassemblyBlock = disassemblyNode is not null,
             HideItemIcon = hideIconNode is not null,
+            Classification = new WeaponClassificationMetadata
+            {
+                Family = family,
+                Subtype = subtype,
+                Handedness = handedness,
+            },
+            CombatProfile = new WeaponCombatProfileMetadata
+            {
+                HasProfileTag = hasCombatProfileTag,
+                Enabled = combatProfileEnabled == true,
+                DamageRate = damageRate,
+                FlatDamage = flatDamage,
+                DefenseRate = defenseRate,
+                AttackInterval = attackInterval,
+                AttackRange = attackRange,
+                AttackRadius = attackRadius,
+                ProjectileSpeed = projectileSpeed,
+                ProjectileColliderRadius = projectileColliderRadius,
+            },
+            Firearm = new WeaponFirearmMetadata
+            {
+                MagazineSize = magazineSize,
+                ReloadDuration = reloadDuration,
+                Accuracy = accuracy,
+                Stability = stability,
+                Handling = handling,
+                AimMinimumDistance = aimMinimumDistance,
+                AimMaximumDistance = aimMaximumDistance,
+                AimMovementMultiplier = aimMovementMultiplier,
+            },
             RecognizedInlineTagCount = recognized.Count(node => node is InlineNotetagNode),
             RecognizedBlockCount = recognized.Count(node => node is BlockNotetagNode),
             UnmanagedLineCount = unmanagedCount,
@@ -279,6 +419,96 @@ public sealed partial class WeaponAdvancedMetadataProvider
     private static InlineNotetagNode? FindInline(NotetagDocument document, string name) =>
         document.InlineTags.FirstOrDefault(node =>
             node.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+
+    private static string? ReadText(
+        NotetagDocument document,
+        string name,
+        ISet<NotetagNode> recognized)
+    {
+        var node = FindInline(document, name);
+        if (node is null)
+        {
+            return null;
+        }
+
+        recognized.Add(node);
+        return string.IsNullOrWhiteSpace(node.Value) ? null : node.Value.Trim();
+    }
+
+    private static bool? ReadBoolean(
+        NotetagDocument document,
+        string name,
+        string diagnosticCode,
+        ISet<NotetagNode> recognized,
+        ICollection<WeaponNotetagDiagnostic> diagnostics)
+    {
+        var node = FindInline(document, name);
+        if (node is null)
+        {
+            return null;
+        }
+
+        recognized.Add(node);
+        if (node.Value is not null && bool.TryParse(node.Value, out var value))
+        {
+            return value;
+        }
+
+        diagnostics.Add(Error(diagnosticCode, $"{name} deve essere true o false."));
+        return null;
+    }
+
+    private static double? ReadDouble(
+        NotetagDocument document,
+        string name,
+        string diagnosticCode,
+        ISet<NotetagNode> recognized,
+        ICollection<WeaponNotetagDiagnostic> diagnostics,
+        double? minimum = null,
+        double? maximum = null,
+        bool exclusiveMinimum = false)
+    {
+        var node = FindInline(document, name);
+        if (node is null)
+        {
+            return null;
+        }
+
+        recognized.Add(node);
+        if (!double.TryParse(
+            node.Value,
+            NumberStyles.Float,
+            CultureInfo.InvariantCulture,
+            out var value) || !double.IsFinite(value))
+        {
+            diagnostics.Add(Error(diagnosticCode, $"{name} deve contenere un numero."));
+            return null;
+        }
+
+        if (minimum is not null && (exclusiveMinimum ? value <= minimum.Value : value < minimum.Value) ||
+            maximum is not null && value > maximum.Value)
+        {
+            var lower = exclusiveMinimum ? $"maggiore di {minimum}" : $"almeno {minimum}";
+            diagnostics.Add(Error(diagnosticCode, maximum is null
+                ? $"{name} deve essere {lower}."
+                : $"{name} deve essere compreso tra {minimum} e {maximum}."));
+        }
+
+        return value;
+    }
+
+    private static void Require<T>(
+        T? value,
+        string code,
+        string message,
+        ICollection<WeaponNotetagDiagnostic> diagnostics)
+        where T : struct
+    {
+        if (value is null)
+        {
+            diagnostics.Add(Error(code, message));
+        }
+    }
 
     private static int? ReadInteger(
         NotetagDocument document,

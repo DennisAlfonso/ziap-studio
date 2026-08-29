@@ -8,6 +8,14 @@ public sealed record WeaponNotetagCatalog
 
     public IReadOnlyList<WeaponDisassemblyResourceOption> DisassemblyResources { get; init; } = [];
 
+    public IReadOnlyList<WeaponAttackSkillOption> AttackSkills { get; init; } = [];
+
+    public IReadOnlyList<WeaponDatabaseOption> WeaponTypes { get; init; } = [];
+
+    public IReadOnlyList<WeaponDatabaseOption> EquipTypes { get; init; } = [];
+
+    public IReadOnlyList<WeaponDatabaseOption> Elements { get; init; } = [];
+
     public IReadOnlyList<WeaponCustomParameterOption> CustomParameters { get; init; } =
         [new(1, "Maestria Hex")];
 
@@ -35,3 +43,20 @@ public sealed record WeaponLoreOption(string Key, string Title, int Id);
 public sealed record WeaponDisassemblyResourceOption(string RawValue, string DisplayName);
 
 public sealed record WeaponCustomParameterOption(int Id, string DisplayName);
+
+public sealed record WeaponDatabaseOption(int Id, string DisplayName)
+{
+    public string Label => $"{DisplayName} · #{Id}";
+}
+
+public sealed record WeaponAttackSkillOption(
+    int Id,
+    string DisplayName,
+    double? AttackInterval,
+    double? AttackRange,
+    double? AttackRadius,
+    double? ProjectileSpeed,
+    double? ProjectileColliderRadius)
+{
+    public string Label => $"{DisplayName} · #{Id}";
+}

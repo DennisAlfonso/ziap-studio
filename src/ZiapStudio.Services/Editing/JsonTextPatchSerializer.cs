@@ -133,7 +133,7 @@ public sealed class JsonTextPatchSerializer
             var scalarKey = new ChangeKey(currentRecordIndex.Value, propertyName, null);
             if (requestedChanges.TryGetValue(scalarKey, out var scalarChange))
             {
-                AddScalarPatch(reader, scalarChange, patches);
+                AddValuePatch(ref reader, scalarChange, patches);
                 continue;
             }
 
@@ -187,6 +187,28 @@ public sealed class JsonTextPatchSerializer
         patches.Add(new JsonPatch(
             change.Key,
             checked((int)reader.TokenStartIndex),
+            checked((int)reader.BytesConsumed),
+            change.Replacement));
+    }
+
+    private static void AddValuePatch(
+        ref Utf8JsonReader reader,
+        RequestedChange change,
+        ICollection<JsonPatch> patches)
+    {
+        var start = checked((int)reader.TokenStartIndex);
+        if (reader.TokenType is JsonTokenType.StartArray or JsonTokenType.StartObject)
+        {
+            reader.Skip();
+        }
+        else if (!IsScalar(reader.TokenType))
+        {
+            throw new JsonException($"{change.Key} non punta a un valore JSON supportato.");
+        }
+
+        patches.Add(new JsonPatch(
+            change.Key,
+            start,
             checked((int)reader.BytesConsumed),
             change.Replacement));
     }

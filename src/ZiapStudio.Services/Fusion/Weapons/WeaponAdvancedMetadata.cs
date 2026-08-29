@@ -48,6 +48,12 @@ public sealed record WeaponAdvancedMetadata
 
     public bool HideItemIcon { get; init; }
 
+    public WeaponClassificationMetadata Classification { get; init; } = new();
+
+    public WeaponCombatProfileMetadata CombatProfile { get; init; } = new();
+
+    public WeaponFirearmMetadata Firearm { get; init; } = new();
+
     public int RecognizedInlineTagCount { get; init; }
 
     public int RecognizedBlockCount { get; init; }
@@ -55,6 +61,59 @@ public sealed record WeaponAdvancedMetadata
     public int UnmanagedLineCount { get; init; }
 
     public IReadOnlyList<WeaponNotetagDiagnostic> Diagnostics { get; init; } = [];
+}
+
+public sealed record WeaponClassificationMetadata
+{
+    public string? Family { get; init; }
+
+    public string? Subtype { get; init; }
+
+    public int? Handedness { get; init; }
+
+    public bool IsFirearm => Family?.Equals("firearm", StringComparison.OrdinalIgnoreCase) == true;
+}
+
+public sealed record WeaponCombatProfileMetadata
+{
+    public bool HasProfileTag { get; init; }
+
+    public bool Enabled { get; init; }
+
+    public double? DamageRate { get; init; }
+
+    public double? FlatDamage { get; init; }
+
+    public double? DefenseRate { get; init; }
+
+    public double? AttackInterval { get; init; }
+
+    public double? AttackRange { get; init; }
+
+    public double? AttackRadius { get; init; }
+
+    public double? ProjectileSpeed { get; init; }
+
+    public double? ProjectileColliderRadius { get; init; }
+}
+
+public sealed record WeaponFirearmMetadata
+{
+    public int? MagazineSize { get; init; }
+
+    public double? ReloadDuration { get; init; }
+
+    public double? Accuracy { get; init; }
+
+    public double? Stability { get; init; }
+
+    public double? Handling { get; init; }
+
+    public double? AimMinimumDistance { get; init; }
+
+    public double? AimMaximumDistance { get; init; }
+
+    public double? AimMovementMultiplier { get; init; }
 }
 
 public sealed record WeaponCustomParameterMetadata(int Id, int Value);

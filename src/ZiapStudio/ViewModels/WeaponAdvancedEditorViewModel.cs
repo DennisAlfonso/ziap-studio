@@ -29,6 +29,7 @@ public sealed class WeaponAdvancedEditorViewModel : INotifyPropertyChanged
     private readonly WeaponNotetagCatalog _catalog;
     private readonly WeaponAdvancedMetadataProvider _metadataProvider = new();
     private readonly WeaponAdvancedNoteEditor _editor = new();
+    private readonly WeaponCreationService _creationService = new();
     private bool _isRefreshing;
     private bool _isApplying;
     private IReadOnlyList<WeaponStringOptionViewModel> _perkColumnOneOptions = [];
@@ -50,7 +51,36 @@ public sealed class WeaponAdvancedEditorViewModel : INotifyPropertyChanged
     private string _loreStatusText = "Nessuna lore associata";
     private string _sourceSummary = string.Empty;
     private string _rawSource = string.Empty;
-    private bool _isExpanded;
+    private bool _isExpanded = true;
+    private WeaponFamilyDefinition? _selectedWeaponFamily;
+    private IReadOnlyList<WeaponSubtypeDefinition> _weaponSubtypeOptions = [];
+    private WeaponSubtypeDefinition? _selectedWeaponSubtype;
+    private double _handedness = 1;
+    private bool _combatProfileEnabled;
+    private double _damageRate = 1;
+    private double _flatDamage;
+    private double _defenseRate = 1;
+    private double _attackInterval = 1.2;
+    private double _attackRange = 1;
+    private double _attackRadius = 0.35;
+    private double _projectileSpeed;
+    private double _projectileColliderRadius = 8;
+    private double _magazineSize = 12;
+    private double _reloadDuration = 1.4;
+    private double _firearmAccuracy = 65;
+    private double _firearmStability = 55;
+    private double _firearmHandling = 80;
+    private double _aimMinimumDistance = 4;
+    private double _aimMaximumDistance = 7;
+    private double _aimMovementMultiplier = 0.25;
+    private double _attackSkillId = 1;
+    private double _attackElementId = 1;
+    private IReadOnlyList<WeaponAttackSkillOption> _attackSkillOptions = [];
+    private WeaponAttackSkillOption? _selectedAttackSkill;
+    private IReadOnlyList<WeaponDatabaseOption> _attackElementOptions = [];
+    private WeaponDatabaseOption? _selectedAttackElement;
+    private bool _hasDamageOverrides;
+    private bool _hasAttackBehaviorOverrides;
 
     public WeaponAdvancedEditorViewModel(
         int entryId,
@@ -71,9 +101,9 @@ public sealed class WeaponAdvancedEditorViewModel : INotifyPropertyChanged
 
     public string HeaderText => HasPreflightIssues
         ? PreflightIssues.Count == 1
-            ? "Avanzate · 1 problema"
-            : $"Avanzate · {PreflightIssues.Count} problemi"
-        : "Avanzate";
+            ? "Weapon Editor · 1 problema"
+            : $"Weapon Editor · {PreflightIssues.Count} problemi"
+        : "Weapon Editor";
 
     public bool IsExpanded
     {
@@ -82,6 +112,278 @@ public sealed class WeaponAdvancedEditorViewModel : INotifyPropertyChanged
     }
 
     public IReadOnlyList<WeaponRarityOptionViewModel> RarityOptions => RarityChoices;
+
+    public IReadOnlyList<WeaponFamilyDefinition> WeaponFamilyOptions => WeaponAuthoringSchema.Families;
+
+    public WeaponFamilyDefinition? SelectedWeaponFamily
+    {
+        get => _selectedWeaponFamily;
+        set
+        {
+            if (value is null || !SetProperty(ref _selectedWeaponFamily, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(IsFirearm));
+            if (!_isRefreshing)
+            {
+                Apply(note => _editor.ApplyFamilyClassification(note, value.Id));
+            }
+        }
+    }
+
+    public IReadOnlyList<WeaponSubtypeDefinition> WeaponSubtypeOptions
+    {
+        get => _weaponSubtypeOptions;
+        private set => SetProperty(ref _weaponSubtypeOptions, value);
+    }
+
+    public WeaponSubtypeDefinition? SelectedWeaponSubtype
+    {
+        get => _selectedWeaponSubtype;
+        set
+        {
+            if (value is not null && SetProperty(ref _selectedWeaponSubtype, value) && !_isRefreshing)
+            {
+                Apply(note => _editor.SetWeaponSubtype(note, value.Id));
+            }
+        }
+    }
+
+    public bool IsFirearm => SelectedWeaponFamily?.IsFirearm == true;
+
+    public IReadOnlyList<WeaponAttackSkillOption> AttackSkillOptions
+    {
+        get => _attackSkillOptions;
+        private set => SetProperty(ref _attackSkillOptions, value);
+    }
+
+    public WeaponAttackSkillOption? SelectedAttackSkill
+    {
+        get => _selectedAttackSkill;
+        set
+        {
+            if (value is not null && SetProperty(ref _selectedAttackSkill, value) && !_isRefreshing)
+            {
+                AttackSkillId = value.Id;
+            }
+        }
+    }
+
+    public IReadOnlyList<WeaponDatabaseOption> AttackElementOptions
+    {
+        get => _attackElementOptions;
+        private set => SetProperty(ref _attackElementOptions, value);
+    }
+
+    public WeaponDatabaseOption? SelectedAttackElement
+    {
+        get => _selectedAttackElement;
+        set
+        {
+            if (value is not null && SetProperty(ref _selectedAttackElement, value) && !_isRefreshing)
+            {
+                AttackElementId = value.Id;
+            }
+        }
+    }
+
+    public bool HasDamageOverrides
+    {
+        get => _hasDamageOverrides;
+        set
+        {
+            if (!SetProperty(ref _hasDamageOverrides, value) || _isRefreshing)
+            {
+                return;
+            }
+
+            Apply(note => value
+                ? _editor.SetDefenseRate(
+                    _editor.SetFlatDamage(
+                        _editor.SetDamageRate(note, DamageRate),
+                        FlatDamage),
+                    DefenseRate)
+                : _editor.ClearDamageOverrides(note));
+        }
+    }
+
+    public bool HasAttackBehaviorOverrides
+    {
+        get => _hasAttackBehaviorOverrides;
+        set
+        {
+            if (!SetProperty(ref _hasAttackBehaviorOverrides, value) || _isRefreshing)
+            {
+                return;
+            }
+
+            Apply(note => value
+                ? SetAttackBehaviorOverrides(note)
+                : _editor.ClearAttackBehaviorOverrides(note));
+        }
+    }
+
+    public string AttackSkillOriginText => SelectedAttackSkill is null
+        ? "Skill di attacco non risolta: i fallback ABS non sono disponibili."
+        : HasAttackBehaviorOverrides
+            ? $"Override dell'arma · base: {SelectedAttackSkill.DisplayName} (#{SelectedAttackSkill.Id})"
+            : $"Ereditato da {SelectedAttackSkill.DisplayName} (#{SelectedAttackSkill.Id})";
+
+    public string SkillAttackBehaviorText => SelectedAttackSkill is null
+        ? "Intervallo — · Portata — · Raggio — · Velocità —"
+        : $"Intervallo {FormatValue(SelectedAttackSkill.AttackInterval, "s")} · " +
+          $"Portata {FormatValue(SelectedAttackSkill.AttackRange, "tile")} · " +
+          $"Raggio {FormatValue(SelectedAttackSkill.AttackRadius, "tile")} · " +
+          $"Velocità {FormatValue(SelectedAttackSkill.ProjectileSpeed, string.Empty)}";
+
+    public double Handedness
+    {
+        get => _handedness;
+        set => SetIntegerSchemaValue(ref _handedness, value, 1, 2,
+            normalized => Apply(note => _editor.SetHandedness(note, normalized)));
+    }
+
+    public bool CombatProfileEnabled
+    {
+        get => _combatProfileEnabled;
+        set
+        {
+            if (SetProperty(ref _combatProfileEnabled, value) && !_isRefreshing)
+            {
+                Apply(note => _editor.SetCombatProfileEnabled(note, value));
+            }
+        }
+    }
+
+    public double DamageRate
+    {
+        get => _damageRate;
+        set => SetSchemaValue(ref _damageRate, value, 0, double.MaxValue,
+            normalized => Apply(note => _editor.SetDamageRate(note, normalized)));
+    }
+
+    public double FlatDamage
+    {
+        get => _flatDamage;
+        set => SetSchemaValue(ref _flatDamage, value, double.MinValue, double.MaxValue,
+            normalized => Apply(note => _editor.SetFlatDamage(note, normalized)));
+    }
+
+    public double DefenseRate
+    {
+        get => _defenseRate;
+        set => SetSchemaValue(ref _defenseRate, value, 0, double.MaxValue,
+            normalized => Apply(note => _editor.SetDefenseRate(note, normalized)));
+    }
+
+    public double AttackInterval
+    {
+        get => _attackInterval;
+        set => SetSchemaValue(ref _attackInterval, value, 0, double.MaxValue,
+            normalized => Apply(note => _editor.SetAttackInterval(note, normalized)));
+    }
+
+    public double AttackRange
+    {
+        get => _attackRange;
+        set => SetSchemaValue(ref _attackRange, value, 0.01, double.MaxValue,
+            normalized => Apply(note => _editor.SetAttackRange(note, normalized)));
+    }
+
+    public double AttackRadius
+    {
+        get => _attackRadius;
+        set => SetSchemaValue(ref _attackRadius, value, 0, double.MaxValue,
+            normalized => Apply(note => _editor.SetAttackRadius(note, normalized)));
+    }
+
+    public double ProjectileSpeed
+    {
+        get => _projectileSpeed;
+        set => SetSchemaValue(ref _projectileSpeed, value, 0, double.MaxValue,
+            normalized => Apply(note => _editor.SetProjectileSpeed(note, normalized)));
+    }
+
+    public double ProjectileColliderRadius
+    {
+        get => _projectileColliderRadius;
+        set => SetSchemaValue(ref _projectileColliderRadius, value, 0.01, double.MaxValue,
+            normalized => Apply(note => _editor.SetProjectileColliderRadius(note, normalized)));
+    }
+
+    public double MagazineSize
+    {
+        get => _magazineSize;
+        set => SetIntegerSchemaValue(ref _magazineSize, value, 1, int.MaxValue,
+            normalized => Apply(note => _editor.SetMagazineSize(note, normalized)));
+    }
+
+    public double ReloadDuration
+    {
+        get => _reloadDuration;
+        set => SetSchemaValue(ref _reloadDuration, value, 0, double.MaxValue,
+            normalized => Apply(note => _editor.SetReloadDuration(note, normalized)));
+    }
+
+    public double FirearmAccuracy
+    {
+        get => _firearmAccuracy;
+        set => SetSchemaValue(ref _firearmAccuracy, value, 0, 100,
+            normalized => Apply(note => _editor.SetFirearmAccuracy(note, normalized)));
+    }
+
+    public double FirearmStability
+    {
+        get => _firearmStability;
+        set => SetSchemaValue(ref _firearmStability, value, 0, 100,
+            normalized => Apply(note => _editor.SetFirearmStability(note, normalized)));
+    }
+
+    public double FirearmHandling
+    {
+        get => _firearmHandling;
+        set => SetSchemaValue(ref _firearmHandling, value, 0, 100,
+            normalized => Apply(note => _editor.SetFirearmHandling(note, normalized)));
+    }
+
+    public double AimMinimumDistance
+    {
+        get => _aimMinimumDistance;
+        set => SetSchemaValue(ref _aimMinimumDistance, value, 1, double.MaxValue,
+            normalized => Apply(note => _editor.SetFirearmAimMinimumDistance(note, normalized)));
+    }
+
+    public double AimMaximumDistance
+    {
+        get => _aimMaximumDistance;
+        set => SetSchemaValue(ref _aimMaximumDistance, value, 1, double.MaxValue,
+            normalized => Apply(note => _editor.SetFirearmAimMaximumDistance(note, normalized)));
+    }
+
+    public double AimMovementMultiplier
+    {
+        get => _aimMovementMultiplier;
+        set => SetSchemaValue(ref _aimMovementMultiplier, value, 0.01, 1,
+            normalized => Apply(note => _editor.SetFirearmAimMovementMultiplier(note, normalized)));
+    }
+
+    public double AttackSkillId
+    {
+        get => _attackSkillId;
+        set => SetIntegerSchemaValue(ref _attackSkillId, value, 1, int.MaxValue,
+            normalized => ApplyStandardField(() => _creationService.SetAttackSkill(
+                _session, _entryId, normalized)));
+    }
+
+    public double AttackElementId
+    {
+        get => _attackElementId;
+        set => SetIntegerSchemaValue(ref _attackElementId, value, 0, int.MaxValue,
+            normalized => ApplyStandardField(() => _creationService.SetAttackElement(
+                _session, _entryId, normalized)));
+    }
 
     public IReadOnlyList<WeaponStringOptionViewModel> PerkColumnOneOptions
     {
@@ -298,6 +600,7 @@ public sealed class WeaponAdvancedEditorViewModel : INotifyPropertyChanged
             var note = ReadNote();
             var metadata = _metadataProvider.Parse(note, _catalog);
             RawSource = note;
+            RebuildWeaponSchema(metadata);
             RebuildPerks(metadata);
             _selectedRarity = RarityChoices.FirstOrDefault(option => option.Value == metadata.Rarity) ??
                 RarityChoices[0];
@@ -437,11 +740,158 @@ public sealed class WeaponAdvancedEditorViewModel : INotifyPropertyChanged
         RefreshFromSession();
     }
 
+    private void ApplyStandardField(Action mutation)
+    {
+        if (_isRefreshing)
+        {
+            return;
+        }
+
+        _isApplying = true;
+        try
+        {
+            mutation();
+        }
+        finally
+        {
+            _isApplying = false;
+        }
+
+        RefreshFromSession();
+    }
+
     private string ReadNote() =>
         _session.TryGetValue(_entryId, "note", out var node) &&
         node is JsonValue value && value.TryGetValue<string>(out var note)
             ? note
             : string.Empty;
+
+    private void RebuildWeaponSchema(WeaponAdvancedMetadata metadata)
+    {
+        _selectedWeaponFamily = WeaponAuthoringSchema.FindFamily(metadata.Classification.Family);
+        OnPropertyChanged(nameof(SelectedWeaponFamily));
+        OnPropertyChanged(nameof(IsFirearm));
+
+        var subtype = metadata.Classification.Subtype?.Trim();
+        var subtypeOptions = (_selectedWeaponFamily?.IsFirearm == true
+                ? WeaponAuthoringSchema.FirearmSubtypes
+                : _selectedWeaponFamily is null
+                    ? Array.Empty<WeaponSubtypeDefinition>()
+                    : [new WeaponSubtypeDefinition(
+                        _selectedWeaponFamily.DefaultSubtype,
+                        _selectedWeaponFamily.DisplayName)])
+            .ToList();
+        if (!string.IsNullOrWhiteSpace(subtype) && subtypeOptions.All(option =>
+            !option.Id.Equals(subtype, StringComparison.OrdinalIgnoreCase)))
+        {
+            subtypeOptions.Add(new WeaponSubtypeDefinition(subtype, $"Non riconosciuto · {subtype}"));
+        }
+
+        WeaponSubtypeOptions = subtypeOptions;
+        _selectedWeaponSubtype = subtypeOptions.FirstOrDefault(option => option.Id.Equals(
+            subtype,
+            StringComparison.OrdinalIgnoreCase));
+        OnPropertyChanged(nameof(SelectedWeaponSubtype));
+
+        _handedness = metadata.Classification.Handedness ?? 1;
+        _combatProfileEnabled = metadata.CombatProfile.Enabled;
+        _hasDamageOverrides = metadata.CombatProfile.DamageRate is not null ||
+            metadata.CombatProfile.FlatDamage is not null ||
+            metadata.CombatProfile.DefenseRate is not null;
+        _hasAttackBehaviorOverrides = metadata.CombatProfile.AttackInterval is not null ||
+            metadata.CombatProfile.AttackRange is not null ||
+            metadata.CombatProfile.AttackRadius is not null ||
+            metadata.CombatProfile.ProjectileSpeed is not null ||
+            metadata.CombatProfile.ProjectileColliderRadius is not null;
+        _attackSkillId = ReadTraitDataId(35, 1);
+        RebuildAttackSkillOptions(checked((int)_attackSkillId));
+        _attackElementId = ReadTraitDataId(31, 1);
+        RebuildAttackElementOptions(checked((int)_attackElementId));
+        _damageRate = metadata.CombatProfile.DamageRate ?? 1;
+        _flatDamage = metadata.CombatProfile.FlatDamage ?? 0;
+        _defenseRate = metadata.CombatProfile.DefenseRate ?? 1;
+        _attackInterval = metadata.CombatProfile.AttackInterval ?? _selectedAttackSkill?.AttackInterval ?? 1.2;
+        _attackRange = metadata.CombatProfile.AttackRange ?? _selectedAttackSkill?.AttackRange ?? 1;
+        _attackRadius = metadata.CombatProfile.AttackRadius ?? _selectedAttackSkill?.AttackRadius ?? 0.35;
+        _projectileSpeed = metadata.CombatProfile.ProjectileSpeed ?? _selectedAttackSkill?.ProjectileSpeed ?? 0;
+        _projectileColliderRadius = metadata.CombatProfile.ProjectileColliderRadius ??
+            _selectedAttackSkill?.ProjectileColliderRadius ?? 8;
+        _magazineSize = metadata.Firearm.MagazineSize ?? 12;
+        _reloadDuration = metadata.Firearm.ReloadDuration ?? 1.4;
+        _firearmAccuracy = metadata.Firearm.Accuracy ?? 65;
+        _firearmStability = metadata.Firearm.Stability ?? 55;
+        _firearmHandling = metadata.Firearm.Handling ?? 80;
+        _aimMinimumDistance = metadata.Firearm.AimMinimumDistance ?? 4;
+        _aimMaximumDistance = metadata.Firearm.AimMaximumDistance ?? 7;
+        _aimMovementMultiplier = metadata.Firearm.AimMovementMultiplier ?? 0.25;
+        foreach (var propertyName in new[]
+        {
+            nameof(Handedness), nameof(CombatProfileEnabled), nameof(DamageRate),
+            nameof(FlatDamage), nameof(DefenseRate), nameof(AttackInterval),
+            nameof(AttackRange), nameof(AttackRadius), nameof(ProjectileSpeed),
+            nameof(ProjectileColliderRadius), nameof(MagazineSize), nameof(ReloadDuration),
+            nameof(FirearmAccuracy), nameof(FirearmStability), nameof(FirearmHandling),
+            nameof(AimMinimumDistance), nameof(AimMaximumDistance),
+            nameof(AimMovementMultiplier), nameof(AttackSkillId), nameof(AttackElementId),
+            nameof(SelectedAttackSkill), nameof(SelectedAttackElement), nameof(HasDamageOverrides),
+            nameof(HasAttackBehaviorOverrides), nameof(AttackSkillOriginText),
+            nameof(SkillAttackBehaviorText),
+        })
+        {
+            OnPropertyChanged(propertyName);
+        }
+    }
+
+    private void RebuildAttackSkillOptions(int currentId)
+    {
+        var options = _catalog.AttackSkills.ToList();
+        if (options.All(option => option.Id != currentId))
+        {
+            options.Add(new WeaponAttackSkillOption(
+                currentId,
+                $"Abilità non risolta {currentId}",
+                null,
+                null,
+                null,
+                null,
+                null));
+        }
+
+        AttackSkillOptions = options.OrderBy(option => option.Id).ToArray();
+        _selectedAttackSkill = AttackSkillOptions.First(option => option.Id == currentId);
+    }
+
+    private void RebuildAttackElementOptions(int currentId)
+    {
+        var options = _catalog.Elements.ToList();
+        if (options.All(option => option.Id != currentId))
+        {
+            options.Add(new WeaponDatabaseOption(currentId, $"Elemento non risolto {currentId}"));
+        }
+
+        AttackElementOptions = options.OrderBy(option => option.Id).ToArray();
+        _selectedAttackElement = AttackElementOptions.First(option => option.Id == currentId);
+    }
+
+    private int ReadTraitDataId(int code, int fallback)
+    {
+        if (!_session.TryGetValue(_entryId, "traits", out var node) || node is not JsonArray traits)
+        {
+            return fallback;
+        }
+
+        foreach (var trait in traits.OfType<JsonObject>())
+        {
+            if (trait["code"] is JsonValue codeValue && codeValue.TryGetValue<int>(out var traitCode) &&
+                traitCode == code && trait["dataId"] is JsonValue dataValue &&
+                dataValue.TryGetValue<int>(out var dataId))
+            {
+                return dataId;
+            }
+        }
+
+        return fallback;
+    }
 
     private void RebuildPerks(WeaponAdvancedMetadata metadata)
     {
@@ -583,6 +1033,60 @@ public sealed class WeaponAdvancedEditorViewModel : INotifyPropertyChanged
         normalized = value;
         return !double.IsNaN(value) && !double.IsInfinity(value) &&
             value >= 1 && value <= int.MaxValue && value == Math.Truncate(value);
+    }
+
+    private string SetAttackBehaviorOverrides(string note)
+    {
+        var updated = _editor.SetAttackInterval(note, AttackInterval);
+        updated = _editor.SetAttackRange(updated, AttackRange);
+        updated = _editor.SetAttackRadius(updated, AttackRadius);
+        updated = _editor.SetProjectileSpeed(updated, ProjectileSpeed);
+        return _editor.SetProjectileColliderRadius(updated, ProjectileColliderRadius);
+    }
+
+    private static string FormatValue(double? value, string unit) => value is null
+        ? "—"
+        : $"{value.Value:0.##}{(unit.Length == 0 ? string.Empty : $" {unit}")}";
+
+    private void SetSchemaValue(
+        ref double field,
+        double value,
+        double minimum,
+        double maximum,
+        Action<double> mutation,
+        [CallerMemberName] string? propertyName = null)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value < minimum || value > maximum)
+        {
+            OnPropertyChanged(propertyName);
+            return;
+        }
+
+        if (SetProperty(ref field, value, propertyName) && !_isRefreshing)
+        {
+            mutation(value);
+        }
+    }
+
+    private void SetIntegerSchemaValue(
+        ref double field,
+        double value,
+        int minimum,
+        int maximum,
+        Action<int> mutation,
+        [CallerMemberName] string? propertyName = null)
+    {
+        if (double.IsNaN(value) || double.IsInfinity(value) || value != Math.Truncate(value) ||
+            value < minimum || value > maximum)
+        {
+            OnPropertyChanged(propertyName);
+            return;
+        }
+
+        if (SetProperty(ref field, value, propertyName) && !_isRefreshing)
+        {
+            mutation(checked((int)value));
+        }
     }
 
     private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

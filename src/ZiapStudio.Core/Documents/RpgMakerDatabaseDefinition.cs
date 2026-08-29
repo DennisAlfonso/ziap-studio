@@ -55,6 +55,8 @@ public sealed record RpgMakerDatabaseFieldDefinition
 public enum RpgMakerEditorKind
 {
     ReadOnly,
+    Text,
+    MultilineText,
     Number,
     ReferenceComboBox,
 }

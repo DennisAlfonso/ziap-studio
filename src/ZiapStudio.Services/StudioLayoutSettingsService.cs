@@ -7,7 +7,7 @@ public sealed record StudioLayoutSettings
     public const int DefaultWindowWidth = 1600;
     public const int DefaultWindowHeight = 950;
     public const double DefaultExplorerWidth = 300;
-    public const double DefaultDatabaseListWidth = 620;
+    public const double DefaultDatabaseListWidth = 460;
 
     public int SchemaVersion { get; init; } = 1;
 
