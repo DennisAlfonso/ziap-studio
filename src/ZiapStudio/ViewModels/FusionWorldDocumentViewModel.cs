@@ -1,0 +1,134 @@
+using System.ComponentModel;
+using System.Runtime.CompilerServices;
+using Microsoft.UI.Xaml.Media.Imaging;
+using ZiapStudio.Core.Documents;
+using ZiapStudio.Core.Fusion.World;
+
+namespace ZiapStudio.ViewModels;
+
+public sealed class FusionWorldDocumentViewModel : INotifyPropertyChanged
+{
+    private FusionWorldTileset? _selectedTileset;
+    private FusionWorldAsset? _selectedAsset;
+    private BitmapImage? _selectedAssetPreview;
+
+    public FusionWorldDocumentViewModel(FusionWorldWorkspaceDocument document)
+    {
+        Document = document;
+        SelectedTileset = Tilesets.FirstOrDefault(tileset => tileset.IsInUse) ?? Tilesets.FirstOrDefault();
+        SelectedAsset = Assets.FirstOrDefault(asset => asset.Exists && !asset.IsOrphan) ?? Assets.FirstOrDefault();
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    public FusionWorldWorkspaceDocument Document { get; }
+
+    public IReadOnlyList<FusionWorldTileset> Tilesets => Document.Tilesets;
+
+    public IReadOnlyList<FusionWorldAsset> Assets => Document.Assets;
+
+    public IReadOnlyList<FusionWorldMap> Maps => Document.Maps;
+
+    public IReadOnlyList<FusionWorldDiagnostic> Diagnostics => Document.Diagnostics;
+
+    public string WorkspaceStatusText => Document.ErrorCount > 0
+        ? $"{Document.ErrorCount} errori · {Document.WarningCount} avvisi"
+        : $"{Document.UsedTilesetCount} tileset in uso · nessun errore";
+
+    public string InventoryText =>
+        $"{Document.UsedTilesetCount} tileset in uso · {Assets.Count} asset · " +
+        $"{Document.OrganizedCategoryCount} categorie";
+
+    public string AssetAuditText =>
+        $"{Document.MissingAssetCount} mancanti · {Document.OrphanAssetCount} orfani · " +
+        $"{Document.DuplicateAssetCount} duplicati";
+
+    public FusionWorldTileset? SelectedTileset
+    {
+        get => _selectedTileset;
+        set
+        {
+            if (ReferenceEquals(_selectedTileset, value))
+            {
+                return;
+            }
+            _selectedTileset = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedTilesetSlots));
+            OnPropertyChanged(nameof(SelectedTilesetMaps));
+            OnPropertyChanged(nameof(SelectedTilesetStatusText));
+        }
+    }
+
+    public IReadOnlyList<FusionWorldTilesetSlot> SelectedTilesetSlots =>
+        SelectedTileset?.Slots ?? [];
+
+    public IReadOnlyList<FusionWorldMapUsage> SelectedTilesetMaps =>
+        SelectedTileset?.Maps ?? [];
+
+    public string SelectedTilesetStatusText => SelectedTileset is null
+        ? "Seleziona un tileset"
+        : $"{SelectedTileset.MapCountText} · {SelectedTileset.AssetCount} sheet · " +
+          $"{SelectedTileset.MissingAssetCount} mancanti";
+
+    public FusionWorldAsset? SelectedAsset
+    {
+        get => _selectedAsset;
+        set
+        {
+            if (ReferenceEquals(_selectedAsset, value))
+            {
+                return;
+            }
+            _selectedAsset = value;
+            SelectedAssetPreview = CreatePreview(value);
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedAssetTilesets));
+            OnPropertyChanged(nameof(SelectedAssetMaps));
+            OnPropertyChanged(nameof(SelectedAssetStatusText));
+        }
+    }
+
+    public IReadOnlyList<FusionWorldTileset> SelectedAssetTilesets =>
+        SelectedAsset?.Tilesets ?? [];
+
+    public IReadOnlyList<FusionWorldMapUsage> SelectedAssetMaps =>
+        SelectedAsset?.Maps ?? [];
+
+    public BitmapImage? SelectedAssetPreview
+    {
+        get => _selectedAssetPreview;
+        private set
+        {
+            if (ReferenceEquals(_selectedAssetPreview, value))
+            {
+                return;
+            }
+            _selectedAssetPreview = value;
+            OnPropertyChanged();
+        }
+    }
+
+    public string SelectedAssetStatusText => SelectedAsset is null
+        ? "Seleziona un asset"
+        : $"{SelectedAsset.StatusText} · {SelectedAsset.UsageText} · {SelectedAsset.MapUsageText}";
+
+    private static BitmapImage? CreatePreview(FusionWorldAsset? asset)
+    {
+        if (asset is not { Exists: true } || !File.Exists(asset.PhysicalPath))
+        {
+            return null;
+        }
+        try
+        {
+            return new BitmapImage(new Uri(asset.PhysicalPath, UriKind.Absolute));
+        }
+        catch (UriFormatException)
+        {
+            return null;
+        }
+    }
+
+    private void OnPropertyChanged([CallerMemberName] string? propertyName = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+}

@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using ZiapStudio.Core.Documents;
 using ZiapStudio.Core.Editing;
 using ZiapStudio.Core.Fusion.Audio;
+using ZiapStudio.Core.Fusion.World;
 using ZiapStudio.Core.Localization;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Core.Preflight;
@@ -246,12 +247,14 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(IsFusionAudioDocumentSelected));
                 OnPropertyChanged(nameof(IsFusionPuzzleDocumentSelected));
                 OnPropertyChanged(nameof(IsFusionBossDocumentSelected));
+                OnPropertyChanged(nameof(IsFusionWorldDocumentSelected));
                 OnPropertyChanged(nameof(IsDatabaseDocumentSelected));
                 OnPropertyChanged(nameof(IsEditingDocumentSelected));
                 OnPropertyChanged(nameof(ActiveDatabaseDocument));
                 OnPropertyChanged(nameof(ActiveFusionAudioDocument));
                 OnPropertyChanged(nameof(ActiveFusionPuzzleDocument));
                 OnPropertyChanged(nameof(ActiveFusionBossDocument));
+                OnPropertyChanged(nameof(ActiveFusionWorldDocument));
                 NotifyEditingPropertiesChanged();
             }
         }
@@ -270,13 +273,16 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public bool IsFusionBossDocumentSelected => SelectedDocument?.IsFusionBoss == true;
 
+    public bool IsFusionWorldDocumentSelected => SelectedDocument?.IsFusionWorld == true;
+
     public bool IsDatabaseDocumentSelected => ActiveDatabaseDocument is not null;
 
     public bool IsEditingDocumentSelected =>
         IsDatabaseDocumentSelected ||
         IsFusionAudioDocumentSelected ||
         IsFusionPuzzleDocumentSelected ||
-        IsFusionBossDocumentSelected;
+        IsFusionBossDocumentSelected ||
+        IsFusionWorldDocumentSelected;
 
     public RpgMakerDatabaseDocumentViewModel? ActiveDatabaseDocument => SelectedDocument?.Database;
 
@@ -288,6 +294,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public FusionBossDocumentViewModel? ActiveFusionBossDocument =>
         SelectedDocument?.FusionBoss;
+
+    public FusionWorldDocumentViewModel? ActiveFusionWorldDocument =>
+        SelectedDocument?.FusionWorld;
 
     public bool CanSaveDocument => CanInteract && SelectedDocument?.IsDirty == true;
 
@@ -1146,6 +1155,12 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                     fusionPuzzleDocument,
                     new FusionPuzzleDocumentViewModel(fusionPuzzleDocument));
             }
+            else if (document is FusionWorldWorkspaceDocument fusionWorldDocument)
+            {
+                tab = DocumentTabViewModel.CreateFusionWorld(
+                    fusionWorldDocument,
+                    new FusionWorldDocumentViewModel(fusionWorldDocument));
+            }
             else
             {
                 throw new DocumentLoadException(
@@ -1390,6 +1405,20 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             }
             await OpenDocumentAsync(bossExplorerItem);
             ActiveFusionBossDocument?.NavigateTo(targetUri);
+            return;
+        }
+
+        if (targetUri.Scheme.Equals("fusionworld", StringComparison.OrdinalIgnoreCase) &&
+            targetUri.Host.Equals("workspace", StringComparison.OrdinalIgnoreCase))
+        {
+            var resourceId = new Uri("fusionworld://workspace/");
+            var worldExplorerItem = FindExplorerItem(ProjectExplorerNodes, resourceId);
+            if (worldExplorerItem is null)
+            {
+                ErrorMessage = "L'integrazione World & Navigation non è disponibile nel Project Explorer.";
+                return;
+            }
+            await OpenDocumentAsync(worldExplorerItem);
             return;
         }
 

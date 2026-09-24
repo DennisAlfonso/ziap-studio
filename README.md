@@ -20,6 +20,10 @@ semantico e un browser con preview per `ZDP_FusionAudio`.
   varianti, volume, pitch, pan, cooldown e anti-ripetizione;
 - preview diretta degli asset audio supportati da Windows e apertura della cartella SE;
 - capability `Fusion Boss Battle` rilevata dai plugin Combat, Encounter e Arena attivi;
+- integrazione read-only `World & Navigation` per dipendenze tra `Tilesets.json`, `MapInfos.json`, `MapXXX.json` e `img/tilesets`;
+- Tileset Manager con slot A1–E, mappe utilizzatrici e stato d'uso effettivo;
+- Asset Usage con relazione inversa PNG → tileset → mappe, preview, dimensione e SHA-256;
+- Asset Auditor / Pre-Flight per sheet mancanti, orfani, duplicati byte-per-byte e tileset mancanti dalle mappe;
 - workspace Boss Battle con inventario di `FusionCombat`, `FusionEncounters`, `FusionArenas` e `FusionPuzzles`;
 - browser degli encounter con selezione sincronizzata di fase e sequenza;
 - grafo interattivo delle fasi con transizioni e condizioni;

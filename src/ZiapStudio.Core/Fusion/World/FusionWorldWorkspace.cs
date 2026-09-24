@@ -1,0 +1,105 @@
+namespace ZiapStudio.Core.Fusion.World;
+
+public enum FusionWorldDiagnosticSeverity
+{
+    Warning,
+    Error,
+}
+
+public sealed record FusionWorldDiagnostic
+{
+    public required string Code { get; init; }
+    public required FusionWorldDiagnosticSeverity Severity { get; init; }
+    public required string Message { get; init; }
+    public string? Details { get; init; }
+    public int? TilesetId { get; init; }
+    public int? MapId { get; init; }
+    public string? AssetPath { get; init; }
+
+    public string SeverityText => Severity == FusionWorldDiagnosticSeverity.Error
+        ? "Errore"
+        : "Avviso";
+}
+
+public sealed record FusionWorldMap
+{
+    public required int Id { get; init; }
+    public required string DisplayName { get; init; }
+    public required int TilesetId { get; init; }
+    public required string TilesetName { get; init; }
+    public required string SourcePath { get; init; }
+
+    public string IdText => $"Map{Id:000}";
+    public string TilesetText => $"{TilesetId:00} · {TilesetName}";
+}
+
+public sealed record FusionWorldMapUsage
+{
+    public required int MapId { get; init; }
+    public required string MapName { get; init; }
+    public required string SourcePath { get; init; }
+
+    public string DisplayText => $"Map{MapId:000} · {MapName}";
+}
+
+public sealed record FusionWorldTilesetSlot
+{
+    public required string Slot { get; init; }
+    public required string AssetPath { get; init; }
+    public required bool Exists { get; init; }
+
+    public string DisplayPath => string.IsNullOrWhiteSpace(AssetPath) ? "—" : AssetPath;
+    public string StatusText => string.IsNullOrWhiteSpace(AssetPath)
+        ? "Vuoto"
+        : Exists ? "Disponibile" : "Mancante";
+}
+
+public sealed record FusionWorldTileset
+{
+    public required int Id { get; init; }
+    public required string Name { get; init; }
+    public required IReadOnlyList<FusionWorldTilesetSlot> Slots { get; init; }
+    public required IReadOnlyList<FusionWorldMapUsage> Maps { get; init; }
+
+    public int AssetCount => Slots.Count(slot => !string.IsNullOrWhiteSpace(slot.AssetPath));
+    public int MissingAssetCount => Slots.Count(slot =>
+        !string.IsNullOrWhiteSpace(slot.AssetPath) && !slot.Exists);
+    public bool IsInUse => Maps.Count > 0;
+    public string IdText => Id.ToString("00");
+    public string StatusText => IsInUse ? "In uso" : "Non usato";
+    public string MapCountText => Maps.Count == 1 ? "1 mappa" : $"{Maps.Count} mappe";
+}
+
+public sealed record FusionWorldAsset
+{
+    public required string AssetPath { get; init; }
+    public required string PhysicalPath { get; init; }
+    public required bool Exists { get; init; }
+    public long? SizeBytes { get; init; }
+    public string? Sha256 { get; init; }
+    public required IReadOnlyList<FusionWorldTileset> Tilesets { get; init; }
+    public required IReadOnlyList<FusionWorldMapUsage> Maps { get; init; }
+    public bool IsOrphan { get; init; }
+    public bool IsDuplicate { get; init; }
+
+    public string FileName => Path.GetFileName(AssetPath);
+    public string UsageText => Tilesets.Count == 1
+        ? "1 tileset"
+        : $"{Tilesets.Count} tileset";
+    public string MapUsageText => Maps.Count == 1
+        ? "1 mappa"
+        : $"{Maps.Count} mappe";
+    public string SizeText => SizeBytes is null ? "—" : FormatSize(SizeBytes.Value);
+    public string HashText => string.IsNullOrWhiteSpace(Sha256) ? "—" : Sha256;
+    public string StatusText => !Exists
+        ? "Mancante"
+        : IsOrphan ? "Orfano"
+        : IsDuplicate ? "Duplicato" : "Referenziato";
+
+    private static string FormatSize(long size) => size switch
+    {
+        < 1024 => $"{size} B",
+        < 1024 * 1024 => $"{size / 1024d:0.0} KB",
+        _ => $"{size / (1024d * 1024d):0.0} MB",
+    };
+}

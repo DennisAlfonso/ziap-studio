@@ -16,6 +16,7 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         FusionAudioDocumentViewModel? fusionAudio = null,
         FusionPuzzleDocumentViewModel? fusionPuzzle = null,
         FusionBossDocumentViewModel? fusionBoss = null,
+        FusionWorldDocumentViewModel? fusionWorld = null,
         DocumentEditSession? editSession = null,
         FusionBossEditSession? fusionBossEditSession = null)
     {
@@ -26,6 +27,7 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         FusionAudio = fusionAudio;
         FusionPuzzle = fusionPuzzle;
         FusionBoss = fusionBoss;
+        FusionWorld = fusionWorld;
         EditSession = editSession;
         FusionBossEditSession = fusionBossEditSession;
         if (EditSession is not null)
@@ -64,6 +66,8 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
 
     public bool IsFusionBoss => FusionBoss is not null;
 
+    public bool IsFusionWorld => FusionWorld is not null;
+
     public RpgMakerDatabaseDocumentViewModel? Database { get; }
 
     public RemoteLocalizationDocumentViewModel? RemoteLocalization { get; }
@@ -75,6 +79,8 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
     public FusionPuzzleDocumentViewModel? FusionPuzzle { get; }
 
     public FusionBossDocumentViewModel? FusionBoss { get; private set; }
+
+    public FusionWorldDocumentViewModel? FusionWorld { get; }
 
     public DocumentEditSession? EditSession { get; }
 
@@ -148,6 +154,13 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
         document.Descriptor,
         database: null,
         fusionPuzzle: fusionPuzzle);
+
+    public static DocumentTabViewModel CreateFusionWorld(
+        FusionWorldWorkspaceDocument document,
+        FusionWorldDocumentViewModel fusionWorld) => new(
+        document.Descriptor,
+        database: null,
+        fusionWorld: fusionWorld);
 
     public void ReplaceFusionBoss(
         FusionBossDocumentViewModel fusionBoss,
