@@ -20,6 +20,7 @@
     const schedulerRuntimeMarkers = document.getElementById("scheduler-runtime-markers");
     const schedulerTooltip = document.getElementById("scheduler-tooltip");
     const attackOnlyControls = Array.from(document.querySelectorAll(".attack-only"));
+    const arenaOnlyControls = Array.from(document.querySelectorAll(".arena-only"));
     const layerButtons = Array.from(document.querySelectorAll("[data-layer]"));
     const state = {
         app: null,
@@ -30,6 +31,7 @@
         layerVisibility: {
             grid: true,
             regions: false,
+            passability: false,
             anchors: true,
             roles: true,
             attackTelegraph: true,
@@ -74,7 +76,7 @@
         attackInfo.style.display = "none";
         scheduler.hidden = true;
         errorPanel.style.display = "grid";
-        errorPanel.textContent = `Arena Preview non disponibile\n${message}`;
+        errorPanel.textContent = `Tilemap Preview non disponibile\n${message}`;
         post({ type: "error", message: String(message) });
     }
 
@@ -152,16 +154,18 @@
         state.layers = {};
     }
 
-    async function loadScene(scene) {
+    async function loadScene(scene, layerVisibility) {
         const generation = ++state.sceneGeneration;
         try {
             validateScene(scene);
+            applyRequestedLayerVisibility(layerVisibility);
             ensureApp();
             clearScene();
             state.scene = scene;
             errorPanel.style.display = "none";
             emptyPanel.style.display = "none";
             toolbar.hidden = false;
+            syncPreviewControls(scene);
 
             const assets = [
                 ...createParallax(scene),
@@ -271,6 +275,12 @@
         overlay.addChild(regions);
         state.layers.regions = regions;
 
+        const passability = new PIXI.Graphics();
+        drawPassability(passability, scene);
+        passability.visible = state.layerVisibility.passability;
+        overlay.addChild(passability);
+        state.layers.passability = passability;
+
         const grid = new PIXI.Graphics();
         drawGrid(grid, scene);
         grid.visible = state.layerVisibility.grid;
@@ -279,7 +289,7 @@
 
         const anchors = new PIXI.Container();
         const roles = new PIXI.Container();
-        for (const marker of scene.markers) {
+        for (const marker of scene.markers || []) {
             const target = marker.kind === 0 ? anchors : roles;
             target.addChild(createMarker(marker, scene));
         }
@@ -345,6 +355,56 @@
                 graphics.endFill();
             }
         }
+    }
+
+    function drawPassability(graphics, scene) {
+        const directions = [
+            { bit: 8, x1: 0, y1: 0, x2: 1, y2: 0 },
+            { bit: 2, x1: 0, y1: 0, x2: 0, y2: 1 },
+            { bit: 4, x1: 1, y1: 0, x2: 1, y2: 1 },
+            { bit: 1, x1: 0, y1: 1, x2: 1, y2: 1 },
+        ];
+        const lineWidth = Math.max(2, Math.min(5, Math.min(scene.tileWidth, scene.tileHeight) / 12));
+        for (let y = 0; y < scene.height; y++) {
+            for (let x = 0; x < scene.width; x++) {
+                const blocked = directions.filter(direction =>
+                    !isRpgMakerPassable(scene, x, y, direction.bit));
+                if (blocked.length === 4) {
+                    graphics.beginFill(0xff5b61, 0.11);
+                    graphics.drawRect(
+                        x * scene.tileWidth,
+                        y * scene.tileHeight,
+                        scene.tileWidth,
+                        scene.tileHeight
+                    );
+                    graphics.endFill();
+                }
+                graphics.lineStyle(lineWidth, 0xff5b61, 0.9);
+                for (const direction of blocked) {
+                    graphics.moveTo(
+                        (x + direction.x1) * scene.tileWidth,
+                        (y + direction.y1) * scene.tileHeight
+                    );
+                    graphics.lineTo(
+                        (x + direction.x2) * scene.tileWidth,
+                        (y + direction.y2) * scene.tileHeight
+                    );
+                }
+            }
+        }
+    }
+
+    function isRpgMakerPassable(scene, x, y, bit) {
+        const tileCount = scene.width * scene.height;
+        const tileIndex = y * scene.width + x;
+        for (let z = 3; z >= 0; z--) {
+            const tileId = scene.mapData[z * tileCount + tileIndex] || 0;
+            const flag = scene.tilesetFlags[tileId] || 0;
+            if ((flag & 0x10) !== 0) continue;
+            if ((flag & bit) === 0) return true;
+            if ((flag & bit) === bit) return false;
+        }
+        return false;
     }
 
     function regionColor(regionId) {
@@ -2110,6 +2170,23 @@
         }
     }
 
+    function applyRequestedLayerVisibility(layerVisibility) {
+        if (!layerVisibility || typeof layerVisibility !== "object") return;
+        for (const [layer, visible] of Object.entries(layerVisibility)) {
+            if (Object.prototype.hasOwnProperty.call(state.layerVisibility, layer) &&
+                typeof visible === "boolean") {
+                state.layerVisibility[layer] = visible;
+            }
+        }
+    }
+
+    function syncPreviewControls(scene) {
+        const hasArenaMarkers = Array.isArray(scene.markers) && scene.markers.length > 0;
+        for (const control of arenaOnlyControls) {
+            control.hidden = !hasArenaMarkers;
+        }
+    }
+
     for (const button of layerButtons) {
         button.addEventListener("click", () => toggleLayer(button));
     }
@@ -2122,13 +2199,14 @@
         if (key === "-") zoomFromCenter(1 / 1.2);
         if (key === "g") toggleLayer(layerButtons.find(button => button.dataset.layer === "grid"));
         if (key === "r") toggleLayer(layerButtons.find(button => button.dataset.layer === "regions"));
+        if (key === "p") toggleLayer(layerButtons.find(button => button.dataset.layer === "passability"));
         if (key === "a") toggleLayer(layerButtons.find(button => button.dataset.layer === "anchors"));
     });
 
     window.chrome.webview.addEventListener("message", event => {
         const message = event.data;
         if (message && message.type === "loadScene" && message.scene) {
-            loadScene(message.scene);
+            loadScene(message.scene, message.layerVisibility);
         } else if (message && message.type === "clearScene") {
             showEmptyScene();
         } else if (message && message.type === "setAttackGeometry") {

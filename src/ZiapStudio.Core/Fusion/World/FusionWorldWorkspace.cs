@@ -29,6 +29,23 @@ public sealed record FusionWorldMap
     public required string TilesetName { get; init; }
     public required string SourcePath { get; init; }
 
+    // Il renderer condiviso usa lo stesso contratto serializzato delle scene arena.
+    // Questi campi restano read-only e rappresentano fedelmente MapXXX.json/Tilesets.json.
+    public int MapId => Id;
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public int TileWidth { get; init; } = 48;
+    public int TileHeight { get; init; } = 48;
+    public int ScrollType { get; init; }
+    public IReadOnlyList<string> TilesetNames { get; init; } = [];
+    public IReadOnlyList<int> TilesetFlags { get; init; } = [];
+    public IReadOnlyList<int> MapData { get; init; } = [];
+    public string ParallaxName { get; init; } = string.Empty;
+    public bool ParallaxLoopX { get; init; }
+    public bool ParallaxLoopY { get; init; }
+    public double ParallaxSx { get; init; }
+    public double ParallaxSy { get; init; }
+
     public string IdText => $"Map{Id:000}";
     public string TilesetText => $"{TilesetId:00} · {TilesetName}";
 }

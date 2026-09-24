@@ -10,6 +10,7 @@ public sealed class FusionWorldDocumentViewModel : INotifyPropertyChanged
 {
     private FusionWorldTileset? _selectedTileset;
     private FusionWorldAsset? _selectedAsset;
+    private FusionWorldMap? _selectedMap;
     private FusionWorldRegion? _selectedRegion;
     private BitmapImage? _selectedAssetPreview;
 
@@ -18,6 +19,7 @@ public sealed class FusionWorldDocumentViewModel : INotifyPropertyChanged
         Document = document;
         SelectedTileset = Tilesets.FirstOrDefault(tileset => tileset.IsInUse) ?? Tilesets.FirstOrDefault();
         SelectedAsset = Assets.FirstOrDefault(asset => asset.Exists && !asset.IsOrphan) ?? Assets.FirstOrDefault();
+        SelectedMap = Maps.FirstOrDefault();
         SelectedRegion = Regions.FirstOrDefault(region => region.CellCount > 0) ?? Regions.FirstOrDefault();
     }
 
@@ -120,6 +122,26 @@ public sealed class FusionWorldDocumentViewModel : INotifyPropertyChanged
     public string SelectedAssetStatusText => SelectedAsset is null
         ? "Seleziona un asset"
         : $"{SelectedAsset.StatusText} · {SelectedAsset.UsageText} · {SelectedAsset.MapUsageText}";
+
+    public FusionWorldMap? SelectedMap
+    {
+        get => _selectedMap;
+        set
+        {
+            if (ReferenceEquals(_selectedMap, value))
+            {
+                return;
+            }
+            _selectedMap = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedMapStatusText));
+        }
+    }
+
+    public string SelectedMapStatusText => SelectedMap is null
+        ? "Seleziona una mappa"
+        : $"{SelectedMap.IdText} · {SelectedMap.TilesetText} · " +
+          $"{SelectedMap.Width} × {SelectedMap.Height} tile";
 
     public FusionWorldRegion? SelectedRegion
     {

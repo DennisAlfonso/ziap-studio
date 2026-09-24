@@ -11,12 +11,22 @@ public sealed partial class FusionArenaPreviewView : UserControl
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private FusionBossDocumentViewModel? _viewModel;
+    private FusionWorldDocumentViewModel? _worldViewModel;
     private bool _rendererReady;
     private bool _initialized;
     private bool _rendererReleased;
     private bool _updatingPreviewFrameFromRenderer;
     private bool _updatingTimelineStepFromRenderer;
     private string? _mappedProjectPath;
+
+    private string? ProjectPath => _viewModel?.ProjectPath ?? _worldViewModel?.Document.ProjectPath;
+
+    private object? SelectedScene => _viewModel?.SelectedMap?.Scene is { } arenaScene
+        ? arenaScene
+        : _worldViewModel?.SelectedMap;
+
+    private string? SelectedMapDisplayName => _viewModel?.SelectedMap?.DisplayName ??
+        _worldViewModel?.SelectedMap?.DisplayName;
 
     public FusionArenaPreviewView()
     {
@@ -28,18 +38,14 @@ public sealed partial class FusionArenaPreviewView : UserControl
 
     private async void Preview_Loaded(object sender, RoutedEventArgs e)
     {
-        AttachViewModel(DataContext as FusionBossDocumentViewModel);
+        AttachViewModel(DataContext);
         await EnsureRendererAsync();
         SendCurrentScene();
     }
 
     private void Preview_Unloaded(object sender, RoutedEventArgs e)
     {
-        if (_viewModel is not null)
-        {
-            _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
-        }
-        _viewModel = null;
+        DetachViewModels();
     }
 
     internal void ReleaseRenderer()
@@ -49,11 +55,7 @@ public sealed partial class FusionArenaPreviewView : UserControl
             return;
         }
         _rendererReleased = true;
-        if (_viewModel is not null)
-        {
-            _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
-            _viewModel = null;
-        }
+        DetachViewModels();
         if (PreviewWebView.CoreWebView2 is { } core)
         {
             core.WebMessageReceived -= Core_WebMessageReceived;
@@ -68,7 +70,7 @@ public sealed partial class FusionArenaPreviewView : UserControl
         FrameworkElement sender,
         DataContextChangedEventArgs args)
     {
-        AttachViewModel(args.NewValue as FusionBossDocumentViewModel);
+        AttachViewModel(args.NewValue);
         if (IsLoaded)
         {
             await EnsureRendererAsync();
@@ -76,21 +78,40 @@ public sealed partial class FusionArenaPreviewView : UserControl
         }
     }
 
-    private void AttachViewModel(FusionBossDocumentViewModel? viewModel)
+    private void AttachViewModel(object? candidate)
     {
-        if (ReferenceEquals(_viewModel, viewModel))
+        var bossViewModel = candidate as FusionBossDocumentViewModel;
+        var worldViewModel = candidate as FusionWorldDocumentViewModel;
+        if (ReferenceEquals(_viewModel, bossViewModel) &&
+            ReferenceEquals(_worldViewModel, worldViewModel))
         {
             return;
         }
-        if (_viewModel is not null)
-        {
-            _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
-        }
-        _viewModel = viewModel;
+        DetachViewModels();
+        _viewModel = bossViewModel;
+        _worldViewModel = worldViewModel;
         if (_viewModel is not null)
         {
             _viewModel.PropertyChanged += ViewModel_PropertyChanged;
         }
+        if (_worldViewModel is not null)
+        {
+            _worldViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        }
+    }
+
+    private void DetachViewModels()
+    {
+        if (_viewModel is not null)
+        {
+            _viewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        }
+        if (_worldViewModel is not null)
+        {
+            _worldViewModel.PropertyChanged -= ViewModel_PropertyChanged;
+        }
+        _viewModel = null;
+        _worldViewModel = null;
     }
 
     private void ViewModel_PropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -99,7 +120,7 @@ public sealed partial class FusionArenaPreviewView : UserControl
         {
             SendCurrentScene();
         }
-        else if (args.PropertyName is
+        else if (_viewModel is not null && args.PropertyName is
             nameof(FusionBossDocumentViewModel.SelectedAttackGeometry) or
             nameof(FusionBossDocumentViewModel.SelectedAttackTarget) or
             nameof(FusionBossDocumentViewModel.RuntimeTraceAnalysis))
@@ -109,7 +130,7 @@ public sealed partial class FusionArenaPreviewView : UserControl
                 SendAttackGeometry();
             }
         }
-        else if (args.PropertyName == nameof(FusionBossDocumentViewModel.PreviewFrame) &&
+        else if (_viewModel is not null && args.PropertyName == nameof(FusionBossDocumentViewModel.PreviewFrame) &&
             !_updatingPreviewFrameFromRenderer)
         {
             SendSchedulerFrame(true);
@@ -118,7 +139,7 @@ public sealed partial class FusionArenaPreviewView : UserControl
 
     private async Task EnsureRendererAsync()
     {
-        if (_initialized || _viewModel is null)
+        if (_initialized || string.IsNullOrWhiteSpace(ProjectPath))
         {
             return;
         }
@@ -129,7 +150,7 @@ public sealed partial class FusionArenaPreviewView : UserControl
             await PreviewWebView.EnsureCoreWebView2Async();
             var core = PreviewWebView.CoreWebView2;
             ConfigureSecurity(core);
-            ConfigureResourceMappings(core, _viewModel.ProjectPath);
+            ConfigureResourceMappings(core, ProjectPath!);
             core.WebMessageReceived += Core_WebMessageReceived;
             core.ProcessFailed += Core_ProcessFailed;
             core.NavigationCompleted += Core_NavigationCompleted;
@@ -270,7 +291,7 @@ public sealed partial class FusionArenaPreviewView : UserControl
                 case "sceneLoaded":
                     LoadingIndicator.IsActive = false;
                     LoadingIndicator.Visibility = Visibility.Collapsed;
-                    HostStatus.Text = _viewModel?.SelectedMap?.DisplayName ?? "Arena caricata";
+                    HostStatus.Text = SelectedMapDisplayName ?? "Mappa caricata";
                     SendAttackGeometry();
                     break;
                 case "markerSelected":
@@ -354,20 +375,21 @@ public sealed partial class FusionArenaPreviewView : UserControl
     private void SendCurrentScene()
     {
         var core = PreviewWebView.CoreWebView2;
-        var viewModel = _viewModel;
-        if (!_rendererReady || core is null || viewModel is null)
+        var scene = SelectedScene;
+        var projectPath = ProjectPath;
+        if (!_rendererReady || core is null || string.IsNullOrWhiteSpace(projectPath))
         {
             return;
         }
         if (!string.Equals(
             _mappedProjectPath,
-            viewModel.ProjectPath,
+            projectPath,
             StringComparison.OrdinalIgnoreCase))
         {
             ShowHostError("Il progetto della preview è cambiato; riaprire il documento.");
             return;
         }
-        if (viewModel.SelectedMap is null)
+        if (scene is null)
         {
             core.PostWebMessageAsJson("{\"type\":\"clearScene\"}");
             LoadingIndicator.IsActive = false;
@@ -379,13 +401,23 @@ public sealed partial class FusionArenaPreviewView : UserControl
             new
             {
                 type = "loadScene",
-                scene = viewModel.SelectedMap.Scene,
+                scene,
+                layerVisibility = _worldViewModel is null
+                    ? null
+                    : new
+                    {
+                        grid = true,
+                        regions = true,
+                        passability = false,
+                        anchors = false,
+                        roles = false,
+                    },
             },
             JsonOptions);
         LoadingIndicator.Visibility = Visibility.Visible;
         LoadingIndicator.IsActive = true;
         core.PostWebMessageAsJson(payload);
-        HostStatus.Text = $"Caricamento {viewModel.SelectedMap.DisplayName}…";
+        HostStatus.Text = $"Caricamento {SelectedMapDisplayName ?? "mappa"}…";
         SendAttackGeometry();
     }
 

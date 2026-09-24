@@ -119,6 +119,38 @@ public sealed class FusionWorldIntegrationTests
     }
 
     [Fact]
+    public async Task Workspace_PreservesMapDataAndTilesetFlagsForSharedTilemapPreview()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WriteFile(
+            "data/Tilesets.json",
+            """
+            [null,{
+              "id":1,
+              "name":"Dungeon",
+              "tilesetNames":["Dungeon/A1","","","","","Dungeon/B","","",""],
+              "flags":[0,15]
+            }]
+            """);
+        workspace.WriteFile("data/MapInfos.json", "[null,{\"id\":1,\"name\":\"Ingresso\"}]");
+        workspace.WriteFile(
+            "data/Map001.json",
+            $"{{\"width\":2,\"height\":2,\"scrollType\":3,\"tilesetId\":1,\"data\":[{BuildRegionData()}]}}");
+        var service = new FusionWorldWorkspaceService(new FileSystemService());
+
+        var document = await service.LoadAsync(CreateProject(workspace.RootPath), CreateDescriptor());
+
+        var map = Assert.Single(document.Maps);
+        Assert.Equal(1, map.MapId);
+        Assert.Equal(2, map.Width);
+        Assert.Equal(2, map.Height);
+        Assert.Equal(3, map.ScrollType);
+        Assert.Equal("Dungeon/A1", map.TilesetNames[0]);
+        Assert.Equal([0, 15], map.TilesetFlags);
+        Assert.Equal(24, map.MapData.Count);
+    }
+
+    [Fact]
     public async Task Preflight_ReportsUsedRegionsWithoutMetadata()
     {
         using var workspace = new TestWorkspace();

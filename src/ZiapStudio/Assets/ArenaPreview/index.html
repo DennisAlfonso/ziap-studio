@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
-    <title>ZIAP Arena Preview</title>
+    <title>ZIAP Tilemap Preview</title>
     <style>
         :root { color-scheme: dark; font-family: "Segoe UI", sans-serif; }
         [hidden] { display: none !important; }
@@ -151,8 +151,9 @@
         <span class="separator"></span>
         <button data-layer="grid" class="active" type="button" aria-pressed="true" title="Mostra o nasconde la griglia (G)">Griglia</button>
         <button data-layer="regions" type="button" aria-pressed="false" title="Mostra o nasconde le regioni (R)">Regioni</button>
-        <button data-layer="anchors" class="active" type="button" aria-pressed="true" title="Mostra o nasconde gli anchor (A)">Anchor</button>
-        <button data-layer="roles" class="active" type="button" aria-pressed="true" title="Mostra o nasconde i ruoli">Ruoli</button>
+        <button data-layer="passability" type="button" aria-pressed="false" title="Mostra i lati bloccati dalla passabilità RPG Maker (P)">Passabilità</button>
+        <button data-layer="anchors" class="active arena-only" type="button" aria-pressed="true" title="Mostra o nasconde gli anchor (A)">Anchor</button>
+        <button data-layer="roles" class="active arena-only" type="button" aria-pressed="true" title="Mostra o nasconde i ruoli">Ruoli</button>
         <span class="separator attack-only" hidden></span>
         <button data-layer="attackTelegraph" class="active telegraph attack-only" hidden type="button" aria-pressed="true">Telegraph</button>
         <button data-layer="attackHitbox" class="active hitbox attack-only" hidden type="button" aria-pressed="true">Hitbox</button>

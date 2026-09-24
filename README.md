@@ -1,9 +1,9 @@
 # ZIAP Studio
 
 ZIAP Studio è un editor desktop Windows per i progetti Zenkaiverse. La milestone
-`0.1.9 — Project Integrations & Fusion Audio` introduce capability custom
-rilevate dal registry plugin di RPG Maker. La prima integrazione è un editor
-semantico e un browser con preview per `ZDP_FusionAudio`.
+`0.2.0 — World & Navigation` aggiunge una superficie semantica e read-only per
+tileset, asset, mappe e Region RPG Maker MZ, oltre alle integrazioni Fusion già
+disponibili.
 
 ## Funzionalità attuali
 
@@ -26,6 +26,7 @@ semantico e un browser con preview per `ZDP_FusionAudio`.
 - Asset Auditor / Pre-Flight per sheet mancanti, orfani, duplicati byte-per-byte e tileset mancanti dalle mappe;
 - Region Registry read-only: scansione del layer Region delle `MapXXX.json`, conteggio per mappa/cella e metadata opzionali in `.ziap/world/regions.json`;
 - diagnostica Region nel Pre-Flight per registry non valido, ID fuori intervallo, layer dati incompleti e Region usate senza metadata;
+- Map Inspector con Tilemap MZ reale, selezione della mappa e overlay di griglia, Region e passabilità RPG Maker;
 - workspace Boss Battle con inventario di `FusionCombat`, `FusionEncounters`, `FusionArenas` e `FusionPuzzles`;
 - browser degli encounter con selezione sincronizzata di fase e sequenza;
 - grafo interattivo delle fasi con transizioni e condizioni;
@@ -187,6 +188,19 @@ aggiunge semantica a un normale Region ID RPG Maker, senza modificare le mappe:
 Il workspace resta read-only: il registry è opzionale e può essere mantenuto nel
 repository; le Region in uso ma prive di metadata compaiono come avvisi nel
 Pre-Flight.
+
+### Map Inspector
+
+La tab `Maps` di `World & Navigation` riusa il renderer Tilemap isolato già usato
+dall'Arena Preview. Selezionando una `MapXXX.json`, Studio legge i layer, il tileset,
+i relativi flag e le immagini dal progetto, quindi mostra la stessa composizione MZ
+senza eseguire plugin o modificare file.
+
+La toolbar della preview permette di attivare griglia, Region e passabilità. Le
+Region corrispondono al layer `z = 5`; la passabilità evidenzia in rosso i lati
+bloccati calcolati come `Game_Map.checkPassage` sui layer tile `z = 3…0` e sui flag
+del tileset. Non include intenzionalmente eventi, plugin, collisioni Alpha/PKD o
+altre regole runtime: questi saranno overlay separati.
 
 ## Schema di creazione armi
 
@@ -377,8 +391,8 @@ tileset seguono lo stesso codice dell'engine. Il renderer gira in una WebView2
 isolata e read-only: non esegue i plugin del gioco, non espone oggetti host, blocca
 rete, finestre e permessi, e può leggere soltanto il runtime MZ e le immagini di
 tileset/parallasse necessarie. Gli overlay dell'editor restano separati dal tilemap,
-così griglia, regioni, `<FusionAnchor>` e `<FusionRole>` possono essere attivati e
-ispezionati senza alterare la scena.
+così griglia, regioni, passabilità, `<FusionAnchor>` e `<FusionRole>` possono essere
+attivati e ispezionati senza alterare la scena.
 
 La preview può essere spostata in una finestra secondaria, dove il canvas occupa
 l'intera area client disponibile. Arena e mappa restano sincronizzate con il documento;

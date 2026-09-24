@@ -264,7 +264,8 @@ public sealed class FusionWorldWorkspaceService
                 if (!result.TryAdd(id, new ParsedTileset(
                     id,
                     ReadString(entry, "name") ?? $"Tileset {id}",
-                    ReadAssetPaths(entry, id, diagnostics))))
+                    ReadAssetPaths(entry, id, diagnostics),
+                    ReadIntArray(entry, "flags"))))
                 {
                     diagnostics.Add(new FusionWorldDiagnostic
                     {
@@ -433,15 +434,25 @@ public sealed class FusionWorldWorkspaceService
                 }
                 var map = document.RootElement;
                 var tilesetId = ReadInt(map, "tilesetId") ?? 0;
+                tilesets.TryGetValue(tilesetId, out var tileset);
                 var worldMap = new FusionWorldMap
                 {
                     Id = mapId,
                     DisplayName = mapNames.GetValueOrDefault(mapId, $"Map {mapId:000}"),
                     TilesetId = tilesetId,
-                    TilesetName = tilesets.TryGetValue(tilesetId, out var tileset)
-                        ? tileset.Name
-                        : $"Tileset {tilesetId} mancante",
+                    TilesetName = tileset?.Name ?? $"Tileset {tilesetId} mancante",
                     SourcePath = path,
+                    Width = ReadInt(map, "width") ?? 0,
+                    Height = ReadInt(map, "height") ?? 0,
+                    ScrollType = ReadInt(map, "scrollType") ?? 0,
+                    TilesetNames = tileset?.AssetPaths ?? [],
+                    TilesetFlags = tileset?.Flags ?? [],
+                    MapData = ReadIntArray(map, "data"),
+                    ParallaxName = ReadString(map, "parallaxName") ?? string.Empty,
+                    ParallaxLoopX = ReadBoolean(map, "parallaxLoopX"),
+                    ParallaxLoopY = ReadBoolean(map, "parallaxLoopY"),
+                    ParallaxSx = ReadDouble(map, "parallaxSx"),
+                    ParallaxSy = ReadDouble(map, "parallaxSy"),
                 };
                 result.Add(new ParsedMap(
                     worldMap,
@@ -732,6 +743,21 @@ public sealed class FusionWorldWorkspaceService
         return result;
     }
 
+    private static IReadOnlyList<int> ReadIntArray(JsonElement source, string name)
+    {
+        if (!source.TryGetProperty(name, out var values) ||
+            values.ValueKind != JsonValueKind.Array)
+        {
+            return [];
+        }
+        var result = new List<int>(values.GetArrayLength());
+        foreach (var value in values.EnumerateArray())
+        {
+            result.Add(value.TryGetInt32(out var parsed) ? parsed : 0);
+        }
+        return result;
+    }
+
     private static bool TryNormalizeAssetPath(string rawPath, out string normalized)
     {
         normalized = string.Empty;
@@ -791,6 +817,13 @@ public sealed class FusionWorldWorkspaceService
             ? result
             : null;
 
+    private static double ReadDouble(JsonElement source, string name) =>
+        source.ValueKind == JsonValueKind.Object &&
+        source.TryGetProperty(name, out var value) &&
+        value.TryGetDouble(out var result)
+            ? result
+            : 0;
+
     private static bool ReadBoolean(JsonElement source, string name) =>
         source.ValueKind == JsonValueKind.Object &&
         source.TryGetProperty(name, out var value) &&
@@ -799,7 +832,8 @@ public sealed class FusionWorldWorkspaceService
     private sealed record ParsedTileset(
         int Id,
         string Name,
-        IReadOnlyList<string> AssetPaths);
+        IReadOnlyList<string> AssetPaths,
+        IReadOnlyList<int> Flags);
 
     private sealed record DiskAsset(
         string AssetPath,
