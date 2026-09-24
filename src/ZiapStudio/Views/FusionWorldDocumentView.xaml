@@ -214,6 +214,42 @@
                 </Border>
             </TabViewItem>
 
+            <TabViewItem Header="Regions" IsClosable="False">
+                <Grid Margin="0,12,0,0" ColumnSpacing="18">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="320" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                    <Border Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="10">
+                        <Grid>
+                            <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                            <StackPanel Spacing="3"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Region Registry" /><TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding RegionRegistryText}" /></StackPanel>
+                            <ListView Grid.Row="1" Margin="0,12,0,0" HorizontalContentAlignment="Stretch" ItemsSource="{Binding Regions}" SelectedItem="{Binding SelectedRegion, Mode=TwoWay}" SelectionMode="Single">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="world:FusionWorldRegion">
+                                        <Grid Padding="4,6" ColumnSpacing="10">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="38" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                            <TextBlock FontFamily="Consolas" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{x:Bind IdText}" />
+                                            <StackPanel Grid.Column="1" Spacing="1"><TextBlock FontWeight="SemiBold" Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" /><TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind CellCountText}" /></StackPanel>
+                                            <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="10" Text="{x:Bind StatusText}" />
+                                        </Grid>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                            <StackPanel Grid.Row="2" Margin="0,10,0,0" Spacing="3"><TextBlock FontSize="10" FontWeight="SemiBold" Text="METADATA ZIAP" /><TextBlock FontFamily="Consolas" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding Document.RegionRegistryPath}" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{Binding Document.RegionRegistryPath}" /></StackPanel>
+                        </Grid>
+                    </Border>
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <StackPanel Spacing="14">
+                            <Grid ColumnSpacing="18"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><StackPanel Spacing="3"><TextBlock FontSize="23" FontWeight="SemiBold" Text="{Binding SelectedRegion.Name}" /><TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SelectedRegionStatusText}" /></StackPanel><TextBlock Grid.Column="1" VerticalAlignment="Center" FontFamily="Consolas" FontSize="24" Text="{Binding SelectedRegion.IdText}" /></Grid>
+                            <Grid ColumnSpacing="14"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
+                                <Border Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="10"><StackPanel Spacing="4"><TextBlock FontSize="10" FontWeight="SemiBold" Text="CATEGORIA" /><TextBlock FontWeight="SemiBold" Text="{Binding SelectedRegion.Category}" /><TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SelectedRegion.Owner}" /></StackPanel></Border>
+                                <Border Grid.Column="1" Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="10"><StackPanel Spacing="4"><TextBlock FontSize="10" FontWeight="SemiBold" Text="REGISTRO" /><TextBlock FontWeight="SemiBold" Text="{Binding SelectedRegion.StatusText}" /><TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SelectedRegion.ReservedText}" /></StackPanel></Border>
+                                <Border Grid.Column="2" Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="10"><StackPanel Spacing="4"><TextBlock FontSize="10" FontWeight="SemiBold" Text="UTILIZZO" /><TextBlock FontWeight="SemiBold" Text="{Binding SelectedRegion.MapCountText}" /><TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SelectedRegion.CellCountText}" /></StackPanel></Border>
+                            </Grid>
+                            <Border Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="10"><Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions><StackPanel Spacing="3"><TextBlock FontSize="18" FontWeight="SemiBold" Text="Uso nelle mappe" /><TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Conta il layer Region (z = 5) senza modificare i dati RPG Maker." /></StackPanel><ListView Grid.Row="1" Margin="0,12,0,0" ItemsSource="{Binding SelectedRegionUsages}" SelectionMode="None"><ListView.ItemTemplate><DataTemplate x:DataType="world:FusionWorldRegionUsage"><Grid Padding="4,7" ColumnSpacing="12"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="110" /></Grid.ColumnDefinitions><TextBlock FontWeight="SemiBold" Text="{x:Bind MapText}" /><TextBlock Grid.Column="1" HorizontalAlignment="Right" Text="{x:Bind CellCountText}" /></Grid></DataTemplate></ListView.ItemTemplate></ListView></Grid></Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Grid>
+            </TabViewItem>
+
             <TabViewItem Header="Diagnostics" IsClosable="False">
                 <Border Margin="0,12,0,0" Padding="14" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="10">
                     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>

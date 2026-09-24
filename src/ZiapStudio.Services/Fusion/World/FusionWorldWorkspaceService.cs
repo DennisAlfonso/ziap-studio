@@ -29,7 +29,25 @@ public sealed class FusionWorldWorkspaceService
         var tilesetDefinitions = await LoadTilesetsAsync(project, diagnostics, cancellationToken);
         var mapNames = await LoadMapNamesAsync(project, diagnostics, cancellationToken);
         var diskAssets = await ScanAssetsAsync(project, diagnostics, cancellationToken);
-        var maps = await LoadMapsAsync(project, mapNames, tilesetDefinitions, diagnostics, cancellationToken);
+        var parsedMaps = await LoadMapsAsync(
+            project,
+            mapNames,
+            tilesetDefinitions,
+            diagnostics,
+            cancellationToken);
+        var maps = parsedMaps.Select(map => map.Map).ToArray();
+        var regionRegistry = await LoadRegionRegistryAsync(project, diagnostics, cancellationToken);
+        var regions = BuildRegions(parsedMaps, regionRegistry.Metadata);
+        foreach (var region in regions.Where(region => region.CellCount > 0 && !region.IsRegistered))
+        {
+            diagnostics.Add(new FusionWorldDiagnostic
+            {
+                Code = "region.unregistered",
+                Severity = FusionWorldDiagnosticSeverity.Warning,
+                Message = $"Region {region.Id} è usata da {region.MapCountText}, ma non è registrata.",
+                Details = $"{region.CellCountText} · crea metadata in .ziap/world/regions.json",
+            });
+        }
         var mapsByTileset = maps
             .GroupBy(map => map.TilesetId)
             .ToDictionary(
@@ -181,6 +199,9 @@ public sealed class FusionWorldWorkspaceService
             Tilesets = tilesets,
             Maps = maps,
             Assets = assets,
+            Regions = regions,
+            RegionRegistryPath = regionRegistry.Path,
+            RegionRegistryExists = regionRegistry.Exists,
             Diagnostics = diagnostics
                 .OrderByDescending(diagnostic => diagnostic.Severity)
                 .ThenBy(diagnostic => diagnostic.Code, StringComparer.OrdinalIgnoreCase)
@@ -380,7 +401,7 @@ public sealed class FusionWorldWorkspaceService
         return result;
     }
 
-    private async Task<IReadOnlyList<FusionWorldMap>> LoadMapsAsync(
+    private async Task<IReadOnlyList<ParsedMap>> LoadMapsAsync(
         ZiapProject project,
         IReadOnlyDictionary<int, string> mapNames,
         IReadOnlyDictionary<int, ParsedTileset> tilesets,
@@ -393,7 +414,7 @@ public sealed class FusionWorldWorkspaceService
             return [];
         }
 
-        var result = new List<FusionWorldMap>();
+        var result = new List<ParsedMap>();
         foreach (var path in _fileSystem.EnumerateFiles(dataDirectory, "Map*.json")
                      .OrderBy(path => path, StringComparer.OrdinalIgnoreCase))
         {
@@ -410,8 +431,9 @@ public sealed class FusionWorldWorkspaceService
                 {
                     throw new JsonException("La radice della mappa deve essere un oggetto JSON.");
                 }
-                var tilesetId = ReadInt(document.RootElement, "tilesetId") ?? 0;
-                result.Add(new FusionWorldMap
+                var map = document.RootElement;
+                var tilesetId = ReadInt(map, "tilesetId") ?? 0;
+                var worldMap = new FusionWorldMap
                 {
                     Id = mapId,
                     DisplayName = mapNames.GetValueOrDefault(mapId, $"Map {mapId:000}"),
@@ -420,7 +442,10 @@ public sealed class FusionWorldWorkspaceService
                         ? tileset.Name
                         : $"Tileset {tilesetId} mancante",
                     SourcePath = path,
-                });
+                };
+                result.Add(new ParsedMap(
+                    worldMap,
+                    ReadRegionCellCounts(map, worldMap, diagnostics)));
             }
             catch (JsonException exception)
             {
@@ -434,7 +459,239 @@ public sealed class FusionWorldWorkspaceService
                 });
             }
         }
-        return result.OrderBy(map => map.Id).ToArray();
+        return result.OrderBy(map => map.Map.Id).ToArray();
+    }
+
+    private async Task<ParsedRegionRegistry> LoadRegionRegistryAsync(
+        ZiapProject project,
+        ICollection<FusionWorldDiagnostic> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var path = Path.Combine(project.Path, ".ziap", "world", "regions.json");
+        if (!_fileSystem.FileExists(path))
+        {
+            return new ParsedRegionRegistry(
+                path,
+                Exists: false,
+                new Dictionary<int, RegionMetadata>());
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(
+                await _fileSystem.ReadAllTextAsync(path, cancellationToken));
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                diagnostics.Add(new FusionWorldDiagnostic
+                {
+                    Code = "region.registry-invalid-shape",
+                    Severity = FusionWorldDiagnosticSeverity.Error,
+                    Message = "regions.json deve contenere un oggetto indicizzato per Region ID.",
+                    Details = path,
+                });
+                return new ParsedRegionRegistry(
+                    path,
+                    Exists: true,
+                    new Dictionary<int, RegionMetadata>());
+            }
+
+            var metadata = new Dictionary<int, RegionMetadata>();
+            foreach (var entry in document.RootElement.EnumerateObject())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (!int.TryParse(entry.Name, out var id) || id is < 1 or > 255)
+                {
+                    diagnostics.Add(new FusionWorldDiagnostic
+                    {
+                        Code = "region.registry-id-invalid",
+                        Severity = FusionWorldDiagnosticSeverity.Error,
+                        Message = $"'{entry.Name}' non è un Region ID valido (1–255).",
+                        Details = path,
+                    });
+                    continue;
+                }
+                if (entry.Value.ValueKind != JsonValueKind.Object)
+                {
+                    diagnostics.Add(new FusionWorldDiagnostic
+                    {
+                        Code = "region.registry-entry-invalid",
+                        Severity = FusionWorldDiagnosticSeverity.Error,
+                        Message = $"La metadata della Region {id} deve essere un oggetto.",
+                        Details = path,
+                    });
+                    continue;
+                }
+                if (!metadata.TryAdd(id, new RegionMetadata(
+                    ReadString(entry.Value, "name"),
+                    ReadString(entry.Value, "category"),
+                    ReadString(entry.Value, "owner"),
+                    ReadBoolean(entry.Value, "reserved"))))
+                {
+                    diagnostics.Add(new FusionWorldDiagnostic
+                    {
+                        Code = "region.registry-id-duplicate",
+                        Severity = FusionWorldDiagnosticSeverity.Error,
+                        Message = $"regions.json contiene più metadata per la Region {id}.",
+                        Details = path,
+                    });
+                }
+            }
+            return new ParsedRegionRegistry(path, Exists: true, metadata);
+        }
+        catch (JsonException exception)
+        {
+            diagnostics.Add(new FusionWorldDiagnostic
+            {
+                Code = "region.registry-json-invalid",
+                Severity = FusionWorldDiagnosticSeverity.Error,
+                Message = "regions.json non contiene JSON valido.",
+                Details = exception.Message,
+            });
+            return new ParsedRegionRegistry(
+                path,
+                Exists: true,
+                new Dictionary<int, RegionMetadata>());
+        }
+    }
+
+    private static IReadOnlyList<FusionWorldRegion> BuildRegions(
+        IReadOnlyList<ParsedMap> maps,
+        IReadOnlyDictionary<int, RegionMetadata> registry)
+    {
+        var usagesByRegion = maps
+            .SelectMany(map => map.RegionCellCounts.Select(pair => new
+            {
+                RegionId = pair.Key,
+                Usage = new FusionWorldRegionUsage
+                {
+                    MapId = map.Map.Id,
+                    MapName = map.Map.DisplayName,
+                    SourcePath = map.Map.SourcePath,
+                    CellCount = pair.Value,
+                },
+            }))
+            .GroupBy(item => item.RegionId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyList<FusionWorldRegionUsage>)group
+                    .Select(item => item.Usage)
+                    .OrderBy(usage => usage.MapId)
+                    .ToArray());
+        return usagesByRegion.Keys
+            .Concat(registry.Keys)
+            .Distinct()
+            .OrderBy(id => id)
+            .Select(id =>
+            {
+                var isRegistered = registry.TryGetValue(id, out var metadata);
+                return new FusionWorldRegion
+                {
+                    Id = id,
+                    Name = metadata?.Name ?? $"Region {id}",
+                    Category = metadata?.Category ?? "Non classificata",
+                    Owner = metadata?.Owner ?? "—",
+                    IsReserved = metadata?.IsReserved ?? false,
+                    IsRegistered = isRegistered,
+                    Usages = usagesByRegion.GetValueOrDefault(id, []),
+                };
+            })
+            .ToArray();
+    }
+
+    private static IReadOnlyDictionary<int, int> ReadRegionCellCounts(
+        JsonElement map,
+        FusionWorldMap worldMap,
+        ICollection<FusionWorldDiagnostic> diagnostics)
+    {
+        var width = ReadInt(map, "width") ?? 0;
+        var height = ReadInt(map, "height") ?? 0;
+        if (width <= 0 || height <= 0)
+        {
+            diagnostics.Add(new FusionWorldDiagnostic
+            {
+                Code = "region.map-dimensions-invalid",
+                Severity = FusionWorldDiagnosticSeverity.Warning,
+                MapId = worldMap.Id,
+                Message = $"{worldMap.IdText} non dichiara dimensioni valide per leggere le Region.",
+                Details = worldMap.SourcePath,
+            });
+            return new Dictionary<int, int>();
+        }
+        if (!map.TryGetProperty("data", out var data) || data.ValueKind != JsonValueKind.Array)
+        {
+            diagnostics.Add(new FusionWorldDiagnostic
+            {
+                Code = "region.map-data-missing",
+                Severity = FusionWorldDiagnosticSeverity.Warning,
+                MapId = worldMap.Id,
+                Message = $"{worldMap.IdText} non contiene il layer data per leggere le Region.",
+                Details = worldMap.SourcePath,
+            });
+            return new Dictionary<int, int>();
+        }
+
+        var tileCountLong = (long)width * height;
+        if (tileCountLong > int.MaxValue / 6)
+        {
+            diagnostics.Add(new FusionWorldDiagnostic
+            {
+                Code = "region.map-dimensions-invalid",
+                Severity = FusionWorldDiagnosticSeverity.Warning,
+                MapId = worldMap.Id,
+                Message = $"{worldMap.IdText} ha dimensioni troppo grandi per il layer Region.",
+                Details = worldMap.SourcePath,
+            });
+            return new Dictionary<int, int>();
+        }
+        var tileCount = (int)tileCountLong;
+        var regionStart = tileCount * 5;
+        var regionEnd = regionStart + tileCount;
+        if (data.GetArrayLength() < regionEnd)
+        {
+            diagnostics.Add(new FusionWorldDiagnostic
+            {
+                Code = "region.map-data-incomplete",
+                Severity = FusionWorldDiagnosticSeverity.Warning,
+                MapId = worldMap.Id,
+                Message = $"{worldMap.IdText} non contiene tutti i 6 layer RPG Maker previsti.",
+                Details = $"Attesi almeno {regionEnd} valori, trovati {data.GetArrayLength()}.",
+            });
+        }
+
+        var counts = new Dictionary<int, int>();
+        var invalidIds = new HashSet<int>();
+        var valueIndex = 0;
+        foreach (var value in data.EnumerateArray())
+        {
+            if (valueIndex >= regionEnd)
+            {
+                break;
+            }
+            if (valueIndex >= regionStart && value.TryGetInt32(out var regionId))
+            {
+                if (regionId is > 0 and <= 255)
+                {
+                    counts[regionId] = counts.GetValueOrDefault(regionId) + 1;
+                }
+                else if (regionId != 0)
+                {
+                    invalidIds.Add(regionId);
+                }
+            }
+            valueIndex++;
+        }
+        foreach (var invalidId in invalidIds.OrderBy(id => id))
+        {
+            diagnostics.Add(new FusionWorldDiagnostic
+            {
+                Code = "region.id-out-of-range",
+                Severity = FusionWorldDiagnosticSeverity.Error,
+                MapId = worldMap.Id,
+                Message = $"{worldMap.IdText} usa Region ID {invalidId}, fuori dall'intervallo 1–255.",
+                Details = worldMap.SourcePath,
+            });
+        }
+        return counts;
     }
 
     private static IReadOnlyList<string> ReadAssetPaths(
@@ -534,6 +791,11 @@ public sealed class FusionWorldWorkspaceService
             ? result
             : null;
 
+    private static bool ReadBoolean(JsonElement source, string name) =>
+        source.ValueKind == JsonValueKind.Object &&
+        source.TryGetProperty(name, out var value) &&
+        value.ValueKind == JsonValueKind.True;
+
     private sealed record ParsedTileset(
         int Id,
         string Name,
@@ -544,4 +806,19 @@ public sealed class FusionWorldWorkspaceService
         string PhysicalPath,
         long SizeBytes,
         string Sha256);
+
+    private sealed record ParsedMap(
+        FusionWorldMap Map,
+        IReadOnlyDictionary<int, int> RegionCellCounts);
+
+    private sealed record RegionMetadata(
+        string? Name,
+        string? Category,
+        string? Owner,
+        bool IsReserved);
+
+    private sealed record ParsedRegionRegistry(
+        string Path,
+        bool Exists,
+        IReadOnlyDictionary<int, RegionMetadata> Metadata);
 }

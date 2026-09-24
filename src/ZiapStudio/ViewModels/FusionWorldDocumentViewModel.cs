@@ -10,6 +10,7 @@ public sealed class FusionWorldDocumentViewModel : INotifyPropertyChanged
 {
     private FusionWorldTileset? _selectedTileset;
     private FusionWorldAsset? _selectedAsset;
+    private FusionWorldRegion? _selectedRegion;
     private BitmapImage? _selectedAssetPreview;
 
     public FusionWorldDocumentViewModel(FusionWorldWorkspaceDocument document)
@@ -17,6 +18,7 @@ public sealed class FusionWorldDocumentViewModel : INotifyPropertyChanged
         Document = document;
         SelectedTileset = Tilesets.FirstOrDefault(tileset => tileset.IsInUse) ?? Tilesets.FirstOrDefault();
         SelectedAsset = Assets.FirstOrDefault(asset => asset.Exists && !asset.IsOrphan) ?? Assets.FirstOrDefault();
+        SelectedRegion = Regions.FirstOrDefault(region => region.CellCount > 0) ?? Regions.FirstOrDefault();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -29,6 +31,8 @@ public sealed class FusionWorldDocumentViewModel : INotifyPropertyChanged
 
     public IReadOnlyList<FusionWorldMap> Maps => Document.Maps;
 
+    public IReadOnlyList<FusionWorldRegion> Regions => Document.Regions;
+
     public IReadOnlyList<FusionWorldDiagnostic> Diagnostics => Document.Diagnostics;
 
     public string WorkspaceStatusText => Document.ErrorCount > 0
@@ -38,6 +42,10 @@ public sealed class FusionWorldDocumentViewModel : INotifyPropertyChanged
     public string InventoryText =>
         $"{Document.UsedTilesetCount} tileset in uso · {Assets.Count} asset · " +
         $"{Document.OrganizedCategoryCount} categorie";
+
+    public string RegionRegistryText => Document.RegionRegistryExists
+        ? $"{Document.RegisteredRegionCount} Region registrate · {Document.ActiveRegionCount} in uso"
+        : $"Registry assente · {Document.ActiveRegionCount} Region in uso";
 
     public string AssetAuditText =>
         $"{Document.MissingAssetCount} mancanti · {Document.OrphanAssetCount} orfani · " +
@@ -112,6 +120,30 @@ public sealed class FusionWorldDocumentViewModel : INotifyPropertyChanged
     public string SelectedAssetStatusText => SelectedAsset is null
         ? "Seleziona un asset"
         : $"{SelectedAsset.StatusText} · {SelectedAsset.UsageText} · {SelectedAsset.MapUsageText}";
+
+    public FusionWorldRegion? SelectedRegion
+    {
+        get => _selectedRegion;
+        set
+        {
+            if (ReferenceEquals(_selectedRegion, value))
+            {
+                return;
+            }
+            _selectedRegion = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SelectedRegionUsages));
+            OnPropertyChanged(nameof(SelectedRegionStatusText));
+        }
+    }
+
+    public IReadOnlyList<FusionWorldRegionUsage> SelectedRegionUsages =>
+        SelectedRegion?.Usages ?? [];
+
+    public string SelectedRegionStatusText => SelectedRegion is null
+        ? "Seleziona una Region"
+        : $"{SelectedRegion.StatusText} · {SelectedRegion.MapCountText} · " +
+          $"{SelectedRegion.CellCountText}";
 
     private static BitmapImage? CreatePreview(FusionWorldAsset? asset)
     {

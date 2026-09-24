@@ -42,6 +42,36 @@ public sealed record FusionWorldMapUsage
     public string DisplayText => $"Map{MapId:000} · {MapName}";
 }
 
+public sealed record FusionWorldRegionUsage
+{
+    public required int MapId { get; init; }
+    public required string MapName { get; init; }
+    public required string SourcePath { get; init; }
+    public required int CellCount { get; init; }
+
+    public string MapText => $"Map{MapId:000} · {MapName}";
+    public string CellCountText => CellCount == 1 ? "1 cella" : $"{CellCount} celle";
+}
+
+public sealed record FusionWorldRegion
+{
+    public required int Id { get; init; }
+    public required string Name { get; init; }
+    public required string Category { get; init; }
+    public required string Owner { get; init; }
+    public required bool IsReserved { get; init; }
+    public required bool IsRegistered { get; init; }
+    public required IReadOnlyList<FusionWorldRegionUsage> Usages { get; init; }
+
+    public int MapCount => Usages.Count;
+    public int CellCount => Usages.Sum(usage => usage.CellCount);
+    public string IdText => Id.ToString();
+    public string MapCountText => MapCount == 1 ? "1 mappa" : $"{MapCount} mappe";
+    public string CellCountText => CellCount == 1 ? "1 cella" : $"{CellCount} celle";
+    public string StatusText => IsRegistered ? "Registrata" : "Da registrare";
+    public string ReservedText => IsReserved ? "Riservata" : "Non riservata";
+}
+
 public sealed record FusionWorldTilesetSlot
 {
     public required string Slot { get; init; }

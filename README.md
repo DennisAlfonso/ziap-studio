@@ -24,6 +24,8 @@ semantico e un browser con preview per `ZDP_FusionAudio`.
 - Tileset Manager con slot A1–E, mappe utilizzatrici e stato d'uso effettivo;
 - Asset Usage con relazione inversa PNG → tileset → mappe, preview, dimensione e SHA-256;
 - Asset Auditor / Pre-Flight per sheet mancanti, orfani, duplicati byte-per-byte e tileset mancanti dalle mappe;
+- Region Registry read-only: scansione del layer Region delle `MapXXX.json`, conteggio per mappa/cella e metadata opzionali in `.ziap/world/regions.json`;
+- diagnostica Region nel Pre-Flight per registry non valido, ID fuori intervallo, layer dati incompleti e Region usate senza metadata;
 - workspace Boss Battle con inventario di `FusionCombat`, `FusionEncounters`, `FusionArenas` e `FusionPuzzles`;
 - browser degli encounter con selezione sincronizzata di fase e sequenza;
 - grafo interattivo delle fasi con transizioni e condizioni;
@@ -159,6 +161,32 @@ sistemi operativi.
 Gli altri database continuano a essere consultabili senza possibilità di modifica.
 Il metadata `.ziap/project.json` è pensato per essere versionato insieme al
 repository; preferenze personali e recenti restano in `%LOCALAPPDATA%`.
+
+### Region Registry
+
+`World & Navigation` legge opzionalmente `.ziap/world/regions.json`. Il file
+aggiunge semantica a un normale Region ID RPG Maker, senza modificare le mappe:
+
+```json
+{
+  "232": {
+    "name": "Encounter Spawn",
+    "category": "Combat",
+    "owner": "FusionEncounter",
+    "reserved": true
+  },
+  "254": {
+    "name": "Hard Block",
+    "category": "Traversal",
+    "owner": "Movement",
+    "reserved": true
+  }
+}
+```
+
+Il workspace resta read-only: il registry è opzionale e può essere mantenuto nel
+repository; le Region in uso ma prive di metadata compaiono come avvisi nel
+Pre-Flight.
 
 ## Schema di creazione armi
 

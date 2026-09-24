@@ -12,6 +12,12 @@ public sealed record FusionWorldWorkspaceDocument : StudioDocument
 
     public IReadOnlyList<FusionWorldAsset> Assets { get; init; } = [];
 
+    public IReadOnlyList<FusionWorldRegion> Regions { get; init; } = [];
+
+    public string RegionRegistryPath { get; init; } = string.Empty;
+
+    public bool RegionRegistryExists { get; init; }
+
     public IReadOnlyList<FusionWorldDiagnostic> Diagnostics { get; init; } = [];
 
     public int UsedTilesetCount => Tilesets.Count(tileset => tileset.IsInUse);
@@ -27,6 +33,10 @@ public sealed record FusionWorldWorkspaceDocument : StudioDocument
     public int OrphanAssetCount => Assets.Count(asset => asset.IsOrphan);
 
     public int DuplicateAssetCount => Assets.Count(asset => asset.IsDuplicate);
+
+    public int RegisteredRegionCount => Regions.Count(region => region.IsRegistered);
+
+    public int ActiveRegionCount => Regions.Count(region => region.CellCount > 0);
 
     public int ErrorCount => Diagnostics.Count(diagnostic =>
         diagnostic.Severity == FusionWorldDiagnosticSeverity.Error);

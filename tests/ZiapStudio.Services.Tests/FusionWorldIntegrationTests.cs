@@ -81,6 +81,66 @@ public sealed class FusionWorldIntegrationTests
         Assert.All(issues, issue => Assert.Equal("WorldNavigation", issue.Scope));
     }
 
+    [Fact]
+    public async Task Workspace_ReadsRegionLayerAndOptionalMetadataRegistry()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WriteFile(
+            "data/Tilesets.json",
+            "[null,{\"id\":1,\"name\":\"Test\",\"tilesetNames\":[]}]");
+        workspace.WriteFile("data/MapInfos.json", "[null,{\"id\":1,\"name\":\"Arena\"}]");
+        workspace.WriteFile(
+            "data/Map001.json",
+            $"{{\"width\":2,\"height\":2,\"tilesetId\":1,\"data\":[{BuildRegionData()}]}}");
+        workspace.WriteFile(
+            ".ziap/world/regions.json",
+            """
+            {
+              "232":{"name":"Encounter Spawn","category":"Combat","owner":"FusionEncounter","reserved":true},
+              "254":{"name":"Hard Block","category":"Traversal","owner":"Movement","reserved":true}
+            }
+            """);
+        var service = new FusionWorldWorkspaceService(new FileSystemService());
+
+        var document = await service.LoadAsync(CreateProject(workspace.RootPath), CreateDescriptor());
+
+        Assert.True(document.RegionRegistryExists);
+        Assert.Equal(2, document.ActiveRegionCount);
+        Assert.Equal(2, document.RegisteredRegionCount);
+        var encounterSpawn = Assert.Single(document.Regions, region => region.Id == 232);
+        Assert.Equal("Encounter Spawn", encounterSpawn.Name);
+        Assert.Equal("Combat", encounterSpawn.Category);
+        Assert.True(encounterSpawn.IsReserved);
+        Assert.Equal(2, encounterSpawn.CellCount);
+        Assert.Equal("Arena", Assert.Single(encounterSpawn.Usages).MapName);
+        var hardBlock = Assert.Single(document.Regions, region => region.Id == 254);
+        Assert.Equal(1, hardBlock.CellCount);
+        Assert.DoesNotContain(document.Diagnostics, issue => issue.Code == "region.unregistered");
+    }
+
+    [Fact]
+    public async Task Preflight_ReportsUsedRegionsWithoutMetadata()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WriteFile(
+            "data/Tilesets.json",
+            "[null,{\"id\":1,\"name\":\"Test\",\"tilesetNames\":[]}]");
+        workspace.WriteFile(
+            "data/Map001.json",
+            $"{{\"width\":2,\"height\":2,\"tilesetId\":1,\"data\":[{BuildRegionData()}]}}");
+        var fileSystem = new FileSystemService();
+        var provider = new FusionWorldPreflightProvider(
+            new FusionWorldWorkspaceService(fileSystem),
+            new FusionWorldIntegrationProvider(fileSystem));
+
+        var issues = await provider.ScanAsync(CreateProject(workspace.RootPath));
+
+        Assert.Contains(issues, issue =>
+            issue.RuleId == "world.region.unregistered" &&
+            issue.Severity == PreflightSeverity.Warning &&
+            issue.Scope == "WorldNavigation");
+    }
+
     private static void WriteWorldData(TestWorkspace workspace)
     {
         workspace.WriteFile(
@@ -100,6 +160,10 @@ public sealed class FusionWorldIntegrationTests
         workspace.WriteFile("data/Map001.json", "{\"tilesetId\":1}");
         workspace.WriteFile("data/Map002.json", "{\"tilesetId\":2}");
     }
+
+    private static string BuildRegionData() => string.Join(
+        ',',
+        Enumerable.Repeat(0, 20).Concat([232, 232, 254, 0]));
 
     private static DocumentDescriptor CreateDescriptor() => new()
     {
