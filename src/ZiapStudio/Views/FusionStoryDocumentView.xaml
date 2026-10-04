@@ -1,0 +1,88 @@
+<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="ZiapStudio.Views.FusionStoryDocumentView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:story="using:ZiapStudio.Core.Fusion.Story"
+    xmlns:viewModels="using:ZiapStudio.ViewModels">
+
+    <Grid Padding="32,26" RowSpacing="18">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid ColumnSpacing="18">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+            <StackPanel Spacing="4">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock FontSize="30" FontWeight="SemiBold" Text="Story &amp; Events" />
+                    <Border Padding="8,3" VerticalAlignment="Center" Background="{ThemeResource AccentFillColorSecondaryBrush}" CornerRadius="5">
+                        <TextBlock FontSize="10" FontWeight="SemiBold" Text="READ ONLY" />
+                    </Border>
+                </StackPanel>
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Timeline semantica degli eventi RPG Maker MZ con localizzazione Fusion risolta." />
+            </StackPanel>
+            <TextBlock Grid.Column="1" VerticalAlignment="Center" FontWeight="SemiBold" Text="{Binding WorkspaceStatusText}" />
+        </Grid>
+
+        <Grid Grid.Row="1" ColumnSpacing="16">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="310" /><ColumnDefinition Width="*" /><ColumnDefinition Width="285" /></Grid.ColumnDefinitions>
+            <Border Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="10">
+                <Grid RowSpacing="10"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                    <TextBlock FontSize="17" FontWeight="SemiBold" Text="Sorgenti narrative" />
+                    <TextBox Grid.Row="1" PlaceholderText="Cerca storia…" Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                    <Grid Grid.Row="2"><Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+                        <ListView HorizontalContentAlignment="Stretch" ItemsSource="{Binding NavigationItems}" SelectedItem="{Binding SelectedSource, Mode=TwoWay}" SelectionMode="Single">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="viewModels:StoryNavigationItem">
+                                    <Grid Padding="3,5" ColumnSpacing="6"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="1"><TextBlock FontWeight="SemiBold" Text="{x:Bind DisplayTitle}" TextTrimming="CharacterEllipsis" /><TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Context}" TextTrimming="CharacterEllipsis" /></StackPanel>
+                                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="10" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{x:Bind KindText}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <TextBlock Grid.Row="1" Margin="0,8,0,0" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SearchStatusText}" TextWrapping="Wrap" />
+                    </Grid>
+                </Grid>
+            </Border>
+
+            <Grid Grid.Column="1" RowSpacing="10"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <StackPanel Spacing="2"><TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding SelectedSourceTitle}" /><TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SelectedSourceDetail}" TextWrapping="Wrap" /></StackPanel>
+                <ListView Grid.Row="1" HorizontalContentAlignment="Stretch" ItemsSource="{Binding Blocks}" SelectedItem="{Binding SelectedBlock, Mode=TwoWay}" SelectionMode="Single">
+                    <ListView.ItemTemplate>
+                        <DataTemplate x:DataType="story:StoryBlock">
+                            <Border Margin="0,0,0,8" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+                                <StackPanel Spacing="5">
+                                    <Grid ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                        <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{x:Bind KindText}" />
+                                        <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Grid.Column="2" FontFamily="Consolas" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind CommandRangeText}" />
+                                    </Grid>
+                                    <TextBlock Text="{x:Bind DisplayText}" TextWrapping="Wrap" />
+                                    <TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind LocalizationOriginText}" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </Grid>
+
+            <Border Grid.Column="2" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="10">
+                <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Spacing="10">
+                    <TextBlock FontSize="17" FontWeight="SemiBold" Text="Inspector" />
+                    <TextBlock FontWeight="SemiBold" Text="{Binding SelectedBlock.KindText}" />
+                    <TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SelectedBlock.CommandRangeText}" />
+                    <TextBlock Text="{Binding SelectedBlock.DisplayText}" TextWrapping="Wrap" />
+                    <TextBlock FontSize="10" FontWeight="SemiBold" Text="LOCALIZATION ORIGIN" />
+                    <TextBlock FontFamily="Consolas" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SelectedBlock.LocalizationOriginText}" TextWrapping="Wrap" />
+                    <ItemsControl ItemsSource="{Binding SelectedBlockDetails}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="x:String"><TextBlock FontSize="11" Text="{x:Bind}" TextWrapping="Wrap" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>
+                    <Expander Header="Raw text" IsExpanded="False"><TextBox AcceptsReturn="True" FontFamily="Consolas" FontSize="10" IsReadOnly="True" Text="{Binding SelectedBlock.RawText}" TextWrapping="Wrap" /></Expander>
+                    <Expander Header="Raw parameters" IsExpanded="False"><TextBox AcceptsReturn="True" FontFamily="Consolas" FontSize="10" IsReadOnly="True" Text="{Binding SelectedBlock.RawParameters}" TextWrapping="Wrap" /></Expander>
+                    <Expander Header="Source commands" IsExpanded="False"><ItemsControl ItemsSource="{Binding SelectedBlockRawCommands}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="story:StoryRawCommand"><TextBlock FontFamily="Consolas" FontSize="10" Text="{x:Bind Parameters}" TextWrapping="Wrap" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl></Expander>
+                </StackPanel></ScrollViewer>
+            </Border>
+        </Grid>
+    </Grid>
+</UserControl>

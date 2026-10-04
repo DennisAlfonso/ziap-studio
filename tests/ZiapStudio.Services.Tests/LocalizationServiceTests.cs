@@ -67,6 +67,26 @@ public sealed class LocalizationServiceTests
     }
 
     [Fact]
+    public async Task ResolveAsync_UsesFusionNestedNamespaceRegistryForMdv()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WriteFile(
+            "locales/it/dialogue/mdv.json",
+            """
+            [{"DestinyOfBirth":[{"newPrologoStory":[{"text":"Testo localizzato"}]}]}]
+            """);
+
+        var resolution = await CreateService().ResolveAsync(
+            workspace.RootPath,
+            "{mdv[0].DestinyOfBirth[0].newPrologoStory[0].text}");
+
+        Assert.NotNull(resolution);
+        Assert.Equal("Testo localizzato", resolution.ResolvedValue);
+        Assert.Equal("dialogue/mdv.json", resolution.Origin!.SourceFile);
+        Assert.Equal("0.DestinyOfBirth.0.newPrologoStory.0.text", resolution.Origin.Path);
+    }
+
+    [Fact]
     public async Task ResolveAsync_IgnoresPrimitiveStrings()
     {
         using var workspace = new TestWorkspace();

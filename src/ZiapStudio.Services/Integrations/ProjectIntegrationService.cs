@@ -44,6 +44,34 @@ public sealed class ProjectIntegrationService
         }
 
         var result = roots.ToList();
+        var storyDocuments = documents.Where(document =>
+            document.ResourceId.Scheme.Equals("fusionstory", StringComparison.OrdinalIgnoreCase) &&
+            document.ResourceId.Host.Equals("workspace", StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (storyDocuments.Length > 0)
+        {
+            var worldIndex = result.FindIndex(node =>
+                node.Name.Equals("World", StringComparison.OrdinalIgnoreCase));
+            if (worldIndex >= 0)
+            {
+                var world = result[worldIndex];
+                var storyNodes = storyDocuments.Select(document => new ProjectExplorerNode
+                {
+                    Name = document.DisplayName,
+                    Kind = ProjectExplorerNodeKind.Integration,
+                    Path = document.SourcePath ?? project.Path,
+                    Document = document,
+                });
+                result[worldIndex] = world with
+                {
+                    Children = storyNodes.Concat(world.Children).ToArray(),
+                };
+            }
+        }
+        var pluginDocuments = documents.Except(storyDocuments).ToArray();
+        if (pluginDocuments.Length == 0)
+        {
+            return result;
+        }
         var systemIndex = result.FindIndex(node =>
             node.Name.Equals("System", StringComparison.OrdinalIgnoreCase));
         if (systemIndex < 0)
@@ -55,7 +83,7 @@ public sealed class ProjectIntegrationService
         var systemChildren = system.Children.ToList();
         var pluginIndex = systemChildren.FindIndex(node =>
             node.Name.Equals("Plugin", StringComparison.OrdinalIgnoreCase));
-        var integrationNodes = documents.Select(document => new ProjectExplorerNode
+        var integrationNodes = pluginDocuments.Select(document => new ProjectExplorerNode
         {
             Name = document.DisplayName,
             Kind = ProjectExplorerNodeKind.Integration,

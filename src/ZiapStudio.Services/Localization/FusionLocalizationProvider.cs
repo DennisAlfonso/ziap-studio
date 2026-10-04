@@ -13,12 +13,16 @@ public sealed class FusionLocalizationProvider : ILocalizationProvider
         RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     private readonly FileSystemService _fileSystem;
+    private readonly LocalizationNamespaceRegistry _namespaceRegistry;
     private readonly ConcurrentDictionary<string, Task<JsonElement?>> _documents =
         new(StringComparer.OrdinalIgnoreCase);
 
-    public FusionLocalizationProvider(FileSystemService fileSystem)
+    public FusionLocalizationProvider(
+        FileSystemService fileSystem,
+        LocalizationNamespaceRegistry? namespaceRegistry = null)
     {
         _fileSystem = fileSystem;
+        _namespaceRegistry = namespaceRegistry ?? LocalizationNamespaceRegistry.Fusion;
     }
 
     public bool CanResolve(string rawValue) => TryParseKey(rawValue, out _);
@@ -40,7 +44,7 @@ public sealed class FusionLocalizationProvider : ILocalizationProvider
             Namespace = key.Namespace,
             Path = key.FocusPath,
             Locale = locale,
-            SourceFile = $"{key.Namespace}.json",
+            SourceFile = _namespaceRegistry.GetSourceFile(key.Namespace),
         };
         var path = Path.Combine(projectPath, "locales", locale, origin.SourceFile);
         var document = await _documents.GetOrAdd(

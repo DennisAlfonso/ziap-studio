@@ -10,6 +10,8 @@ using ZiapStudio.Services.Fusion.Audio;
 using ZiapStudio.Services.Fusion.Bosses;
 using ZiapStudio.Services.Fusion.Puzzles;
 using ZiapStudio.Services.Fusion.World;
+using ZiapStudio.Services.Fusion.Story;
+using ZiapStudio.Services.Localization;
 using ZiapStudio.Services.Fusion.Preflight.Audio;
 using ZiapStudio.Services.Fusion.Preflight.Bosses;
 using ZiapStudio.Services.Fusion.Preflight.World;
@@ -51,12 +53,14 @@ public partial class App : Application
         var fusionBossIntegrationProvider = new FusionBossIntegrationProvider(pluginRegistry);
         var fusionPuzzleIntegrationProvider = new FusionPuzzleIntegrationProvider(pluginRegistry);
         var fusionWorldIntegrationProvider = new FusionWorldIntegrationProvider(fileSystem);
+        var fusionStoryIntegrationProvider = new FusionStoryIntegrationProvider(fileSystem);
         var projectIntegrationService = new ProjectIntegrationService(
         [
             fusionAudioIntegrationProvider,
             fusionBossIntegrationProvider,
             fusionPuzzleIntegrationProvider,
             fusionWorldIntegrationProvider,
+            fusionStoryIntegrationProvider,
         ]);
         var fusionAudioCatalogService = new FusionAudioCatalogService(
             fileSystem,
@@ -71,6 +75,14 @@ public partial class App : Application
             fileSystem,
             pluginRegistry);
         var fusionWorldWorkspaceService = new FusionWorldWorkspaceService(fileSystem);
+        var localizationService = new LocalizationService(
+        [
+            new FusionLocalizationProvider(fileSystem),
+        ]);
+        var fusionStoryWorkspaceService = new FusionStoryWorkspaceService(
+            fileSystem,
+            new RpgMakerStoryCommandParser(
+                new CompositeLocalizationTextResolver(localizationService)));
         var documentResolver = new DocumentResolver(
         [
             new RpgMakerDatabaseDocumentProvider(fileSystem),
@@ -78,6 +90,7 @@ public partial class App : Application
             new FusionBossDocumentProvider(fusionBossWorkspaceService),
             new FusionPuzzleDocumentProvider(fusionPuzzleWorkspaceService),
             new FusionWorldDocumentProvider(fusionWorldWorkspaceService),
+            new FusionStoryDocumentProvider(fusionStoryWorkspaceService),
         ]);
         var assetPreviewService = new AssetPreviewService(
             new AssetResolver(new RpgMakerAssetProvider(fileSystem)),

@@ -25,6 +25,7 @@ public sealed class ProjectProviderService
             new FusionBossIntegrationProvider(pluginRegistry),
             new FusionPuzzleIntegrationProvider(pluginRegistry),
             new FusionWorldIntegrationProvider(fileSystem),
+            new FusionStoryIntegrationProvider(fileSystem),
         ]);
     }
 

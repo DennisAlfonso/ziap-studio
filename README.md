@@ -1,9 +1,9 @@
 # ZIAP Studio
 
-ZIAP Studio è un editor desktop Windows per i progetti Zenkaiverse. La milestone
-`0.2.0 — World & Navigation` aggiunge una superficie semantica e read-only per
-tileset, asset, mappe e Region RPG Maker MZ, oltre alle integrazioni Fusion già
-disponibili.
+ZIAP Studio è un editor desktop Windows per i progetti Zenkaiverse. La tranche
+`0.3A — Story Reader` aggiunge `Story & Events`: una superficie semantica e
+strettamente read-only per leggere eventi RPG Maker MZ e localizzazioni Fusion,
+senza anticipare alcuna funzione di editing della storia.
 
 ## Funzionalità attuali
 
@@ -21,6 +21,12 @@ disponibili.
 - preview diretta degli asset audio supportati da Windows e apertura della cartella SE;
 - capability `Fusion Boss Battle` rilevata dai plugin Combat, Encounter e Arena attivi;
 - integrazione read-only `World & Navigation` per dipendenze tra `Tilesets.json`, `MapInfos.json`, `MapXXX.json` e `img/tilesets`;
+- `Story & Events` sotto `World`, con navigazione Map → Event → Page e Common Events;
+- timeline semantica read-only per dialoghi, scelte, commenti, script, plugin command, movement route, audio, wait, logica, transfer e control-flow;
+- raggruppamento conservativo dei command stream MZ (`101/401`, `108/408`, `355/655`, `357/657`, `205/505`), con range e parametri raw sempre consultabili;
+- fallback `Raw command` per i codici non ancora interpretati, senza perdita dei parametri sorgente;
+- risoluzione localizzazione nel testo intero, inclusi token embedded accanto agli escape code RPG Maker;
+- registry di namespace Fusion estensibile: oltre a `locales/{locale}/{namespace}.json`, `mdv` risolve `locales/{locale}/dialogue/mdv.json`;
 - Tileset Manager con slot A1–E, mappe utilizzatrici e stato d'uso effettivo;
 - Asset Usage con relazione inversa PNG → tileset → mappe, preview, dimensione e SHA-256;
 - Asset Auditor / Pre-Flight per sheet mancanti, orfani, duplicati byte-per-byte e tileset mancanti dalle mappe;
@@ -146,6 +152,7 @@ src/
 │   ├── Integrations/     registry plugin e provider delle capability di progetto
 │   ├── Fusion/Audio/     catalogo, risoluzione asset e salvataggio FusionAudio
 │   ├── Fusion/Bosses/    workspace e validazione dei contratti Boss Battle
+│   ├── Fusion/Story/     parser read-only degli event command e Story Workspace
 │   ├── Fusion/Weapons/   cataloghi, semantica e patch dei notetag arma
 │   ├── Authentication/  OAuth browser, Firebase token e sessione
 │   └── Integration/
@@ -201,6 +208,25 @@ Region corrispondono al layer `z = 5`; la passabilità evidenzia in rosso i lati
 bloccati calcolati come `Game_Map.checkPassage` sui layer tile `z = 3…0` e sui flag
 del tileset. Non include intenzionalmente eventi, plugin, collisioni Alpha/PKD o
 altre regole runtime: questi saranno overlay separati.
+
+### Story & Events — 0.3A
+
+`Story & Events` è disponibile nell'area `World` di un progetto RPG Maker con
+`MapInfos.json` o `CommonEvents.json`. Legge soltanto `MapInfos.json`, le
+`MapXXX.json` elencate e `CommonEvents.json`; non salva né riserializza i file del
+gioco. La colonna delle sorgenti porta da Map a Event e Page, mentre il centro mostra
+una timeline compatta e l'inspector conserva comandi, parametri e chiavi raw.
+
+Per esempio `{mdv[0].DestinyOfBirth[0].newPrologoStory[0].text}` viene mostrato come
+testo narrativo e mantiene la chiave e l'origine `dialogue/mdv.json` come dettaglio
+tecnico. Lo stesso vale per testi compositi, ad esempio
+`\i[1668] {mdv[...].choices[0]}`: l'escape code resta letterale e il token viene
+risolto. Chiavi mancanti restano visibili in forma raw e non impediscono il caricamento.
+
+La ricerca in memoria trova nomi di mappe/eventi, speaker, testo risolto e chiavi raw.
+I command code che 0.3A non interpreta diventano `Raw command` con `code`, `indent` e
+parametri invariati. Editing, drag & drop, nuove entry MDV, modifiche degli eventi e
+reference graph globale restano esplicitamente fuori dallo scope della tranche.
 
 ## Schema di creazione armi
 

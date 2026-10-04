@@ -5,6 +5,7 @@ using ZiapStudio.Core.Documents;
 using ZiapStudio.Core.Editing;
 using ZiapStudio.Core.Fusion.Audio;
 using ZiapStudio.Core.Fusion.World;
+using ZiapStudio.Core.Fusion.Story;
 using ZiapStudio.Core.Localization;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Core.Preflight;
@@ -248,6 +249,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(IsFusionPuzzleDocumentSelected));
                 OnPropertyChanged(nameof(IsFusionBossDocumentSelected));
                 OnPropertyChanged(nameof(IsFusionWorldDocumentSelected));
+                OnPropertyChanged(nameof(IsFusionStoryDocumentSelected));
                 OnPropertyChanged(nameof(IsDatabaseDocumentSelected));
                 OnPropertyChanged(nameof(IsEditingDocumentSelected));
                 OnPropertyChanged(nameof(ActiveDatabaseDocument));
@@ -255,6 +257,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                 OnPropertyChanged(nameof(ActiveFusionPuzzleDocument));
                 OnPropertyChanged(nameof(ActiveFusionBossDocument));
                 OnPropertyChanged(nameof(ActiveFusionWorldDocument));
+                OnPropertyChanged(nameof(ActiveFusionStoryDocument));
                 NotifyEditingPropertiesChanged();
             }
         }
@@ -275,6 +278,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public bool IsFusionWorldDocumentSelected => SelectedDocument?.IsFusionWorld == true;
 
+    public bool IsFusionStoryDocumentSelected => SelectedDocument?.IsFusionStory == true;
+
     public bool IsDatabaseDocumentSelected => ActiveDatabaseDocument is not null;
 
     public bool IsEditingDocumentSelected =>
@@ -282,7 +287,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         IsFusionAudioDocumentSelected ||
         IsFusionPuzzleDocumentSelected ||
         IsFusionBossDocumentSelected ||
-        IsFusionWorldDocumentSelected;
+        IsFusionWorldDocumentSelected ||
+        IsFusionStoryDocumentSelected;
 
     public RpgMakerDatabaseDocumentViewModel? ActiveDatabaseDocument => SelectedDocument?.Database;
 
@@ -297,6 +303,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     public FusionWorldDocumentViewModel? ActiveFusionWorldDocument =>
         SelectedDocument?.FusionWorld;
+
+    public FusionStoryDocumentViewModel? ActiveFusionStoryDocument =>
+        SelectedDocument?.FusionStory;
 
     public bool CanSaveDocument => CanInteract && SelectedDocument?.IsDirty == true;
 
@@ -1161,6 +1170,12 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                     fusionWorldDocument,
                     new FusionWorldDocumentViewModel(fusionWorldDocument));
             }
+            else if (document is FusionStoryWorkspaceDocument fusionStoryDocument)
+            {
+                tab = DocumentTabViewModel.CreateFusionStory(
+                    fusionStoryDocument,
+                    new FusionStoryDocumentViewModel(fusionStoryDocument));
+            }
             else
             {
                 throw new DocumentLoadException(
@@ -1419,6 +1434,20 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                 return;
             }
             await OpenDocumentAsync(worldExplorerItem);
+            return;
+        }
+
+        if (targetUri.Scheme.Equals("fusionstory", StringComparison.OrdinalIgnoreCase) &&
+            targetUri.Host.Equals("workspace", StringComparison.OrdinalIgnoreCase))
+        {
+            var resourceId = new Uri("fusionstory://workspace/");
+            var storyExplorerItem = FindExplorerItem(ProjectExplorerNodes, resourceId);
+            if (storyExplorerItem is null)
+            {
+                ErrorMessage = "L'integrazione Story & Events non è disponibile nel Project Explorer.";
+                return;
+            }
+            await OpenDocumentAsync(storyExplorerItem);
             return;
         }
 
