@@ -26,4 +26,12 @@ public sealed class LocalizationService
                 rawValue,
                 cancellationToken);
     }
+
+    public void Invalidate(string projectPath, string locale, string sourceFile)
+    {
+        foreach (var provider in _providers.OfType<ILocalizationCacheInvalidator>())
+        {
+            provider.Invalidate(projectPath, locale, sourceFile);
+        }
+    }
 }

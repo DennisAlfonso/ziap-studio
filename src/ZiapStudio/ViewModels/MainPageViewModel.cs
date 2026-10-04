@@ -42,6 +42,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private readonly ConsoleIntegrationService _consoleIntegrationService;
     private readonly RemoteLocalizationService _remoteLocalizationService;
     private readonly PublishedLocalizationSyncService _publishedLocalizationSyncService;
+    private readonly StoryLocalizationAuthoringService _storyLocalizationAuthoringService;
     private readonly ZiapAuthenticationService _authenticationService;
     private readonly RemoteLocalizationDocumentViewModel _remoteLocalizationDocument = new();
     private readonly PreflightScanner _preflightScanner;
@@ -79,6 +80,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         ConsoleIntegrationService consoleIntegrationService,
         RemoteLocalizationService remoteLocalizationService,
         PublishedLocalizationSyncService publishedLocalizationSyncService,
+        StoryLocalizationAuthoringService storyLocalizationAuthoringService,
         ZiapAuthenticationService authenticationService,
         PreflightScanner preflightScanner,
         PreflightSuppressionStore preflightSuppressionStore,
@@ -101,6 +103,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         _consoleIntegrationService = consoleIntegrationService;
         _remoteLocalizationService = remoteLocalizationService;
         _publishedLocalizationSyncService = publishedLocalizationSyncService;
+        _storyLocalizationAuthoringService = storyLocalizationAuthoringService;
         _authenticationService = authenticationService;
         _preflightScanner = preflightScanner;
         _preflightSuppressionStore = preflightSuppressionStore;
@@ -435,6 +438,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         IsAuthenticationBusy = true;
         try
         {
+            await ReleaseStoryAuthoringLocksAsync();
             await _authenticationService.SignOutAsync();
             StatusMessage = "Sessione myZenkai disconnessa da ZIAP Studio.";
             ResetRemoteLocalizationStatus(CurrentProject?.IsZiapInitialized == true
@@ -1174,7 +1178,10 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             {
                 tab = DocumentTabViewModel.CreateFusionStory(
                     fusionStoryDocument,
-                    new FusionStoryDocumentViewModel(fusionStoryDocument));
+                    new FusionStoryDocumentViewModel(
+                        fusionStoryDocument,
+                        CurrentProject,
+                        _storyLocalizationAuthoringService));
             }
             else
             {
@@ -1233,6 +1240,15 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         foreach (var document in OpenDocuments)
         {
             document.FusionBoss?.CloseExternalSurfaces();
+        }
+    }
+
+    private async Task ReleaseStoryAuthoringLocksAsync()
+    {
+        foreach (var story in OpenDocuments.Select(document => document.FusionStory)
+                     .OfType<FusionStoryDocumentViewModel>())
+        {
+            await story.ReleaseAsync();
         }
     }
 
@@ -1485,6 +1501,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
         try
         {
+            await ReleaseStoryAuthoringLocksAsync();
             var project = await _projectService.LoadAsync(path);
             CurrentProject = project;
             ResetDocumentWorkspace(project);

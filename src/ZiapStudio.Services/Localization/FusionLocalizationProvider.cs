@@ -6,7 +6,7 @@ using ZiapStudio.Core.Localization;
 
 namespace ZiapStudio.Services.Localization;
 
-public sealed class FusionLocalizationProvider : ILocalizationProvider
+public sealed class FusionLocalizationProvider : ILocalizationProvider, ILocalizationCacheInvalidator
 {
     private static readonly Regex NamespacePattern = new(
         "^[a-zA-Z_][a-zA-Z0-9_-]*$",
@@ -45,6 +45,9 @@ public sealed class FusionLocalizationProvider : ILocalizationProvider
             Path = key.FocusPath,
             Locale = locale,
             SourceFile = _namespaceRegistry.GetSourceFile(key.Namespace),
+            Segments = key.Path.Select(segment => segment.ArrayIndex is int index
+                ? ZiapStudio.Core.Localization.LocalizationPathSegment.Index(index)
+                : ZiapStudio.Core.Localization.LocalizationPathSegment.Property(segment.PropertyName!)).ToArray(),
         };
         var path = Path.Combine(projectPath, "locales", locale, origin.SourceFile);
         var document = await _documents.GetOrAdd(
@@ -61,9 +64,18 @@ public sealed class FusionLocalizationProvider : ILocalizationProvider
             ResolvedValue = value,
             Target = key.Target,
             Locale = locale,
-            Origin = origin,
+            Origin = origin with { ResolvedValue = value },
             Status = RpgMakerResolutionStatus.Resolved,
         };
+    }
+
+    public void Invalidate(string projectPath, string locale, string sourceFile)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(projectPath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(locale);
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceFile);
+        var path = Path.Combine(projectPath, "locales", locale, sourceFile);
+        _documents.TryRemove(path, out _);
     }
 
     private async Task<JsonElement?> LoadDocumentAsync(string path)

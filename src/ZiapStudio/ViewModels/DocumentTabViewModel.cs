@@ -221,6 +221,7 @@ public sealed class DocumentTabViewModel : INotifyPropertyChanged
             FusionBossEditSession.PropertyChanged -= FusionBossEditSession_PropertyChanged;
         }
         FusionBoss?.CloseExternalSurfaces();
+        FusionStory?.Dispose();
     }
 
     private void EditSession_PropertyChanged(object? sender, PropertyChangedEventArgs args)

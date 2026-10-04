@@ -36,6 +36,10 @@ public sealed class LocalizationServiceTests
         Assert.Equal("0.moneteAbisso", database.Origin.Path);
         Assert.Equal("it", database.Origin.Locale);
         Assert.Equal("db.json", database.Origin.SourceFile);
+        Assert.Equal(2, database.Origin.Segments.Count);
+        Assert.Equal(0, database.Origin.Segments[0].ArrayIndex);
+        Assert.Equal("moneteAbisso", database.Origin.Segments[1].PropertyName);
+        Assert.Equal("Moneta dell'Abisso", database.Origin.ResolvedValue);
         Assert.Equal(RpgMakerResolutionStatus.Resolved, database.Status);
         Assert.NotNull(main);
         Assert.Equal("Arma", main.ResolvedValue);
@@ -84,6 +88,32 @@ public sealed class LocalizationServiceTests
         Assert.Equal("Testo localizzato", resolution.ResolvedValue);
         Assert.Equal("dialogue/mdv.json", resolution.Origin!.SourceFile);
         Assert.Equal("0.DestinyOfBirth.0.newPrologoStory.0.text", resolution.Origin.Path);
+        Assert.Collection(
+            resolution.Origin.Segments,
+            segment => Assert.Equal(0, segment.ArrayIndex),
+            segment => Assert.Equal("DestinyOfBirth", segment.PropertyName),
+            segment => Assert.Equal(0, segment.ArrayIndex),
+            segment => Assert.Equal("newPrologoStory", segment.PropertyName),
+            segment => Assert.Equal(0, segment.ArrayIndex),
+            segment => Assert.Equal("text", segment.PropertyName));
+    }
+
+    [Fact]
+    public async Task Invalidate_RefreshesOnlyTheWrittenLocalizationDocument()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WriteFile("locales/it/dialogue/mdv.json", "[{\"text\":\"A\"}]");
+        var service = CreateService();
+
+        var before = await service.ResolveAsync(workspace.RootPath, "{mdv[0].text}");
+        workspace.WriteFile("locales/it/dialogue/mdv.json", "[{\"text\":\"B\"}]");
+        var cached = await service.ResolveAsync(workspace.RootPath, "{mdv[0].text}");
+        service.Invalidate(workspace.RootPath, "it", "dialogue/mdv.json");
+        var refreshed = await service.ResolveAsync(workspace.RootPath, "{mdv[0].text}");
+
+        Assert.Equal("A", before!.ResolvedValue);
+        Assert.Equal("A", cached!.ResolvedValue);
+        Assert.Equal("B", refreshed!.ResolvedValue);
     }
 
     [Fact]

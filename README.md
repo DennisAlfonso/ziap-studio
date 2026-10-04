@@ -1,9 +1,9 @@
 # ZIAP Studio
 
 ZIAP Studio è un editor desktop Windows per i progetti Zenkaiverse. La tranche
-`0.3A — Story Reader` aggiunge `Story & Events`: una superficie semantica e
-strettamente read-only per leggere eventi RPG Maker MZ e localizzazioni Fusion,
-senza anticipare alcuna funzione di editing della storia.
+`0.3A — Story Reader` ha aggiunto `Story & Events`; `0.3B — Story Authoring`
+aggiunge l'editing controllato dei soli leaf string già esistenti nel locale master,
+senza modificare la struttura degli eventi RPG Maker.
 
 ## Funzionalità attuali
 
@@ -23,6 +23,14 @@ senza anticipare alcuna funzione di editing della storia.
 - integrazione read-only `World & Navigation` per dipendenze tra `Tilesets.json`, `MapInfos.json`, `MapXXX.json` e `img/tilesets`;
 - `Story & Events` sotto `World`, con navigazione Map → Event → Page e Common Events;
 - timeline semantica read-only per dialoghi, scelte, commenti, script, plugin command, movement route, audio, wait, logica, transfer e control-flow;
+- Story Authoring 0.3B per le reference Fusion già risolte nel master `it`: working
+  snapshot locale, ChangeSet, dirty state, undo/redo, discard e save esplicito verso
+  lo staging ZIAP;
+- lock collaborativo acquisito solo entrando in editing, heartbeat ogni minuto,
+  optimistic concurrency su versione/current, staging checksum e valore originario;
+- mirror locale scritto soltanto dopo l'esito remoto, con replace atomico, controllo
+  di modifiche esterne, invalidazione della cache Localization e retry esplicito per
+  `LOCAL OUT OF SYNC`;
 - raggruppamento conservativo dei command stream MZ (`101/401`, `108/408`, `355/655`, `357/657`, `205/505`), con range e parametri raw sempre consultabili;
 - fallback `Raw command` per i codici non ancora interpretati, senza perdita dei parametri sorgente;
 - risoluzione localizzazione nel testo intero, inclusi token embedded accanto agli escape code RPG Maker;
@@ -228,6 +236,29 @@ I command code che 0.3A non interpreta diventano `Raw command` con `code`, `inde
 parametri invariati. Editing, drag & drop, nuove entry MDV, modifiche degli eventi e
 reference graph globale restano esplicitamente fuori dallo scope della tranche.
 
+### Story Authoring — 0.3B
+
+Per una reference esistente come
+`{mdv[0].DestinyOfBirth[0].newPrologoStory[8].text}`, l'inspector permette di
+scegliere **Edit master text**. Studio richiede un Firebase ID token myZenkai e un
+soft lock server-side; quindi lavora su una copia locale del JSON remoto. `Undo`,
+`Redo` e `Discard` agiscono soltanto su tale copia. **Save to ZIAP Staging** invia
+patch semantiche a path tipizzati (property/index), non un upload JSON arbitrario.
+
+Il backend verifica autorizzazione, master locale, lock, `currentVersionId`, checksum
+dello staging, valore atteso, path esistente e target stringa. Al successo restituisce
+il JSON staging canonico: Studio lo scrive atomically in
+`locales/it/dialogue/mdv.json`, invalida il cache e aggiorna la timeline. Se il remoto
+è stato salvato ma il mirror non può essere sostituito, lo stato resta chiaramente
+`LOCAL OUT OF SYNC` e **Retry sync** non ripete la patch remota.
+
+I valori embedded, ad esempio `\i[1668] {mdv[...].choices[0]}`, hanno un campo per il
+solo leaf localizzato: l'escape code e il raw command restano invariati. Un testo
+letterale nell'evento e ogni operation su `MapXXX.json`/`CommonEvents.json`, array,
+chiavi o struttura restano read-only fino alle tranche successive. `CONFLICT` non
+applica alcun last-write-wins: conserva la bozza locale e richiede di ricaricare o
+riconciliare la base.
+
 ## Schema di creazione armi
 
 `+ Nuova arma` crea un record completo nel primo slot vuoto predisposto da RPG Maker.
@@ -313,13 +344,18 @@ letto. Per un emulatore o un endpoint alternativo:
 ```powershell
 $env:ZIAP_REMOTE_LOCALIZATION_MANIFEST_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/getLocalizationPublishedManifest"
 $env:ZIAP_REMOTE_LOCALIZATION_FILE_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/getLocalizationPublishedFile"
+$env:ZIAP_LOCALIZATION_AUTHORING_GET_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/getLocalizationAuthoringFile"
+$env:ZIAP_LOCALIZATION_AUTHORING_CLAIM_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/claimLocalizationLock"
+$env:ZIAP_LOCALIZATION_AUTHORING_RENEW_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/renewLocalizationLock"
+$env:ZIAP_LOCALIZATION_AUTHORING_RELEASE_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/releaseLocalizationLock"
+$env:ZIAP_LOCALIZATION_AUTHORING_PATCH_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/patchLocalizationStaging"
 ```
 
 Configurazione e deploy del backend da `D:\Zenkaiverse\Firebase`:
 
 ```powershell
 firebase functions:secrets:set ZIAP_STUDIO_READ_TOKEN
-firebase deploy --only functions:oauthAuthorize,functions:oauthToken,functions:resolveExternalAuthRequest,functions:getExternalConsentRequest,functions:approveExternalAuthRequest,functions:getLocalizationPublishedManifest,functions:getLocalizationPublishedFile
+firebase deploy --only functions:oauthAuthorize,functions:oauthToken,functions:resolveExternalAuthRequest,functions:getExternalConsentRequest,functions:approveExternalAuthRequest,functions:getLocalizationPublishedManifest,functions:getLocalizationPublishedFile,functions:getLocalizationAuthoringFile,functions:claimLocalizationLock,functions:renewLocalizationLock,functions:releaseLocalizationLock,functions:patchLocalizationStaging
 ```
 
 Il backend registra `ziap_studio_desktop_v1` come client first-party con callback

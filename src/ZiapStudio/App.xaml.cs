@@ -133,13 +133,28 @@ public partial class App : Application
         var remoteLocalizationService = new RemoteLocalizationService(
             fileSystem,
             remoteClient);
+        var localizationMirrorWriter = new PublishedLocalizationFileWriter(
+            fileSystem,
+            new AtomicJsonFileWriter(fileSystem));
         var publishedLocalizationSyncService = new PublishedLocalizationSyncService(
             fileSystem,
             remoteClient,
             new LocalizationJsonDiffService(),
-            new PublishedLocalizationFileWriter(
-                fileSystem,
-                new AtomicJsonFileWriter(fileSystem)));
+            localizationMirrorWriter);
+        var storyLocalizationAuthoringClient = new HttpRemoteLocalizationAuthoringClient(
+            new HttpClient { Timeout = TimeSpan.FromSeconds(30) },
+            GetLocalizationAuthoringUri("ZIAP_LOCALIZATION_AUTHORING_GET_URL", "getLocalizationAuthoringFile"),
+            GetLocalizationAuthoringUri("ZIAP_LOCALIZATION_AUTHORING_CLAIM_URL", "claimLocalizationLock"),
+            GetLocalizationAuthoringUri("ZIAP_LOCALIZATION_AUTHORING_RENEW_URL", "renewLocalizationLock"),
+            GetLocalizationAuthoringUri("ZIAP_LOCALIZATION_AUTHORING_RELEASE_URL", "releaseLocalizationLock"),
+            GetLocalizationAuthoringUri("ZIAP_LOCALIZATION_AUTHORING_PATCH_URL", "patchLocalizationStaging"),
+            authenticationService);
+        var storyLocalizationAuthoringService = new StoryLocalizationAuthoringService(
+            storyLocalizationAuthoringClient,
+            snapshotService,
+            externalModificationDetector,
+            localizationMirrorWriter,
+            localizationService);
         var preflightScanner = new PreflightScanner(
         [
             new WeaponPreflightProvider(
@@ -172,6 +187,7 @@ public partial class App : Application
             consoleIntegrationService,
             remoteLocalizationService,
             publishedLocalizationSyncService,
+            storyLocalizationAuthoringService,
             authenticationService,
             preflightScanner,
             preflightSuppressionStore,
@@ -212,6 +228,11 @@ public partial class App : Application
         "ZIAP_REMOTE_LOCALIZATION_FILE_URL",
         "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/" +
         "getLocalizationPublishedFile");
+
+    private static Uri GetLocalizationAuthoringUri(string variableName, string functionName) =>
+        GetConfiguredUri(
+            variableName,
+            $"https://europe-west1-myzenkai-c58ee.cloudfunctions.net/{functionName}");
 
     private static Uri GetOAuthAuthorizeUri() => GetConfiguredUri(
         "ZIAP_OAUTH_AUTHORIZE_URL",
