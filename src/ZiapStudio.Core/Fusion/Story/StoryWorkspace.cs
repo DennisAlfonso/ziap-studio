@@ -71,6 +71,7 @@ public enum StoryBlockKind
     Script,
     PluginCommand,
     MovementRoute,
+    Animation,
     Audio,
     Wait,
     SwitchVariable,
@@ -102,6 +103,7 @@ public sealed record StoryBlock
         StoryBlockKind.Script => "SCRIPT",
         StoryBlockKind.PluginCommand => "PLUGIN",
         StoryBlockKind.MovementRoute => "MOVIMENTO",
+        StoryBlockKind.Animation => "ANIMAZIONE",
         StoryBlockKind.Audio => "AUDIO",
         StoryBlockKind.Wait => "WAIT",
         StoryBlockKind.SwitchVariable => "LOGICA",
@@ -113,6 +115,14 @@ public sealed record StoryBlock
     public string CommandRangeText => CommandStartIndex == CommandEndIndex
         ? $"Command {CommandStartIndex}"
         : $"Commands {CommandStartIndex}–{CommandEndIndex}";
+
+    /// <summary>Compact, bounded presentation depth derived directly from RPG Maker indent.</summary>
+    public int DisplayIndent => Math.Clamp(Indent, 0, 6);
+
+    public string IndentText => Indent <= 0 ? "root" : $"depth {Indent}";
+
+    public bool ShowsNarrativeLocalization =>
+        Kind is StoryBlockKind.Dialogue or StoryBlockKind.Choices && LocalizationOrigins.Count > 0;
 
     public string LocalizationOriginText => LocalizationOrigins.Count == 0
         ? "—"

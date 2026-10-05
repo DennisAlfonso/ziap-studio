@@ -16,7 +16,8 @@ public static class StoryLocalizationAuthoringAvailability
         StoryBlock? selectedBlock,
         StoryLocalizationAuthoringSession? authoringSession)
     {
-        if (isAuthoringBusy || selectedBlock?.LocalizationOrigins.Any(IsMasterEditable) != true)
+        if (isAuthoringBusy || !IsAuthoringContent(selectedBlock) ||
+            selectedBlock!.LocalizationOrigins.Any(IsMasterEditable) != true)
         {
             return false;
         }
@@ -38,6 +39,13 @@ public static class StoryLocalizationAuthoringAvailability
     private static bool IsMasterEditable(LocalizationReferenceOrigin origin) =>
         origin.Locale.Equals(LocalizationService.DefaultLocale, StringComparison.OrdinalIgnoreCase) &&
         origin.Segments.Count > 0;
+
+    /// <summary>
+    /// A reference in a comment/plugin/script is readable metadata, not permission
+    /// to edit that command through the narrative master-text workflow.
+    /// </summary>
+    private static bool IsAuthoringContent(StoryBlock? block) =>
+        block?.Kind is StoryBlockKind.Dialogue or StoryBlockKind.Choices;
 
     private static bool IsSameFile(LocalizationReferenceOrigin left, LocalizationReferenceOrigin right) =>
         left.Locale.Equals(right.Locale, StringComparison.OrdinalIgnoreCase) &&

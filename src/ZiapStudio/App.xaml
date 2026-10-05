@@ -12,6 +12,7 @@
             </ResourceDictionary.MergedDictionaries>
 
             <converters:BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+            <converters:StoryIndentationConverter x:Key="StoryIndentationConverter" />
             <numberFormatting:DecimalFormatter
                 x:Key="TwoDecimalFormatter"
                 FractionDigits="2"

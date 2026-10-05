@@ -62,6 +62,31 @@ public sealed class LocalizationAuthoringTests
             authoringSession: null));
     }
 
+    [Theory]
+    [InlineData(StoryBlockKind.PluginCommand)]
+    [InlineData(StoryBlockKind.Comment)]
+    [InlineData(StoryBlockKind.Script)]
+    public void BeginEditingAvailability_LocalizationLookingTechnicalContentIsReadOnly(StoryBlockKind kind)
+    {
+        Assert.False(StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: false,
+            selectedBlock: CreateStoryBlock(CreateOrigin(), kind),
+            authoringSession: null));
+    }
+
+    [Fact]
+    public void BeginEditingAvailability_LocalizedChoiceIsEditableButLiteralChoiceIsNot()
+    {
+        Assert.True(StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: false,
+            selectedBlock: CreateStoryBlock(CreateOrigin(), StoryBlockKind.Choices),
+            authoringSession: null));
+        Assert.False(StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: false,
+            selectedBlock: new StoryBlock { Kind = StoryBlockKind.Choices, Title = "Choices" },
+            authoringSession: null));
+    }
+
     [Fact]
     public void BeginEditingAvailability_DirtySessionAllowsSameFile()
     {
@@ -262,9 +287,11 @@ public sealed class LocalizationAuthoringTests
         Lock = new LocalizationLockInfo { IsOwnedByCurrentUser = true, AcquiredAt = "2026-10-04T00:00:00.000Z" },
     };
 
-    private static StoryBlock CreateStoryBlock(LocalizationReferenceOrigin origin) => new()
+    private static StoryBlock CreateStoryBlock(
+        LocalizationReferenceOrigin origin,
+        StoryBlockKind kind = StoryBlockKind.Dialogue) => new()
     {
-        Kind = StoryBlockKind.Dialogue,
+        Kind = kind,
         Title = "Polka",
         LocalizationOrigins = [origin],
     };

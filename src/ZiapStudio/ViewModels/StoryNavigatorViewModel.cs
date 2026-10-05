@@ -111,7 +111,7 @@ public sealed class StoryCommonEventNavigatorItemViewModel
 public sealed class StorySearchFiltersViewModel : INotifyPropertyChanged
 {
     private StorySearchSourceFilter _source;
-    private bool _dialogue, _choices, _movement, _audio, _logic, _transfer, _plugin, _script, _comment, _raw;
+    private bool _dialogue, _choices, _movement, _animation, _audio, _logic, _transfer, _plugin, _script, _comment, _raw;
     private bool _localized, _literal, _editableMaster, _withConditions, _withoutConditions, _technical;
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -121,6 +121,7 @@ public sealed class StorySearchFiltersViewModel : INotifyPropertyChanged
     public bool Dialogue { get => _dialogue; set => Set(ref _dialogue, value); }
     public bool Choices { get => _choices; set => Set(ref _choices, value); }
     public bool Movement { get => _movement; set => Set(ref _movement, value); }
+    public bool Animation { get => _animation; set => Set(ref _animation, value); }
     public bool Audio { get => _audio; set => Set(ref _audio, value); }
     public bool Logic { get => _logic; set => Set(ref _logic, value); }
     public bool Transfer { get => _transfer; set => Set(ref _transfer, value); }
@@ -155,7 +156,7 @@ public sealed class StorySearchFiltersViewModel : INotifyPropertyChanged
     public void Clear()
     {
         _source = StorySearchSourceFilter.All;
-        _dialogue = _choices = _movement = _audio = _logic = _transfer = _plugin = _script = _comment = _raw = false;
+        _dialogue = _choices = _movement = _animation = _audio = _logic = _transfer = _plugin = _script = _comment = _raw = false;
         _localized = _literal = _editableMaster = _withConditions = _withoutConditions = _technical = false;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
         Changed?.Invoke(this, EventArgs.Empty);
@@ -167,6 +168,7 @@ public sealed class StorySearchFiltersViewModel : INotifyPropertyChanged
         if (Dialogue) result.Add(StorySearchContentFilter.Dialogue);
         if (Choices) result.Add(StorySearchContentFilter.Choices);
         if (Movement) result.Add(StorySearchContentFilter.Movement);
+        if (Animation) result.Add(StorySearchContentFilter.Animation);
         if (Audio) result.Add(StorySearchContentFilter.Audio);
         if (Logic) result.Add(StorySearchContentFilter.Logic);
         if (Transfer) result.Add(StorySearchContentFilter.Transfer);

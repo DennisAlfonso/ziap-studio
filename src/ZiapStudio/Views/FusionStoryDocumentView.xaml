@@ -47,7 +47,7 @@
                                         <StackPanel Orientation="Horizontal" Spacing="5"><Button Click="FilterSourceAll_Click" Content="All" /><Button Click="FilterSourceMaps_Click" Content="Maps" /><Button Click="FilterSourceCommon_Click" Content="Common Events" /></StackPanel>
                                         <TextBlock FontWeight="SemiBold" Text="Content type" />
                                         <CheckBox Content="Dialogue" IsChecked="{Binding Navigator.Filters.Dialogue, Mode=TwoWay}" /><CheckBox Content="Choices" IsChecked="{Binding Navigator.Filters.Choices, Mode=TwoWay}" />
-                                        <CheckBox Content="Movement" IsChecked="{Binding Navigator.Filters.Movement, Mode=TwoWay}" /><CheckBox Content="Audio" IsChecked="{Binding Navigator.Filters.Audio, Mode=TwoWay}" />
+                                        <CheckBox Content="Movement" IsChecked="{Binding Navigator.Filters.Movement, Mode=TwoWay}" /><CheckBox Content="Animation" IsChecked="{Binding Navigator.Filters.Animation, Mode=TwoWay}" /><CheckBox Content="Audio" IsChecked="{Binding Navigator.Filters.Audio, Mode=TwoWay}" />
                                         <CheckBox Content="Logic" IsChecked="{Binding Navigator.Filters.Logic, Mode=TwoWay}" /><CheckBox Content="Transfer" IsChecked="{Binding Navigator.Filters.Transfer, Mode=TwoWay}" />
                                         <CheckBox Content="Plugin" IsChecked="{Binding Navigator.Filters.Plugin, Mode=TwoWay}" /><CheckBox Content="Script" IsChecked="{Binding Navigator.Filters.Script, Mode=TwoWay}" />
                                         <CheckBox Content="Comment" IsChecked="{Binding Navigator.Filters.Comment, Mode=TwoWay}" /><CheckBox Content="Raw" IsChecked="{Binding Navigator.Filters.Raw, Mode=TwoWay}" />
@@ -114,15 +114,15 @@
                 <ListView x:Name="TimelineList" Grid.Row="1" HorizontalContentAlignment="Stretch" ItemsSource="{Binding Blocks}" SelectedItem="{Binding SelectedBlock, Mode=TwoWay}" SelectionMode="Single">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="story:StoryBlock">
-                            <Border Margin="0,0,0,8" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
+                            <Border Margin="{x:Bind DisplayIndent, Converter={StaticResource StoryIndentationConverter}}" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">
                                 <StackPanel Spacing="5">
                                     <Grid ColumnSpacing="10"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                         <TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{x:Bind KindText}" />
                                         <TextBlock Grid.Column="1" FontWeight="SemiBold" Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" />
-                                        <TextBlock Grid.Column="2" FontFamily="Consolas" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind CommandRangeText}" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="5"><TextBlock FontFamily="Consolas" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind IndentText}" /><TextBlock FontFamily="Consolas" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind CommandRangeText}" /></StackPanel>
                                     </Grid>
                                     <TextBlock Text="{x:Bind DisplayText}" TextWrapping="Wrap" />
-                                    <TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind LocalizationOriginText}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind LocalizationOriginText}" TextTrimming="CharacterEllipsis" Visibility="{x:Bind ShowsNarrativeLocalization, Converter={StaticResource BooleanToVisibilityConverter}}" />
                                 </StackPanel>
                             </Border>
                         </DataTemplate>
@@ -136,7 +136,7 @@
                     <TextBlock FontWeight="SemiBold" Text="{Binding SelectedBlock.KindText}" />
                     <TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SelectedBlock.CommandRangeText}" />
                     <TextBlock Text="{Binding SelectedBlock.DisplayText}" TextWrapping="Wrap" />
-                    <TextBlock FontSize="10" FontWeight="SemiBold" Text="CONTENT" />
+                    <TextBlock FontSize="10" FontWeight="SemiBold" Text="NARRATIVE LOCALIZATION" />
                     <TextBlock FontSize="10" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{Binding AuthoringStateText}" TextWrapping="Wrap" />
                     <ItemsControl ItemsSource="{Binding LocalizationFields}">
                         <ItemsControl.ItemTemplate>

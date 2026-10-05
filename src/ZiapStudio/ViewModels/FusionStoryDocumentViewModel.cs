@@ -163,7 +163,9 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
 
     public async Task BeginEditingAsync()
     {
-        var origin = SelectedBlock?.LocalizationOrigins.FirstOrDefault(IsMasterEditable);
+        var origin = IsNarrativeMasterEditable(SelectedBlock)
+            ? SelectedBlock!.LocalizationOrigins.FirstOrDefault(IsMasterEditable)
+            : null;
         if (origin is null)
         {
             _authoringMessage = "Il blocco non contiene una reference Localization master modificabile.";
@@ -547,21 +549,23 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
     private void RebuildLocalizationFields()
     {
         _localizationFields.Clear();
-        if (SelectedBlock is null || _authoringSession?.EditSession is not { } editSession)
+        var selectedBlock = SelectedBlock;
+        var authoringSession = _authoringSession;
+        if (!IsNarrativeMasterEditable(selectedBlock) || authoringSession?.EditSession is not { } editSession)
         {
             return;
         }
 
-        foreach (var (origin, index) in SelectedBlock.LocalizationOrigins
-                     .Where(origin => IsSameFile(origin, _authoringSession.Origin) && editSession.CanEdit(origin))
+        foreach (var (origin, index) in selectedBlock!.LocalizationOrigins
+                     .Where(origin => IsSameFile(origin, authoringSession.Origin) && editSession.CanEdit(origin))
                      .Select((origin, index) => (origin, index)))
         {
             _localizationFields.Add(new StoryLocalizationFieldViewModel(
-                GetFieldLabel(SelectedBlock, index, origin),
+                GetFieldLabel(selectedBlock, index, origin),
                 origin,
                 editSession.TryGetValue(origin, out var value) ? value : string.Empty,
                 SetLocalizationFieldValue,
-                _authoringSession.State is LocalizationAuthoringState.Conflict or
+                authoringSession.State is LocalizationAuthoringState.Conflict or
                     LocalizationAuthoringState.LockedByOther or
                     LocalizationAuthoringState.LocalOutOfSync));
         }
@@ -594,6 +598,9 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
         }
         return block with {Title = title, DisplayText = displayText};
     }
+
+    private static bool IsNarrativeMasterEditable(StoryBlock? block) =>
+        block?.Kind is StoryBlockKind.Dialogue or StoryBlockKind.Choices;
 
     private static bool IsMasterEditable(LocalizationReferenceOrigin origin) =>
         origin.Locale.Equals(LocalizationService.DefaultLocale, StringComparison.OrdinalIgnoreCase) &&

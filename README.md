@@ -6,6 +6,8 @@ ha aggiunto l'editing controllato dei soli leaf string già esistenti nel locale
 master. `0.3C — Story Composer` aggiunge soltanto Dialogue/Narration append-only,
 con una patch mirata e verificata dei command RPG Maker. `0.3C.1 — Story
 Navigator UX` rende navigabili le sorgenti Story senza introdurre nuove mutazioni.
+`0.3D — Semantic Event Reader` estende la lettura semantica, senza trasformare
+Studio in un editor tecnico di eventi RPG Maker.
 
 ## Funzionalità attuali
 
@@ -29,7 +31,10 @@ Navigator UX` rende navigabili le sorgenti Story senza introdurre nuove mutazion
   in-memory con filtri e jump esatto al command range del blocco;
 - stato di selezione Story semantico e ripristinabile dopo reload (mappa, evento,
   page, block, map/event expansion), senza scrivere metadata UI in `MapInfos.json`;
-- timeline semantica read-only per dialoghi, scelte, commenti, script, plugin command, movement route, audio, wait, logica, transfer e control-flow;
+- timeline semantica read-only per dialoghi, scelte, commenti, script, plugin command, movement route, audio, animazioni/balloon, wait, logica, transfer e control-flow;
+- resolver read-only per nomi di mappe, switch, variabili, database e animazioni,
+  caricato una volta per workspace; indent RPG Maker visibile nella timeline e
+  fallback raw conservativo per forme ignote o malformate;
 - Story Authoring 0.3B per le reference Fusion già risolte nel master `it`: working
   snapshot locale, ChangeSet, dirty state, undo/redo, discard e save esplicito verso
   lo staging ZIAP;
@@ -333,8 +338,35 @@ al blocco più vicino se quel block è stato rimosso al reload.
 0.3C.1 non aggiunge API, staging, writer o capacità di authoring: authoring 0.3B,
 composer/unlink/recovery 0.3C continuano a usare la stessa selection e gli stessi
 guard per sessioni Localization dirty.
-Choices, editor del control flow, drag & drop, stable ID e reference graph restano
-fuori scope rispettivamente per 0.3D/0.3E.
+L'editing strutturale delle Choices, l'editor del control flow, drag & drop, stable
+ID e reference graph restano fuori scope; 0.3E sarà dedicata al Reference Graph /
+Story Pre-Flight.
+
+### Semantic Event Reader — 0.3D
+
+`Story & Events` resta un **reader semantico**, non un RPG Maker Event Editor.
+Durante il caricamento costruisce cache read-only da `System.json`, `MapInfos.json`
+e dai database RPG Maker necessari: gli ID diventano, quando disponibili, nomi
+leggibili di mappe, switch, variabili, attori, oggetti e animazioni. Nessun file
+del gioco è riserializzato dal reader.
+
+La timeline interpreta Show Text/Choices, wait in frame con conversione indicativa
+a 60 FPS, switch/variabili/self switch, transfer, BGM/BGS/ME/SE, animation/balloon,
+route di movimento, conditional/else/loop e i command strutturali più comuni.
+Route, script, commenti e plugin mantengono comunque range, indent, parametri e
+source commands raw nell'Inspector. Un codice sconosciuto — oppure una forma
+malformata di un codice noto — resta `Raw`, senza perdere nessun comando sorgente.
+
+L'indent RPG Maker è mostrato in modo compatto nella timeline e la ricerca in-memory
+indicizza i summary semantici: ad esempio può trovare il nome di uno switch, una
+mappa destinazione o un BGM. Parametri raw rimangono una ricerca advanced opt-in.
+
+Il confine di authoring è intenzionalmente stretto: **Edit master text** è disponibile
+solo per Dialogue/Narration e testo localizzato delle Choices. Non aggiunge, rimuove
+o riordina opzioni e non modifica branch/cancel/default. Reference che compaiono per
+caso in commenti, plugin command o script possono essere risolte per la lettura, ma
+non rendono quei command editabili. Wait, switch, transfer, audio, animation, route,
+control flow, plugin e script restano read-only.
 
 ## Schema di creazione armi
 

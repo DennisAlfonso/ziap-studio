@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Globalization;
 using ZiapStudio.Core.Fusion.Story;
 using ZiapStudio.Services.Localization;
 
@@ -22,6 +23,8 @@ public sealed class RpgMakerStoryCommandParser
         IReadOnlyList<RpgMakerEventCommand> commands,
         ICollection<StoryDiagnostic> diagnostics,
         StoryCommandLocation location,
+        RpgMakerStoryResourceResolver? resources = null,
+        RpgMakerStoryCommandContext? context = null,
         CancellationToken cancellationToken = default)
     {
         var blocks = new List<StoryBlock>();
@@ -31,6 +34,10 @@ public sealed class RpgMakerStoryCommandParser
             var command = commands[index];
             switch (command.Code)
             {
+                case 0:
+                    blocks.Add(CreateBlock(command, index, StoryBlockKind.ControlFlow,
+                        "End Event List", "RPG Maker terminal command."));
+                    break;
                 case 101:
                 {
                     var parsed = await ParseDialogueAsync(projectPath, commands, index, cancellationToken);
@@ -64,7 +71,7 @@ public sealed class RpgMakerStoryCommandParser
                     break;
                 }
                 case 205:
-                    blocks.Add(ParseMovementRoute(commands, ref index, diagnostics, location));
+                    blocks.Add(ParseMovementRoute(commands, ref index, diagnostics, location, resources, context));
                     break;
                 case 102:
                     blocks.Add(await ParseChoicesAsync(projectPath, command, index, cancellationToken));
@@ -84,16 +91,15 @@ public sealed class RpgMakerStoryCommandParser
                         "Fine scelte", "Fine delle scelte"));
                     break;
                 case 230:
-                    blocks.Add(CreateBlock(command, index, StoryBlockKind.Wait,
-                        "Wait", $"{ReadInt(command.Parameters, 0) ?? 0} frame"));
+                    blocks.Add(ParseWait(command, index, diagnostics, location));
                     break;
                 case 121:
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.SwitchVariable,
-                        "Switch", DescribeSwitch(command.Parameters)));
+                        "Switch", DescribeSwitch(command.Parameters, resources)));
                     break;
                 case 122:
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.SwitchVariable,
-                        "Variabile", DescribeVariable(command.Parameters)));
+                        "Variabile", DescribeVariable(command.Parameters, resources)));
                     break;
                 case 123:
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.SwitchVariable,
@@ -101,7 +107,7 @@ public sealed class RpgMakerStoryCommandParser
                     break;
                 case 201:
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.Transfer,
-                        "Transfer player", DescribeTransfer(command.Parameters)));
+                        "Transfer player", DescribeTransfer(command.Parameters, resources)));
                     break;
                 case 111:
                 case 411:
@@ -111,7 +117,7 @@ public sealed class RpgMakerStoryCommandParser
                 case 113:
                 case 115:
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.ControlFlow,
-                        GetControlFlowTitle(command.Code), DescribeControlFlow(command)));
+                        GetControlFlowTitle(command.Code), DescribeControlFlow(command, resources)));
                     break;
                 case 241:
                 case 242:
@@ -121,6 +127,12 @@ public sealed class RpgMakerStoryCommandParser
                 case 250:
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.Audio,
                         GetAudioTitle(command.Code), DescribeAudio(command)));
+                    break;
+                case 212:
+                    blocks.Add(ParseAnimation(command, index, diagnostics, location, resources, context));
+                    break;
+                case 213:
+                    blocks.Add(ParseBalloon(command, index, diagnostics, location, context));
                     break;
                 default:
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.Raw,
@@ -198,9 +210,14 @@ public sealed class RpgMakerStoryCommandParser
         {
             resolved.Add(await _textResolver.ResolveAsync(projectPath, line, cancellationToken: cancellationToken));
         }
+        var displayText = string.Join(Environment.NewLine, resolved.Select(text => text.DisplayText));
+        var summary = kind == StoryBlockKind.Script
+            ? displayText.Split(["\r\n", "\n"], StringSplitOptions.None).FirstOrDefault() ?? string.Empty
+            : displayText;
         return (CreateBlock(grouped, start, index, kind, title,
-            string.Join(Environment.NewLine, resolved.Select(text => text.DisplayText)),
+            summary,
             string.Join(Environment.NewLine, lines),
+            details: kind == StoryBlockKind.Script ? ["Full script is preserved in Raw text."] : null,
             origins: resolved.SelectMany(text => text.Origins).ToArray()), index);
     }
 
@@ -242,7 +259,9 @@ public sealed class RpgMakerStoryCommandParser
         IReadOnlyList<RpgMakerEventCommand> commands,
         ref int index,
         ICollection<StoryDiagnostic> diagnostics,
-        StoryCommandLocation location)
+        StoryCommandLocation location,
+        RpgMakerStoryResourceResolver? resources,
+        RpgMakerStoryCommandContext? context)
     {
         var start = index;
         var grouped = new List<RpgMakerEventCommand> { commands[index] };
@@ -255,22 +274,33 @@ public sealed class RpgMakerStoryCommandParser
         var target = ReadInt(first.Parameters, 0) ?? 0;
         var route = GetElement(first.Parameters, 1);
         var routeCommands = route is { ValueKind: JsonValueKind.Object }
-            ? ReadMovementCommands(route.Value).ToArray()
+            ? ReadMovementCommands(route.Value, resources).ToArray()
             : [];
-        if (route is null)
+        if (route is not { ValueKind: JsonValueKind.Object })
         {
             diagnostics.Add(location.CreateDiagnostic(
                 "story.movement-route-incomplete",
                 StoryDiagnosticSeverity.Warning,
                 "Movement Route senza definizione route; il comando raw è stato conservato."));
+            return CreateMalformedKnownBlock(grouped, start, index, "Movement Route", location);
         }
 
-        var routeFlags = route is { ValueKind: JsonValueKind.Object }
-            ? $"wait: {ReadBoolean(route.Value, "wait")} · repeat: {ReadBoolean(route.Value, "repeat")} · skippable: {ReadBoolean(route.Value, "skippable")}" 
-            : "Route non leggibile";
+        if (!route.Value.TryGetProperty("list", out var routeList) || routeList.ValueKind != JsonValueKind.Array)
+        {
+            diagnostics.Add(location.CreateDiagnostic(
+                "story.movement-route-malformed", StoryDiagnosticSeverity.Warning,
+                "Movement Route con list non valida; il comando raw è stato conservato."));
+            return CreateMalformedKnownBlock(grouped, start, index, "Movement Route", location);
+        }
+
+        var routeFlags = $"Wait for completion: {ReadBoolean(route.Value, "wait")} · Repeat: {ReadBoolean(route.Value, "repeat")} · Skippable: {ReadBoolean(route.Value, "skippable")}";
         return CreateBlock(grouped, start, index, StoryBlockKind.MovementRoute,
-            "Movement Route", $"Target {DescribeRouteTarget(target)} · {routeCommands.Length} movimenti",
-            details: [routeFlags, ..routeCommands]);
+            "Movement Route", $"Target: {DescribeRouteTarget(target, context)} · {routeCommands.Length} route commands",
+            details: [
+                $"Target: {DescribeRouteTarget(target, context)}",
+                routeFlags,
+                ..routeCommands,
+            ]);
     }
 
     private async Task<StoryBlock> ParseChoicesAsync(
@@ -338,19 +368,107 @@ public sealed class RpgMakerStoryCommandParser
         LocalizationOrigins = origins ?? [],
     };
 
-    private static string DescribeSwitch(JsonElement parameters) =>
-        $"Switch {ReadInt(parameters, 0) ?? 0}–{ReadInt(parameters, 1) ?? 0}: " +
-        ((ReadInt(parameters, 2) ?? 0) == 0 ? "ON" : "OFF");
+    private static StoryBlock ParseWait(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location)
+    {
+        var frames = ReadInt(command.Parameters, 0);
+        if (frames is null || frames < 0)
+        {
+            diagnostics.Add(location.CreateDiagnostic(
+                "story.wait-malformed", StoryDiagnosticSeverity.Warning,
+                "Wait senza frame validi; il comando raw è stato conservato."));
+            return CreateMalformedKnownBlock([command], index, index, "Wait", location);
+        }
 
-    private static string DescribeVariable(JsonElement parameters) =>
-        $"Variabile {ReadInt(parameters, 0) ?? 0}–{ReadInt(parameters, 1) ?? 0} · operazione {ReadInt(parameters, 2) ?? 0}";
+        var seconds = frames.Value / 60d;
+        return CreateBlock(command, index, StoryBlockKind.Wait, "Wait",
+            $"{frames.Value} frames · ~{seconds.ToString("0.0", CultureInfo.InvariantCulture)} s",
+            [$"Frames (authoritative): {frames.Value}", "Display conversion: 60 FPS RPG Maker"]);
+    }
+
+    private static string DescribeSwitch(JsonElement parameters, RpgMakerStoryResourceResolver? resources)
+    {
+        var first = ReadInt(parameters, 0);
+        var last = ReadInt(parameters, 1);
+        var value = ReadInt(parameters, 2);
+        if (first is null || last is null || value is null)
+        {
+            return "Switch parameters unavailable";
+        }
+
+        var firstLabel = resources?.DescribeSwitch(first.Value) ?? $"Switch #{first.Value}";
+        var lastLabel = first == last ? string.Empty : $"–{resources?.DescribeSwitch(last.Value) ?? $"Switch #{last.Value}"}";
+        return $"{firstLabel}{lastLabel} → {(value.Value == 0 ? "ON" : "OFF")}";
+    }
+
+    private static string DescribeVariable(JsonElement parameters, RpgMakerStoryResourceResolver? resources)
+    {
+        var first = ReadInt(parameters, 0);
+        var last = ReadInt(parameters, 1);
+        var operation = ReadInt(parameters, 2);
+        var operandType = ReadInt(parameters, 3);
+        if (first is null || last is null || operation is null || operandType is null)
+        {
+            return "Variable parameters unavailable";
+        }
+
+        var firstLabel = resources?.DescribeVariable(first.Value) ?? $"Variable #{first.Value}";
+        var range = first == last ? firstLabel : $"{firstLabel}–{resources?.DescribeVariable(last.Value) ?? $"Variable #{last.Value}"}";
+        var verb = operation.Value switch
+        {
+            0 => "Set",
+            1 => "Add",
+            2 => "Subtract",
+            3 => "Multiply",
+            4 => "Divide",
+            5 => "Modulo",
+            _ => $"Operation {operation.Value}",
+        };
+        return $"{range} {verb} → {DescribeVariableOperand(parameters, operandType.Value, resources)}";
+    }
 
     private static string DescribeSelfSwitch(JsonElement parameters) =>
         $"Self switch {ReadString(parameters, 0) ?? "?"}: " +
         ((ReadInt(parameters, 1) ?? 0) == 0 ? "ON" : "OFF");
 
-    private static string DescribeTransfer(JsonElement parameters) =>
-        $"Map {ReadInt(parameters, 1) ?? 0} · x {ReadInt(parameters, 2) ?? 0} · y {ReadInt(parameters, 3) ?? 0}";
+    private static string DescribeTransfer(JsonElement parameters, RpgMakerStoryResourceResolver? resources)
+    {
+        var designation = ReadInt(parameters, 0);
+        var map = ReadInt(parameters, 1);
+        var x = ReadInt(parameters, 2);
+        var y = ReadInt(parameters, 3);
+        if (designation is null || map is null || x is null || y is null)
+        {
+            return "Transfer parameters unavailable";
+        }
+
+        var direct = designation.Value == 0;
+        var mapText = direct
+            ? resources?.DescribeMap(map.Value) ?? $"Map {map.Value:000}"
+            : DescribeVariableReference(map.Value, resources);
+        var xText = direct ? x.Value.ToString() : DescribeVariableReference(x.Value, resources);
+        var yText = direct ? y.Value.ToString() : DescribeVariableReference(y.Value, resources);
+        var direction = ReadInt(parameters, 4) switch
+        {
+            2 => "Facing Down",
+            4 => "Facing Left",
+            6 => "Facing Right",
+            8 => "Facing Up",
+            0 => "Keep direction",
+            _ => "Direction unavailable",
+        };
+        var fade = ReadInt(parameters, 5) switch
+        {
+            0 => "Fade Black",
+            1 => "Fade White",
+            2 => "No fade",
+            _ => "Fade unavailable",
+        };
+        return $"{mapText} · X {xText} · Y {yText} · {direction} · {fade}";
+    }
 
     private static string GetControlFlowTitle(int code) => code switch
     {
@@ -363,9 +481,9 @@ public sealed class RpgMakerStoryCommandParser
         _ => "Exit event processing",
     };
 
-    private static string DescribeControlFlow(RpgMakerEventCommand command) => command.Code switch
+    private static string DescribeControlFlow(RpgMakerEventCommand command, RpgMakerStoryResourceResolver? resources) => command.Code switch
     {
-        111 => $"Condizione tipo {ReadInt(command.Parameters, 0) ?? 0}",
+        111 => DescribeConditional(command.Parameters, resources),
         411 => "Altrimenti",
         412 => "Fine condizione",
         112 => "Inizio loop",
@@ -388,30 +506,245 @@ public sealed class RpgMakerStoryCommandParser
     {
         if (command.Code is 242 or 246)
         {
-            return $"{ReadInt(command.Parameters, 0) ?? 0} secondi";
+            return $"{ReadInt(command.Parameters, 0) ?? 0} s";
         }
         var audio = GetElement(command.Parameters, 0);
         return audio is { ValueKind: JsonValueKind.Object }
-            ? ReadString(audio.Value, "name") ?? "(nessun file)"
+            ? $"{ReadString(audio.Value, "name") ?? "(nessun file)"} · Volume {ReadInt(audio.Value, "volume") ?? 90} · Pitch {ReadInt(audio.Value, "pitch") ?? 100} · Pan {ReadInt(audio.Value, "pan") ?? 0}"
             : "Audio non leggibile";
     }
 
-    private static IEnumerable<string> ReadMovementCommands(JsonElement route)
+    private static IEnumerable<string> ReadMovementCommands(
+        JsonElement route,
+        RpgMakerStoryResourceResolver? resources)
     {
         if (!route.TryGetProperty("list", out var list) || list.ValueKind != JsonValueKind.Array)
         {
             return [];
         }
         return list.EnumerateArray().Where(item => item.ValueKind == JsonValueKind.Object)
-            .Select(item => $"Movement code {ReadInt(item, "code") ?? -1}: {ReadPropertyRaw(item, "parameters")}");
+            .Select((item, index) => $"{index + 1}. {DescribeMovementCommand(item, resources)}");
     }
 
-    private static string DescribeRouteTarget(int target) => target switch
+    private static string DescribeRouteTarget(int target, RpgMakerStoryCommandContext? context) =>
+        context?.DescribeEvent(target) ?? target switch
+        {
+            -1 => "Player",
+            0 => "This Event",
+            _ => $"Event #{target}",
+        };
+
+    private static StoryBlock ParseAnimation(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location,
+        RpgMakerStoryResourceResolver? resources,
+        RpgMakerStoryCommandContext? context)
     {
-        -1 => "Player",
-        0 => "Questo evento",
-        _ => $"Evento {target}",
+        var target = ReadInt(command.Parameters, 0);
+        var animationId = ReadInt(command.Parameters, 1);
+        if (target is null || animationId is null)
+        {
+            diagnostics.Add(location.CreateDiagnostic(
+                "story.animation-malformed", StoryDiagnosticSeverity.Warning,
+                "Show Animation con parametri non validi; il comando raw è stato conservato."));
+            return CreateMalformedKnownBlock([command], index, index, "Show Animation", location);
+        }
+
+        var targetText = DescribeRouteTarget(target.Value, context);
+        var animation = resources?.DescribeAnimation(animationId.Value) ?? $"Animation #{animationId.Value}";
+        var wait = ReadBoolean(command.Parameters, 2);
+        return CreateBlock(command, index, StoryBlockKind.Animation, "Show Animation",
+            $"{targetText} · {animation}",
+            [$"Target: {targetText}", $"Wait for completion: {wait}"]);
+    }
+
+    private static StoryBlock ParseBalloon(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location,
+        RpgMakerStoryCommandContext? context)
+    {
+        var target = ReadInt(command.Parameters, 0);
+        var balloon = ReadInt(command.Parameters, 1);
+        if (target is null || balloon is null)
+        {
+            diagnostics.Add(location.CreateDiagnostic(
+                "story.balloon-malformed", StoryDiagnosticSeverity.Warning,
+                "Show Balloon Icon con parametri non validi; il comando raw è stato conservato."));
+            return CreateMalformedKnownBlock([command], index, index, "Show Balloon Icon", location);
+        }
+
+        var targetText = DescribeRouteTarget(target.Value, context);
+        return CreateBlock(command, index, StoryBlockKind.Animation, "Show Balloon Icon",
+            $"{targetText} · {DescribeBalloon(balloon.Value)}",
+            [$"Target: {targetText}", $"Wait for completion: {ReadBoolean(command.Parameters, 2)}"]);
+    }
+
+    private static StoryBlock CreateMalformedKnownBlock(
+        IReadOnlyList<RpgMakerEventCommand> commands,
+        int start,
+        int end,
+        string knownName,
+        StoryCommandLocation _) => CreateBlock(
+            commands,
+            start,
+            end,
+            StoryBlockKind.Raw,
+            $"Raw · Command {commands[0].Code}",
+            $"{knownName} has an unsupported or malformed parameter shape.",
+            details: ["Raw source is preserved in the Inspector."]);
+
+    private static string DescribeVariableOperand(
+        JsonElement parameters,
+        int operandType,
+        RpgMakerStoryResourceResolver? resources) => operandType switch
+    {
+        0 => ReadInt(parameters, 4)?.ToString() ?? "constant unavailable",
+        1 => DescribeVariableReference(ReadInt(parameters, 4) ?? 0, resources),
+        2 => $"random {ReadInt(parameters, 4)?.ToString() ?? "?"}–{ReadInt(parameters, 5)?.ToString() ?? "?"}",
+        3 => $"game data (type {ReadInt(parameters, 4)?.ToString() ?? "?"})",
+        4 => $"script: {ReadString(parameters, 4) ?? "(empty)"}",
+        _ => $"operand type {operandType} · raw params available",
     };
+
+    private static string DescribeVariableReference(int id, RpgMakerStoryResourceResolver? resources) =>
+        resources?.DescribeVariable(id) ?? $"Variable #{id}";
+
+    private static string DescribeConditional(JsonElement parameters, RpgMakerStoryResourceResolver? resources)
+    {
+        var type = ReadInt(parameters, 0);
+        if (type is null)
+        {
+            return "Conditional branch · parameters unavailable";
+        }
+
+        return type.Value switch
+        {
+            0 => $"{DescribeSwitchReference(ReadInt(parameters, 1) ?? 0, resources)} is {((ReadInt(parameters, 2) ?? 0) == 0 ? "ON" : "OFF")}",
+            1 => $"{DescribeVariableReference(ReadInt(parameters, 1) ?? 0, resources)} {DescribeComparison(ReadInt(parameters, 4) ?? -1)} {((ReadInt(parameters, 2) ?? 0) == 0 ? ReadInt(parameters, 3)?.ToString() ?? "?" : DescribeVariableReference(ReadInt(parameters, 3) ?? 0, resources))}",
+            2 => $"Self Switch {ReadString(parameters, 1) ?? "?"} is {((ReadInt(parameters, 2) ?? 0) == 0 ? "ON" : "OFF")}",
+            3 => $"Timer {DescribeComparison(ReadInt(parameters, 2) ?? -1)} {ReadInt(parameters, 1)?.ToString() ?? "?"} s",
+            4 => $"{DescribeActorReference(ReadInt(parameters, 1) ?? 0, resources)} · condition {ReadInt(parameters, 2)?.ToString() ?? "?"}",
+            5 => $"Enemy #{ReadInt(parameters, 1)?.ToString() ?? "?"} · condition {ReadInt(parameters, 2)?.ToString() ?? "?"}",
+            6 => $"Character #{ReadInt(parameters, 1)?.ToString() ?? "?"} faces {DescribeDirection(ReadInt(parameters, 2) ?? 0)}",
+            7 => $"Gold {DescribeComparison(ReadInt(parameters, 2) ?? -1)} {ReadInt(parameters, 1)?.ToString() ?? "?"}",
+            8 => $"Party has {DescribeItemReference(ReadInt(parameters, 1) ?? 0, resources)}",
+            9 => $"Party has {DescribeWeaponReference(ReadInt(parameters, 1) ?? 0, resources)}",
+            10 => $"Party has {DescribeArmorReference(ReadInt(parameters, 1) ?? 0, resources)}",
+            11 => $"Button {ReadString(parameters, 1) ?? ReadInt(parameters, 1)?.ToString() ?? "?"} is pressed",
+            12 => $"Script condition: {ReadString(parameters, 1) ?? "(empty)"}",
+            _ => $"Conditional Branch · type {type.Value} · raw params available",
+        };
+    }
+
+    private static string DescribeComparison(int operation) => operation switch
+    {
+        0 => "=",
+        1 => "≥",
+        2 => "≤",
+        3 => ">",
+        4 => "<",
+        5 => "≠",
+        _ => "?",
+    };
+
+    private static string DescribeSwitchReference(int id, RpgMakerStoryResourceResolver? resources) =>
+        resources?.DescribeSwitch(id) ?? $"Switch #{id}";
+
+    private static string DescribeActorReference(int id, RpgMakerStoryResourceResolver? resources) =>
+        resources?.DescribeActor(id) ?? $"Actor #{id}";
+
+    private static string DescribeItemReference(int id, RpgMakerStoryResourceResolver? resources) =>
+        resources?.DescribeItem(id) ?? $"Item #{id}";
+
+    private static string DescribeWeaponReference(int id, RpgMakerStoryResourceResolver? resources) =>
+        resources?.DescribeWeapon(id) ?? $"Weapon #{id}";
+
+    private static string DescribeArmorReference(int id, RpgMakerStoryResourceResolver? resources) =>
+        resources?.DescribeArmor(id) ?? $"Armor #{id}";
+
+    private static string DescribeDirection(int direction) => direction switch
+    {
+        2 => "Down",
+        4 => "Left",
+        6 => "Right",
+        8 => "Up",
+        _ => "direction unavailable",
+    };
+
+    private static string DescribeBalloon(int balloon) => balloon switch
+    {
+        1 => "Exclamation",
+        2 => "Question",
+        3 => "Music Note",
+        4 => "Heart",
+        5 => "Anger",
+        6 => "Sweat",
+        7 => "Frustration",
+        8 => "Silence",
+        9 => "Light Bulb",
+        10 => "Zzz",
+        _ => $"Balloon #{balloon}",
+    };
+
+    private static string DescribeMovementCommand(JsonElement command, RpgMakerStoryResourceResolver? resources)
+    {
+        var code = ReadInt(command, "code");
+        var parameters = command.TryGetProperty("parameters", out var value) ? value : default;
+        var first = ReadInt(parameters, 0);
+        return code switch
+        {
+            0 => "End Route",
+            1 => "Move Down",
+            2 => "Move Left",
+            3 => "Move Right",
+            4 => "Move Up",
+            5 => "Move Lower Left",
+            6 => "Move Lower Right",
+            7 => "Move Upper Left",
+            8 => "Move Upper Right",
+            9 => "Move Random",
+            10 => "Move Toward Player",
+            11 => "Move Away From Player",
+            12 => "Move Forward",
+            13 => "Move Backward",
+            14 => $"Jump {first?.ToString() ?? "?"}, {ReadInt(parameters, 1)?.ToString() ?? "?"}",
+            15 => $"Wait {first?.ToString() ?? "?"} frames",
+            16 => "Turn Down",
+            17 => "Turn Left",
+            18 => "Turn Right",
+            19 => "Turn Up",
+            20 => "Turn 90° Right",
+            21 => "Turn 90° Left",
+            22 => "Turn 180°",
+            23 => "Turn 90° Random",
+            24 => "Turn Random",
+            25 => "Turn Toward Player",
+            26 => $"Switch ON {DescribeSwitchReference(first ?? 0, resources)}",
+            27 => $"Switch OFF {DescribeSwitchReference(first ?? 0, resources)}",
+            28 => $"Change Speed {first?.ToString() ?? "?"}",
+            29 => $"Change Frequency {first?.ToString() ?? "?"}",
+            30 => "Walking Animation ON",
+            31 => "Walking Animation OFF",
+            32 => "Stepping Animation ON",
+            33 => "Stepping Animation OFF",
+            34 => "Direction Fix ON",
+            35 => "Direction Fix OFF",
+            36 => "Through ON",
+            37 => "Through OFF",
+            38 => "Transparency ON",
+            39 => "Transparency OFF",
+            40 => $"Change Image {ReadString(parameters, 0) ?? "(none)"} · index {ReadInt(parameters, 1)?.ToString() ?? "?"}",
+            41 => $"Change Opacity {first?.ToString() ?? "?"}",
+            42 => $"Change Blend Mode {first?.ToString() ?? "?"}",
+            44 => "Play SE",
+            45 => $"Script: {ReadString(parameters, 0) ?? "(empty)"}",
+            _ => $"Movement code {code?.ToString() ?? "?"}: {ReadPropertyRaw(command, "parameters")}",
+        };
+    }
 
     private static string ReadPropertyRaw(JsonElement source, string name) =>
         source.TryGetProperty(name, out var value) ? value.GetRawText() : "[]";
@@ -449,6 +782,9 @@ public sealed class RpgMakerStoryCommandParser
     private static int? ReadInt(JsonElement source, string name) =>
         source.ValueKind == JsonValueKind.Object && source.TryGetProperty(name, out var value) &&
         value.TryGetInt32(out var result) ? result : null;
+
+    private static bool ReadBoolean(JsonElement parameters, int index) =>
+        GetElement(parameters, index) is { ValueKind: JsonValueKind.True };
 
     private static bool ReadBoolean(JsonElement source, string name) =>
         source.ValueKind == JsonValueKind.Object && source.TryGetProperty(name, out var value) &&

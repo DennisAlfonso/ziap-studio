@@ -27,8 +27,10 @@ public sealed class FusionStoryWorkspaceService
         ArgumentNullException.ThrowIfNull(descriptor);
 
         var diagnostics = new List<StoryDiagnostic>();
-        var maps = await LoadMapsAsync(project.Path, diagnostics, cancellationToken);
-        var commonEvents = await LoadCommonEventsAsync(project.Path, diagnostics, cancellationToken);
+        var resources = await RpgMakerStoryResourceResolver.LoadAsync(
+            _fileSystem, project.Path, diagnostics, cancellationToken);
+        var maps = await LoadMapsAsync(project.Path, resources, diagnostics, cancellationToken);
+        var commonEvents = await LoadCommonEventsAsync(project.Path, resources, diagnostics, cancellationToken);
         return new FusionStoryWorkspaceDocument
         {
             Descriptor = descriptor,
@@ -49,114 +51,75 @@ public sealed class FusionStoryWorkspaceService
 
     private async Task<IReadOnlyList<StoryMap>> LoadMapsAsync(
         string projectPath,
+        RpgMakerStoryResourceResolver resources,
         ICollection<StoryDiagnostic> diagnostics,
         CancellationToken cancellationToken)
     {
         var dataPath = Path.Combine(projectPath, "data");
-        var mapInfosPath = Path.Combine(dataPath, "MapInfos.json");
-        if (!_fileSystem.FileExists(mapInfosPath))
+        if (resources.MapInfos.Count == 0)
         {
-            diagnostics.Add(FileDiagnostic(
-                "story.map-infos-missing", StoryDiagnosticSeverity.Warning,
-                "data/MapInfos.json non esiste; non è possibile enumerare le mappe.", "data/MapInfos.json"));
             return [];
         }
 
-        JsonDocument mapInfosDocument;
-        try
+        var mapInfos = resources.MapInfos;
+        var maps = new List<StoryMap>(mapInfos.Count);
+        foreach (var info in mapInfos)
         {
-            mapInfosDocument = JsonDocument.Parse(await _fileSystem.ReadAllTextAsync(mapInfosPath, cancellationToken));
-        }
-        catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
-        {
-            diagnostics.Add(FileDiagnostic(
-                "story.map-infos-unreadable", StoryDiagnosticSeverity.Error,
-                "MapInfos.json non è leggibile.", "data/MapInfos.json"));
-            return [];
-        }
-
-        using (mapInfosDocument)
-        {
-            if (mapInfosDocument.RootElement.ValueKind != JsonValueKind.Array)
+            cancellationToken.ThrowIfCancellationRequested();
+            var relativePath = $"data/Map{info.Id:000}.json";
+            var mapPath = Path.Combine(dataPath, $"Map{info.Id:000}.json");
+            if (!_fileSystem.FileExists(mapPath))
             {
                 diagnostics.Add(FileDiagnostic(
-                    "story.map-infos-invalid", StoryDiagnosticSeverity.Error,
-                    "MapInfos.json deve contenere un array RPG Maker.", "data/MapInfos.json"));
-                return [];
+                    "story.map-file-missing", StoryDiagnosticSeverity.Warning,
+                    $"{relativePath} non esiste.", relativePath, info.Id));
+                continue;
             }
 
-            var mapInfos = mapInfosDocument.RootElement.EnumerateArray()
-                .Select((entry, index) => entry.ValueKind == JsonValueKind.Object
-                    ? new MapInfo(
-                        ReadInt(entry, "id") ?? index,
-                        ReadString(entry, "name") ?? string.Empty,
-                        ReadInt(entry, "order") ?? int.MaxValue,
-                        ReadInt(entry, "parentId") ?? 0,
-                        ReadBoolean(entry, "expanded"))
-                    : null)
-                .Where(info => info is not null)
-                .Select(info => info!)
-                .Where(info => info.Id > 0)
-                .OrderBy(info => info.Order)
-                .ThenBy(info => info.Id)
-                .ToArray();
-            var maps = new List<StoryMap>(mapInfos.Length);
-            foreach (var info in mapInfos)
+            try
             {
-                cancellationToken.ThrowIfCancellationRequested();
-                var relativePath = $"data/Map{info.Id:000}.json";
-                var mapPath = Path.Combine(dataPath, $"Map{info.Id:000}.json");
-                if (!_fileSystem.FileExists(mapPath))
+                using var mapDocument = JsonDocument.Parse(
+                    await _fileSystem.ReadAllTextAsync(mapPath, cancellationToken));
+                if (mapDocument.RootElement.ValueKind != JsonValueKind.Object)
                 {
                     diagnostics.Add(FileDiagnostic(
-                        "story.map-file-missing", StoryDiagnosticSeverity.Warning,
-                        $"{relativePath} non esiste.", relativePath, info.Id));
+                        "story.map-invalid", StoryDiagnosticSeverity.Error,
+                        $"{relativePath} deve contenere un oggetto RPG Maker.", relativePath, info.Id));
                     continue;
                 }
-
-                try
-                {
-                    using var mapDocument = JsonDocument.Parse(
-                        await _fileSystem.ReadAllTextAsync(mapPath, cancellationToken));
-                    if (mapDocument.RootElement.ValueKind != JsonValueKind.Object)
-                    {
-                        diagnostics.Add(FileDiagnostic(
-                            "story.map-invalid", StoryDiagnosticSeverity.Error,
-                            $"{relativePath} deve contenere un oggetto RPG Maker.", relativePath, info.Id));
-                        continue;
-                    }
-                    maps.Add(await ParseMapAsync(
-                        projectPath,
-                        mapDocument.RootElement,
-                        info,
-                        relativePath,
-                        diagnostics,
-                        cancellationToken));
-                }
-                catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
-                {
-                    diagnostics.Add(FileDiagnostic(
-                        "story.map-unreadable", StoryDiagnosticSeverity.Error,
-                        $"{relativePath} non è leggibile.", relativePath, info.Id));
-                }
+                maps.Add(await ParseMapAsync(
+                    projectPath,
+                    mapDocument.RootElement,
+                    info,
+                    resources,
+                    relativePath,
+                    diagnostics,
+                    cancellationToken));
             }
-            var hierarchy = StoryMapHierarchy.Build(maps);
-            foreach (var mapId in hierarchy.FallbackRootMapIds.Order())
+            catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
             {
-                var map = maps.First(candidate => candidate.Id == mapId);
                 diagnostics.Add(FileDiagnostic(
-                    "story.map-parent-invalid", StoryDiagnosticSeverity.Warning,
-                    $"Map {map.Id:000} ha un parentId non valido o ciclico; è mostrata alla radice del navigator.",
-                    map.SourcePath, map.Id));
+                    "story.map-unreadable", StoryDiagnosticSeverity.Error,
+                    $"{relativePath} non è leggibile.", relativePath, info.Id));
             }
-            return maps;
         }
+        var hierarchy = StoryMapHierarchy.Build(maps);
+        foreach (var mapId in hierarchy.FallbackRootMapIds.Order())
+        {
+            var map = maps.First(candidate => candidate.Id == mapId);
+            diagnostics.Add(FileDiagnostic(
+                "story.map-parent-invalid", StoryDiagnosticSeverity.Warning,
+                $"Map {map.Id:000} ha un parentId non valido o ciclico; è mostrata alla radice del navigator.",
+                map.SourcePath, map.Id));
+        }
+        return maps;
     }
 
     private async Task<StoryMap> ParseMapAsync(
         string projectPath,
         JsonElement map,
-        MapInfo info,
+        RpgMakerStoryMapInfo info,
+        RpgMakerStoryResourceResolver resources,
         string relativePath,
         ICollection<StoryDiagnostic> diagnostics,
         CancellationToken cancellationToken)
@@ -164,6 +127,13 @@ public sealed class FusionStoryWorkspaceService
         var events = new List<StoryEvent>();
         if (map.TryGetProperty("events", out var sourceEvents) && sourceEvents.ValueKind == JsonValueKind.Array)
         {
+            var eventNames = sourceEvents.EnumerateArray()
+                .Select((entry, index) => entry.ValueKind == JsonValueKind.Object
+                    ? (Id: ReadInt(entry, "id") ?? index, Name: ReadString(entry, "name"))
+                    : (Id: 0, Name: (string?)null))
+                .Where(entry => entry.Id > 0 && !string.IsNullOrWhiteSpace(entry.Name))
+                .GroupBy(entry => entry.Id)
+                .ToDictionary(group => group.Key, group => group.Last().Name!);
             var eventIndex = 0;
             foreach (var sourceEvent in sourceEvents.EnumerateArray())
             {
@@ -189,7 +159,7 @@ public sealed class FusionStoryWorkspaceService
                     continue;
                 }
                 events.Add(await ParseMapEventAsync(
-                    projectPath, sourceEvent, info.Id, eventId, relativePath, diagnostics, cancellationToken));
+                    projectPath, sourceEvent, info.Id, eventId, eventNames, resources, relativePath, diagnostics, cancellationToken));
                 eventIndex++;
             }
         }
@@ -217,6 +187,8 @@ public sealed class FusionStoryWorkspaceService
         JsonElement sourceEvent,
         int mapId,
         int eventId,
+        IReadOnlyDictionary<int, string> eventNames,
+        RpgMakerStoryResourceResolver resources,
         string relativePath,
         ICollection<StoryDiagnostic> diagnostics,
         CancellationToken cancellationToken)
@@ -246,7 +218,10 @@ public sealed class FusionStoryWorkspaceService
                     relativePath, mapId, eventId, pageNumber));
                 var blocks = await _commandParser.ParseAsync(
                     projectPath, commands, diagnostics,
-                    new StoryCommandLocation(relativePath, mapId, eventId, pageNumber), cancellationToken);
+                    new StoryCommandLocation(relativePath, mapId, eventId, pageNumber),
+                    resources,
+                    new RpgMakerStoryCommandContext { MapId = mapId, EventId = eventId, EventNames = eventNames },
+                    cancellationToken);
                 pages.Add(new StoryPage
                 {
                     Number = pageNumber,
@@ -290,6 +265,7 @@ public sealed class FusionStoryWorkspaceService
 
     private async Task<IReadOnlyList<StoryCommonEvent>> LoadCommonEventsAsync(
         string projectPath,
+        RpgMakerStoryResourceResolver resources,
         ICollection<StoryDiagnostic> diagnostics,
         CancellationToken cancellationToken)
     {
@@ -348,7 +324,7 @@ public sealed class FusionStoryWorkspaceService
                         EventId = id,
                     },
                     Blocks = await _commandParser.ParseAsync(
-                        projectPath, commands, diagnostics, location, cancellationToken),
+                        projectPath, commands, diagnostics, location, resources, null, cancellationToken),
                 });
             }
             return result.OrderBy(@event => @event.Id).ToArray();
@@ -443,6 +419,4 @@ public sealed class FusionStoryWorkspaceService
 
     private static bool ReadBoolean(JsonElement source, string propertyName) =>
         source.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.True;
-
-    private sealed record MapInfo(int Id, string Name, int Order, int ParentId, bool Expanded);
 }

@@ -170,7 +170,7 @@ public sealed class StorySearchIndex
             block.RawParameters,
             hasConditions,
             block.LocalizationOrigins.Count > 0,
-            block.LocalizationOrigins.Any(IsEditableMaster));
+            IsEditableMaster(block));
     }
 
     private static bool MatchesFilters(Entry entry, StorySearchFilters filters)
@@ -200,6 +200,7 @@ public sealed class StorySearchIndex
         StoryBlockKind.Dialogue => StorySearchResultKind.Dialogue,
         StoryBlockKind.Choices => StorySearchResultKind.Choices,
         StoryBlockKind.MovementRoute => StorySearchResultKind.Movement,
+        StoryBlockKind.Animation => StorySearchResultKind.Animation,
         StoryBlockKind.Audio => StorySearchResultKind.Audio,
         StoryBlockKind.Wait or StoryBlockKind.SwitchVariable or StoryBlockKind.ControlFlow => StorySearchResultKind.Logic,
         StoryBlockKind.Transfer => StorySearchResultKind.Transfer,
@@ -222,6 +223,7 @@ public sealed class StorySearchIndex
         StorySearchResultKind.Dialogue => StorySearchContentFilter.Dialogue,
         StorySearchResultKind.Choices => StorySearchContentFilter.Choices,
         StorySearchResultKind.Movement => StorySearchContentFilter.Movement,
+        StorySearchResultKind.Animation => StorySearchContentFilter.Animation,
         StorySearchResultKind.Audio => StorySearchContentFilter.Audio,
         StorySearchResultKind.Logic => StorySearchContentFilter.Logic,
         StorySearchResultKind.Transfer => StorySearchContentFilter.Transfer,
@@ -231,8 +233,10 @@ public sealed class StorySearchIndex
         _ => StorySearchContentFilter.Raw,
     };
 
-    private static bool IsEditableMaster(LocalizationReferenceOrigin origin) =>
-        origin.Locale.Equals("it", StringComparison.OrdinalIgnoreCase) && origin.Segments.Count > 0;
+    private static bool IsEditableMaster(StoryBlock block) =>
+        block.Kind is StoryBlockKind.Dialogue or StoryBlockKind.Choices &&
+        block.LocalizationOrigins.Any(origin =>
+            origin.Locale.Equals("it", StringComparison.OrdinalIgnoreCase) && origin.Segments.Count > 0);
 
     private static IReadOnlyDictionary<int, string> BuildMapBreadcrumbs(IReadOnlyList<StoryMap> maps)
     {
