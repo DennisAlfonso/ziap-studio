@@ -68,6 +68,49 @@ public sealed class HttpRemoteLocalizationAuthoringClientTests
         Assert.Equal(RemoteLocalizationAuthoringFailure.Unauthorized, exception.Failure);
     }
 
+    [Fact]
+    public async Task Append_UsesOperationIdClosedTemplateAndReturnsAuthoritativePath()
+    {
+        string? body = null;
+        var client = CreateClient(new StubHttpMessageHandler(async request =>
+        {
+            body = await request.Content!.ReadAsStringAsync();
+            return JsonResponse(
+                """
+                {"operationId":"b6f0300c-7791-4c34-b2d4-7df4c7afb7da","assignedIndex":87,"entryPath":[{"kind":"index","index":0},{"kind":"property","name":"DestinyOfBirth"},{"kind":"index","index":0},{"kind":"property","name":"newPrologoStory"},{"kind":"index","index":87}],"projectId":"fusion-hexella-dive","locale":"it","file":"dialogue/mdv.json","content":"[{}]\n","currentVersionId":"v1","currentChecksum":"current","stagingBasedOnVersionId":"v1","stagingChecksum":"staging","source":"staging","isIdempotentReplay":true,"lock":{"isOwnedByCurrentUser":true}}
+                """);
+        }), new StubIdTokenProvider("firebase-id-token"));
+
+        var result = await client.AppendStagingEntryAsync(new LocalizationAppendRequest
+        {
+            ProjectId = "fusion-hexella-dive",
+            Locale = "it",
+            SourceFile = "dialogue/mdv.json",
+            OperationId = "b6f0300c-7791-4c34-b2d4-7df4c7afb7da",
+            BasedOnVersionId = "v1",
+            ExpectedStagingChecksum = "staging",
+            ExpectedArrayLength = 87,
+            BranchPath =
+            [
+                LocalizationPathSegment.Index(0), LocalizationPathSegment.Property("DestinyOfBirth"),
+                LocalizationPathSegment.Index(0), LocalizationPathSegment.Property("newPrologoStory"),
+            ],
+            Template = "dialogue",
+            Speaker = "Ilan",
+            Text = "E allora da dove è iniziato tutto?",
+        });
+
+        Assert.Equal(87, result.AssignedIndex);
+        Assert.True(result.IsIdempotentReplay);
+        Assert.Equal("newPrologoStory", result.EntryPath[^2].PropertyName);
+        Assert.Equal(87, result.EntryPath[^1].ArrayIndex);
+        Assert.Contains("\"operationId\":\"b6f0300c", body);
+        Assert.Contains("\"expectedArrayLength\":87", body);
+        Assert.Contains("\"template\":\"dialogue\"", body);
+        Assert.Contains("\"name\":\"Ilan\"", body);
+        Assert.Contains("\"text\":", body);
+    }
+
     private static HttpRemoteLocalizationAuthoringClient CreateClient(
         HttpMessageHandler handler,
         IIdTokenProvider tokens) => new(
@@ -77,6 +120,7 @@ public sealed class HttpRemoteLocalizationAuthoringClientTests
         new Uri("https://api.example.test/renew"),
         new Uri("https://api.example.test/release"),
         new Uri("https://api.example.test/patch"),
+        new Uri("https://api.example.test/append"),
         tokens);
 
     private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)

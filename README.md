@@ -2,8 +2,9 @@
 
 ZIAP Studio è un editor desktop Windows per i progetti Zenkaiverse. La tranche
 `0.3A — Story Reader` ha aggiunto `Story & Events`; `0.3B — Story Authoring`
-aggiunge l'editing controllato dei soli leaf string già esistenti nel locale master,
-senza modificare la struttura degli eventi RPG Maker.
+ha aggiunto l'editing controllato dei soli leaf string già esistenti nel locale
+master. `0.3C — Story Composer` aggiunge soltanto Dialogue/Narration append-only,
+con una patch mirata e verificata dei command RPG Maker.
 
 ## Funzionalità attuali
 
@@ -31,6 +32,19 @@ senza modificare la struttura degli eventi RPG Maker.
 - mirror locale scritto soltanto dopo l'esito remoto, con replace atomico, controllo
   di modifiche esterne, invalidazione della cache Localization e retry esplicito per
   `LOCAL OUT OF SYNC`;
+- Story Composer 0.3C: `+ Dialogue after` e `+ Narration after` costruiscono un
+  `StoryCompositionPlan` validato e mostrano il preview Localization/RPG Maker prima
+  di qualsiasi mutazione;
+- nuovo MDV esclusivamente append-only su `dialogue/mdv.json`: l'indice è assegnato
+  dal server, l'operation idempotente è persistita e i riferimenti esistenti non sono
+  mai rinumerati, rimossi, compattati o riutilizzati;
+- inserimento atomico e concorrente-safe di `101` + `401` nella page di `MapXXX.json`
+  o in `CommonEvents.json`, sempre prima dell'unico terminal code `0`;
+- recovery journal fuori dal repository in `%LOCALAPPDATA%\Zenkaiverse\ZIAP Studio`:
+  dopo un append remoto già riuscito consente di completare/rebase l'inserimento locale
+  o di dismissarlo senza cancellare la entry Localization;
+- `Remove from event` rimuove soltanto il command range del dialogo/narrazione: non
+  elimina mai Localization e può lasciare una entry intenzionalmente non usata;
 - raggruppamento conservativo dei command stream MZ (`101/401`, `108/408`, `355/655`, `357/657`, `205/505`), con range e parametri raw sempre consultabili;
 - fallback `Raw command` per i codici non ancora interpretati, senza perdita dei parametri sorgente;
 - risoluzione localizzazione nel testo intero, inclusi token embedded accanto agli escape code RPG Maker;
@@ -160,7 +174,7 @@ src/
 │   ├── Integrations/     registry plugin e provider delle capability di progetto
 │   ├── Fusion/Audio/     catalogo, risoluzione asset e salvataggio FusionAudio
 │   ├── Fusion/Bosses/    workspace e validazione dei contratti Boss Battle
-│   ├── Fusion/Story/     parser read-only degli event command e Story Workspace
+│   ├── Fusion/Story/     parser, composition plan, command writer e recovery Story
 │   ├── Fusion/Weapons/   cataloghi, semantica e patch dei notetag arma
 │   ├── Authentication/  OAuth browser, Firebase token e sessione
 │   └── Integration/
@@ -259,6 +273,35 @@ chiavi o struttura restano read-only fino alle tranche successive. `CONFLICT` no
 applica alcun last-write-wins: conserva la bozza locale e richiede di ricaricare o
 riconciliare la base.
 
+### Story Composer — 0.3C
+
+Se un `DialogueBlock` localizzato espone un path strutturato master, **+ Dialogue
+after** e **+ Narration after** non modificano direttamente JSON: costruiscono un
+`StoryCompositionPlan` immutabile con source snapshot, command range/indent,
+destination branch, presentation e `operationId`. Il preview distingue l'indice
+previsto dall'indice autorevole: quest'ultimo arriva soltanto dall'append server-side.
+
+L'append è limitato a `dialogue/mdv.json` e alle sole shape `{ name, text }` oppure
+`{ text }`. Il backend verifica Firebase auth, membership al progetto, master locale,
+allowlist file, lock, versione/checksum, lunghezza attesa dell'array, path tipizzato e
+shape esatta. L'entry viene aggiunta solo con `push` alla fine dell'array. La receipt
+persistente, indicizzata da `operationId`, restituisce sempre lo stesso path a un retry
+e rifiuta lo stesso ID con payload diverso.
+
+Dopo receipt remota, Studio aggiorna il mirror locale atomico e invalida la cache;
+solo dopo genera `101` e `401` (`.name` + `.text` per un dialogo; soltanto `.text` per
+una narrazione) e inserisce il pair dopo l'intero range anchor. Il writer rilegge hash,
+target, anchor, terminal code `0` e indent prima di scrivere. Un file modificato da RPG
+Maker produce `SOURCE CONFLICT`, non una posizione indovinata.
+
+Il recovery journal conserva il path remoto, l'intento command e gli snapshot locali.
+Se una risposta va persa, il retry ripete l'append con lo stesso `operationId`; se la
+Map cambia, l'utente seleziona un nuovo anchor e riusa la stessa entry remota. **Dismiss
+recovery** lascia l'entry come orphan recuperabile in futuro. **Remove from event**
+rimuove solo `101/401`: non esiste alcuna azione di delete/compact/reorder MDV in 0.3C.
+Choices, editor del control flow, drag & drop, stable ID e reference graph restano
+fuori scope rispettivamente per 0.3D/0.3E.
+
 ## Schema di creazione armi
 
 `+ Nuova arma` crea un record completo nel primo slot vuoto predisposto da RPG Maker.
@@ -349,13 +392,14 @@ $env:ZIAP_LOCALIZATION_AUTHORING_CLAIM_URL = "http://127.0.0.1:5001/myzenkai-c58
 $env:ZIAP_LOCALIZATION_AUTHORING_RENEW_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/renewLocalizationLock"
 $env:ZIAP_LOCALIZATION_AUTHORING_RELEASE_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/releaseLocalizationLock"
 $env:ZIAP_LOCALIZATION_AUTHORING_PATCH_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/patchLocalizationStaging"
+$env:ZIAP_LOCALIZATION_AUTHORING_APPEND_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/appendLocalizationStagingEntry"
 ```
 
 Configurazione e deploy del backend da `D:\Zenkaiverse\Firebase`:
 
 ```powershell
 firebase functions:secrets:set ZIAP_STUDIO_READ_TOKEN
-firebase deploy --only functions:oauthAuthorize,functions:oauthToken,functions:resolveExternalAuthRequest,functions:getExternalConsentRequest,functions:approveExternalAuthRequest,functions:getLocalizationPublishedManifest,functions:getLocalizationPublishedFile,functions:getLocalizationAuthoringFile,functions:claimLocalizationLock,functions:renewLocalizationLock,functions:releaseLocalizationLock,functions:patchLocalizationStaging
+firebase deploy --only functions:oauthAuthorize,functions:oauthToken,functions:resolveExternalAuthRequest,functions:getExternalConsentRequest,functions:approveExternalAuthRequest,functions:getLocalizationPublishedManifest,functions:getLocalizationPublishedFile,functions:getLocalizationAuthoringFile,functions:claimLocalizationLock,functions:renewLocalizationLock,functions:releaseLocalizationLock,functions:patchLocalizationStaging,functions:appendLocalizationStagingEntry
 ```
 
 Il backend registra `ziap_studio_desktop_v1` come client first-party con callback

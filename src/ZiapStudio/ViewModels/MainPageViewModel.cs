@@ -19,6 +19,7 @@ using ZiapStudio.Services.Initialization;
 using ZiapStudio.Services.Fusion.Preflight;
 using ZiapStudio.Services.Fusion.Audio;
 using ZiapStudio.Services.Fusion.Bosses;
+using ZiapStudio.Services.Fusion.Story;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
 using ZiapStudio.Services.Providers;
@@ -43,6 +44,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private readonly RemoteLocalizationService _remoteLocalizationService;
     private readonly PublishedLocalizationSyncService _publishedLocalizationSyncService;
     private readonly StoryLocalizationAuthoringService _storyLocalizationAuthoringService;
+    private readonly StoryCompositionService _storyCompositionService;
     private readonly ZiapAuthenticationService _authenticationService;
     private readonly RemoteLocalizationDocumentViewModel _remoteLocalizationDocument = new();
     private readonly PreflightScanner _preflightScanner;
@@ -81,6 +83,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         RemoteLocalizationService remoteLocalizationService,
         PublishedLocalizationSyncService publishedLocalizationSyncService,
         StoryLocalizationAuthoringService storyLocalizationAuthoringService,
+        StoryCompositionService storyCompositionService,
         ZiapAuthenticationService authenticationService,
         PreflightScanner preflightScanner,
         PreflightSuppressionStore preflightSuppressionStore,
@@ -104,6 +107,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         _remoteLocalizationService = remoteLocalizationService;
         _publishedLocalizationSyncService = publishedLocalizationSyncService;
         _storyLocalizationAuthoringService = storyLocalizationAuthoringService;
+        _storyCompositionService = storyCompositionService;
         _authenticationService = authenticationService;
         _preflightScanner = preflightScanner;
         _preflightSuppressionStore = preflightSuppressionStore;
@@ -1181,7 +1185,14 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                     new FusionStoryDocumentViewModel(
                         fusionStoryDocument,
                         CurrentProject,
-                        _storyLocalizationAuthoringService));
+                        _storyLocalizationAuthoringService,
+                        _storyCompositionService,
+                        async () =>
+                        {
+                            var reloaded = await _documentService.OpenAsync(CurrentProject, fusionStoryDocument.Descriptor);
+                            return reloaded as FusionStoryWorkspaceDocument ?? throw new DocumentLoadException(
+                                "Impossibile ricaricare Story Workspace dopo la composizione.");
+                        }));
             }
             else
             {

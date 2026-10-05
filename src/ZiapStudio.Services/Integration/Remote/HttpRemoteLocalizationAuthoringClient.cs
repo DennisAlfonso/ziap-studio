@@ -21,6 +21,7 @@ public sealed class HttpRemoteLocalizationAuthoringClient : IRemoteLocalizationA
     private readonly Uri _renewEndpoint;
     private readonly Uri _releaseEndpoint;
     private readonly Uri _patchEndpoint;
+    private readonly Uri _appendEndpoint;
 
     public HttpRemoteLocalizationAuthoringClient(
         HttpClient httpClient,
@@ -29,6 +30,7 @@ public sealed class HttpRemoteLocalizationAuthoringClient : IRemoteLocalizationA
         Uri renewEndpoint,
         Uri releaseEndpoint,
         Uri patchEndpoint,
+        Uri appendEndpoint,
         IIdTokenProvider idTokenProvider)
     {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
@@ -38,6 +40,7 @@ public sealed class HttpRemoteLocalizationAuthoringClient : IRemoteLocalizationA
         _renewEndpoint = ValidateEndpoint(renewEndpoint, nameof(renewEndpoint));
         _releaseEndpoint = ValidateEndpoint(releaseEndpoint, nameof(releaseEndpoint));
         _patchEndpoint = ValidateEndpoint(patchEndpoint, nameof(patchEndpoint));
+        _appendEndpoint = ValidateEndpoint(appendEndpoint, nameof(appendEndpoint));
     }
 
     public Task<LocalizationAuthoringSnapshot> GetAuthoringFileAsync(
@@ -96,6 +99,56 @@ public sealed class HttpRemoteLocalizationAuthoringClient : IRemoteLocalizationA
             _patchEndpoint, HttpMethod.Post, projectId, locale, sourceFile, payload, cancellationToken);
     }
 
+    public async Task<LocalizationAppendResult> AppendStagingEntryAsync(
+        LocalizationAppendRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.ExpectedArrayLength < 0 || string.IsNullOrWhiteSpace(request.OperationId) ||
+            string.IsNullOrWhiteSpace(request.BasedOnVersionId))
+        {
+            throw new ArgumentException("Richiesta di append Localization non valida.", nameof(request));
+        }
+
+        var normalizedTemplate = request.Template.Trim().ToLowerInvariant();
+        if (normalizedTemplate is not ("dialogue" or "narration"))
+        {
+            throw new ArgumentException("Template di append Localization non supportato.", nameof(request));
+        }
+
+        object values = normalizedTemplate == "dialogue"
+            ? new { name = request.Speaker, text = request.Text }
+            : new { text = request.Text };
+        var payload = new
+        {
+            operationId = request.OperationId,
+            basedOnVersionId = request.BasedOnVersionId,
+            expectedStagingChecksum = request.ExpectedStagingChecksum,
+            expectedArrayLength = request.ExpectedArrayLength,
+            branchPath = SerializePath(request.BranchPath),
+            template = normalizedTemplate,
+            values,
+        };
+        var response = await SendAsync<AppendResponse>(
+            _appendEndpoint, HttpMethod.Post, request.ProjectId, request.Locale, request.SourceFile,
+            payload, cancellationToken);
+        if (response.AssignedIndex is null || response.EntryPath is null || response.EntryPath.Length == 0)
+        {
+            throw new RemoteLocalizationAuthoringException(
+                RemoteLocalizationAuthoringFailure.Unknown,
+                "La ZIAP API non ha restituito il path autorevole dell'append.");
+        }
+
+        return new LocalizationAppendResult
+        {
+            OperationId = response.OperationId ?? request.OperationId,
+            AssignedIndex = response.AssignedIndex.Value,
+            EntryPath = DeserializePath(response.EntryPath),
+            Snapshot = ToSnapshot(response, request.ProjectId, request.Locale, request.SourceFile),
+            IsIdempotentReplay = response.IsIdempotentReplay,
+        };
+    }
+
     private async Task<LocalizationAuthoringSnapshot> SendSnapshotAsync(
         Uri endpoint,
         HttpMethod method,
@@ -107,6 +160,12 @@ public sealed class HttpRemoteLocalizationAuthoringClient : IRemoteLocalizationA
     {
         var response = await SendAsync<AuthoringSnapshotResponse>(
             endpoint, method, projectId, locale, sourceFile, payload, cancellationToken);
+        return ToSnapshot(response, projectId, locale, sourceFile);
+    }
+
+    private static LocalizationAuthoringSnapshot ToSnapshot(
+        AuthoringSnapshotResponse response, string projectId, string locale, string sourceFile)
+    {
         if (string.IsNullOrWhiteSpace(response.Content))
         {
             throw new RemoteLocalizationAuthoringException(
@@ -129,6 +188,22 @@ public sealed class HttpRemoteLocalizationAuthoringClient : IRemoteLocalizationA
             Lock = ToLockInfo(response.Lock),
         };
     }
+
+    private static object[] SerializePath(IReadOnlyList<LocalizationPathSegment> path)
+    {
+        ArgumentNullException.ThrowIfNull(path);
+        return path.Select(segment => segment.PropertyName is { } name
+            ? (object)new { kind = "property", name, index = (int?)null }
+            : new { kind = "index", name = (string?)null, index = segment.ArrayIndex }).ToArray();
+    }
+
+    private static IReadOnlyList<LocalizationPathSegment> DeserializePath(
+        IReadOnlyList<PathSegmentResponse> path) => path.Select(segment =>
+        string.Equals(segment.Kind, "property", StringComparison.OrdinalIgnoreCase)
+            ? LocalizationPathSegment.Property(segment.Name ?? throw new JsonException("Segmento property senza name."))
+            : string.Equals(segment.Kind, "index", StringComparison.OrdinalIgnoreCase) && segment.Index is >= 0
+                ? LocalizationPathSegment.Index(segment.Index.Value)
+                : throw new JsonException("Segmento path autorevole non valido.")).ToArray();
 
     private async Task<T> SendJsonAsync<T>(
         Uri endpoint, string projectId, string locale, string sourceFile, object? payload,
@@ -289,7 +364,7 @@ public sealed class HttpRemoteLocalizationAuthoringClient : IRemoteLocalizationA
         return normalized;
     }
 
-    private sealed record AuthoringSnapshotResponse
+    private record AuthoringSnapshotResponse
     {
         public string? ProjectId { get; init; }
         public string? Locale { get; init; }
@@ -301,6 +376,21 @@ public sealed class HttpRemoteLocalizationAuthoringClient : IRemoteLocalizationA
         public string? StagingChecksum { get; init; }
         public string? Source { get; init; }
         public LockResponse? Lock { get; init; }
+    }
+
+    private sealed record PathSegmentResponse
+    {
+        public string? Kind { get; init; }
+        public string? Name { get; init; }
+        public int? Index { get; init; }
+    }
+
+    private sealed record AppendResponse : AuthoringSnapshotResponse
+    {
+        public string? OperationId { get; init; }
+        public int? AssignedIndex { get; init; }
+        public PathSegmentResponse[]? EntryPath { get; init; }
+        public bool IsIdempotentReplay { get; init; }
     }
 
     private sealed record LockResponse

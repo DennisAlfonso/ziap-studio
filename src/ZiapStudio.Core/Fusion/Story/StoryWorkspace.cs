@@ -39,6 +39,7 @@ public sealed record StoryPage
     public required int Number { get; init; }
     public required int Trigger { get; init; }
     public string ConditionsSummary { get; init; } = "Nessuna condizione";
+    public StoryCommandListTarget? CommandListTarget { get; init; }
     public IReadOnlyList<StoryBlock> Blocks { get; init; } = [];
 
     public string DisplayName => $"Page {Number}";
@@ -50,6 +51,7 @@ public sealed record StoryCommonEvent
     public required string Name { get; init; }
     public int Trigger { get; init; }
     public int SwitchId { get; init; }
+    public StoryCommandListTarget? CommandListTarget { get; init; }
     public IReadOnlyList<StoryBlock> Blocks { get; init; } = [];
 
     public string DisplayName => $"{Id:000} — {Name}";

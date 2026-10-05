@@ -231,5 +231,9 @@ public sealed class LocalizationAuthoringTests
                 Source = LocalizationAuthoringSource.Staging,
             });
         }
+
+        public Task<LocalizationAppendResult> AppendStagingEntryAsync(
+            LocalizationAppendRequest request,
+            CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

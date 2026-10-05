@@ -99,6 +99,32 @@
                         <Button Click="RetryMirror_Click" Content="Retry sync" IsEnabled="{Binding CanRetryMirror}" />
                     </StackPanel>
                     <TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding AuthoringMessage}" TextWrapping="Wrap" />
+                    <TextBlock FontSize="10" FontWeight="SemiBold" Text="COMPOSE STORY" />
+                    <StackPanel Spacing="4" Visibility="{Binding Composer.HasRecovery, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding Composer.RecoveryMessage}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Click="CompleteRecovery_Click" Content="Complete local insertion" />
+                            <Button Click="DismissRecovery_Click" Content="Dismiss recovery" />
+                        </StackPanel>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button Click="AddDialogueAfter_Click" Content="+ Dialogue after" IsEnabled="{Binding Composer.CanStart}" />
+                        <Button Click="AddNarrationAfter_Click" Content="+ Narration after" IsEnabled="{Binding Composer.CanStart}" />
+                    </StackPanel>
+                    <StackPanel Spacing="4">
+                        <TextBlock FontSize="11" FontWeight="SemiBold" Text="Speaker" Visibility="{Binding Composer.IsDialogue, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <TextBox Text="{Binding Composer.Speaker, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Visibility="{Binding Composer.IsDialogue, Converter={StaticResource BooleanToVisibilityConverter}}" />
+                        <TextBlock FontSize="11" FontWeight="SemiBold" Text="Text" />
+                        <TextBox AcceptsReturn="True" MinHeight="60" Text="{Binding Composer.Text, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" TextWrapping="Wrap" />
+                        <TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding Composer.Message}" TextWrapping="Wrap" />
+                        <TextBox AcceptsReturn="True" FontFamily="Consolas" FontSize="10" IsReadOnly="True" MinHeight="90" Text="{Binding Composer.PreviewText}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Button Click="PreviewComposition_Click" Content="Preview" IsEnabled="{Binding Composer.CanPreview}" />
+                            <Button Click="CommitComposition_Click" Content="Add to story" IsEnabled="{Binding Composer.CanCommit}" />
+                        </StackPanel>
+                        <Button Click="UnlinkStoryBlock_Click" Content="Remove from event" IsEnabled="{Binding Composer.CanUnlink}" />
+                        <TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Remove from event preserves Localization; it never deletes or renumbers MDV." TextWrapping="Wrap" />
+                    </StackPanel>
                     <TextBlock FontSize="10" FontWeight="SemiBold" Text="LOCALIZATION ORIGIN" />
                     <TextBlock FontFamily="Consolas" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SelectedBlock.LocalizationOriginText}" TextWrapping="Wrap" />
                     <ItemsControl ItemsSource="{Binding SelectedBlockDetails}"><ItemsControl.ItemTemplate><DataTemplate x:DataType="x:String"><TextBlock FontSize="11" Text="{x:Bind}" TextWrapping="Wrap" /></DataTemplate></ItemsControl.ItemTemplate></ItemsControl>

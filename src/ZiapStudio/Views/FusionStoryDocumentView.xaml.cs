@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml;
 using ZiapStudio.ViewModels;
+using ZiapStudio.Core.Fusion.Story;
 
 namespace ZiapStudio.Views;
 
@@ -41,6 +42,52 @@ public sealed partial class FusionStoryDocumentView : UserControl
         if (DataContext is FusionStoryDocumentViewModel viewModel)
         {
             await viewModel.RetryMirrorAsync();
+        }
+    }
+
+    private void AddDialogueAfter_Click(object sender, RoutedEventArgs e) =>
+        (DataContext as FusionStoryDocumentViewModel)?.Composer.Start(StoryCompositionOperationType.AddDialogue);
+
+    private void AddNarrationAfter_Click(object sender, RoutedEventArgs e) =>
+        (DataContext as FusionStoryDocumentViewModel)?.Composer.Start(StoryCompositionOperationType.AddNarration);
+
+    private async void PreviewComposition_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is FusionStoryDocumentViewModel viewModel)
+        {
+            await viewModel.Composer.PreviewAsync();
+        }
+    }
+
+    private async void CommitComposition_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is FusionStoryDocumentViewModel viewModel)
+        {
+            await viewModel.Composer.CommitAsync();
+        }
+    }
+
+    private async void UnlinkStoryBlock_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is FusionStoryDocumentViewModel viewModel)
+        {
+            await viewModel.Composer.UnlinkAsync();
+        }
+    }
+
+    private async void CompleteRecovery_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is FusionStoryDocumentViewModel viewModel)
+        {
+            await viewModel.Composer.CompleteRecoveryAsync();
+        }
+    }
+
+    private async void DismissRecovery_Click(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is FusionStoryDocumentViewModel viewModel)
+        {
+            await viewModel.Composer.DismissRecoveryAsync();
         }
     }
 }

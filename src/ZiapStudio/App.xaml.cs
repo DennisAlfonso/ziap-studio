@@ -148,6 +148,7 @@ public partial class App : Application
             GetLocalizationAuthoringUri("ZIAP_LOCALIZATION_AUTHORING_RENEW_URL", "renewLocalizationLock"),
             GetLocalizationAuthoringUri("ZIAP_LOCALIZATION_AUTHORING_RELEASE_URL", "releaseLocalizationLock"),
             GetLocalizationAuthoringUri("ZIAP_LOCALIZATION_AUTHORING_PATCH_URL", "patchLocalizationStaging"),
+            GetLocalizationAuthoringUri("ZIAP_LOCALIZATION_AUTHORING_APPEND_URL", "appendLocalizationStagingEntry"),
             authenticationService);
         var storyLocalizationAuthoringService = new StoryLocalizationAuthoringService(
             storyLocalizationAuthoringClient,
@@ -155,6 +156,16 @@ public partial class App : Application
             externalModificationDetector,
             localizationMirrorWriter,
             localizationService);
+        var storyCompositionService = new StoryCompositionService(
+            storyLocalizationAuthoringClient,
+            snapshotService,
+            localizationMirrorWriter,
+            localizationService,
+            new StoryCompositionPlanner(snapshotService),
+            new StoryCommandListWriter(fileSystem, atomicJsonWriter),
+            new StoryCompositionRecoveryStore(
+                fileSystem,
+                Path.Combine(settingsDirectory, "story-composition-recovery.json")));
         var preflightScanner = new PreflightScanner(
         [
             new WeaponPreflightProvider(
@@ -188,6 +199,7 @@ public partial class App : Application
             remoteLocalizationService,
             publishedLocalizationSyncService,
             storyLocalizationAuthoringService,
+            storyCompositionService,
             authenticationService,
             preflightScanner,
             preflightSuppressionStore,

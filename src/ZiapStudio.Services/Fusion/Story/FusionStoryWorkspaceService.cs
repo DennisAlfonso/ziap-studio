@@ -235,6 +235,14 @@ public sealed class FusionStoryWorkspaceService
                     Number = pageNumber,
                     Trigger = ReadInt(page, "trigger") ?? 0,
                     ConditionsSummary = DescribeConditions(page),
+                    CommandListTarget = new StoryCommandListTarget
+                    {
+                        Kind = StoryCommandListKind.MapPage,
+                        SourceFile = relativePath,
+                        MapId = mapId,
+                        EventId = eventId,
+                        PageNumber = pageNumber,
+                    },
                     Blocks = blocks,
                 });
                 pageNumber++;
@@ -316,6 +324,12 @@ public sealed class FusionStoryWorkspaceService
                     Name = ReadString(sourceEvent, "name") ?? $"Common Event {id}",
                     Trigger = ReadInt(sourceEvent, "trigger") ?? 0,
                     SwitchId = ReadInt(sourceEvent, "switchId") ?? 0,
+                    CommandListTarget = new StoryCommandListTarget
+                    {
+                        Kind = StoryCommandListKind.CommonEvent,
+                        SourceFile = relativePath,
+                        EventId = id,
+                    },
                     Blocks = await _commandParser.ParseAsync(
                         projectPath, commands, diagnostics, location, cancellationToken),
                 });

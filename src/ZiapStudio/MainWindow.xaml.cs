@@ -10,6 +10,7 @@ using ZiapStudio.Services.Editing;
 using ZiapStudio.Services.Fusion.Preflight;
 using ZiapStudio.Services.Fusion.Audio;
 using ZiapStudio.Services.Fusion.Bosses;
+using ZiapStudio.Services.Fusion.Story;
 using ZiapStudio.Services.Initialization;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
@@ -44,6 +45,7 @@ public sealed partial class MainWindow : Window
         RemoteLocalizationService remoteLocalizationService,
         PublishedLocalizationSyncService publishedLocalizationSyncService,
         StoryLocalizationAuthoringService storyLocalizationAuthoringService,
+        StoryCompositionService storyCompositionService,
         ZiapAuthenticationService authenticationService,
         PreflightScanner preflightScanner,
         PreflightSuppressionStore preflightSuppressionStore,
@@ -79,6 +81,7 @@ public sealed partial class MainWindow : Window
             remoteLocalizationService,
             publishedLocalizationSyncService,
             storyLocalizationAuthoringService,
+            storyCompositionService,
             authenticationService,
             preflightScanner,
             preflightSuppressionStore,

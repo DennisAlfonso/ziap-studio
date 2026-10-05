@@ -6,6 +6,7 @@ using ZiapStudio.Core.Localization;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Services.Integration.Remote;
 using ZiapStudio.Services.Localization;
+using ZiapStudio.Services.Fusion.Story;
 
 namespace ZiapStudio.ViewModels;
 
@@ -16,6 +17,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
     private StoryBlock? _selectedBlock;
     private readonly ZiapProject _project;
     private readonly StoryLocalizationAuthoringService _authoringService;
+    private readonly Func<Task<FusionStoryWorkspaceDocument>> _reloadWorkspace;
     private StoryLocalizationAuthoringSession? _authoringSession;
     private CancellationTokenSource? _lockHeartbeatCancellation;
     private bool _isAuthoringBusy;
@@ -24,18 +26,29 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
     public FusionStoryDocumentViewModel(
         FusionStoryWorkspaceDocument document,
         ZiapProject project,
-        StoryLocalizationAuthoringService authoringService)
+        StoryLocalizationAuthoringService authoringService,
+        StoryCompositionService compositionService,
+        Func<Task<FusionStoryWorkspaceDocument>> reloadWorkspace)
     {
         Document = document;
         _project = project ?? throw new ArgumentNullException(nameof(project));
         _authoringService = authoringService ?? throw new ArgumentNullException(nameof(authoringService));
+        _reloadWorkspace = reloadWorkspace ?? throw new ArgumentNullException(nameof(reloadWorkspace));
+        Composer = new StoryComposerViewModel(
+            _project,
+            compositionService,
+            ReloadWorkspaceAsync,
+            () => _authoringSession?.Lock.AcquiredAt);
         RebuildNavigation();
         SelectedSource = NavigationItems.FirstOrDefault(item => item.IsSelectable);
+        _ = Composer.LoadRecoveriesAsync();
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    public FusionStoryWorkspaceDocument Document { get; }
+    public FusionStoryWorkspaceDocument Document { get; private set; }
+
+    public StoryComposerViewModel Composer { get; }
 
     public IReadOnlyList<StoryNavigationItem> NavigationItems { get; private set; } = [];
 
@@ -66,6 +79,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
             OnPropertyChanged(nameof(Blocks));
             OnPropertyChanged(nameof(SelectedSourceTitle));
             OnPropertyChanged(nameof(SelectedSourceDetail));
+            Composer.SetAnchor(value.Target, SelectedBlock);
         }
     }
 
@@ -143,6 +157,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
             OnPropertyChanged(nameof(SelectedBlockDetails));
             OnPropertyChanged(nameof(SelectedBlockRawCommands));
             NotifyAuthoringPropertiesChanged();
+            Composer.SetAnchor(SelectedSource?.Target, value);
         }
     }
 
@@ -196,7 +211,8 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
                         page.DisplayName,
                         3,
                         $"{map.DisplayName} · {match.Event.DisplayName} · {page.ConditionsSummary}",
-                        page.Blocks));
+                        page.Blocks,
+                        page.CommandListTarget));
                 }
             }
         }
@@ -213,7 +229,8 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
                     commonEvent.DisplayName,
                     1,
                     $"Trigger {commonEvent.Trigger} · Switch {commonEvent.SwitchId}",
-                    commonEvent.Blocks));
+                    commonEvent.Blocks,
+                    commonEvent.CommandListTarget));
             }
         }
 
@@ -474,6 +491,21 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
         NotifyAuthoringPropertiesChanged();
     }
 
+    private async Task ReloadWorkspaceAsync()
+    {
+        var previousTarget = SelectedSource?.Target;
+        Document = await _reloadWorkspace();
+        RebuildNavigation();
+        if (previousTarget is not null)
+        {
+            SelectedSource = NavigationItems.FirstOrDefault(item => item.Target == previousTarget && item.IsSelectable) ??
+                NavigationItems.FirstOrDefault(item => item.IsSelectable);
+        }
+        OnPropertyChanged(nameof(Document));
+        OnPropertyChanged(nameof(WorkspaceStatusText));
+        RefreshStoryProjection();
+    }
+
     private void NotifyAuthoringPropertiesChanged()
     {
         OnPropertyChanged(nameof(HasAuthoringSession));
@@ -605,6 +637,7 @@ public sealed record StoryNavigationItem
     public required int Depth { get; init; }
     public string Context { get; init; } = string.Empty;
     public IReadOnlyList<StoryBlock> Blocks { get; init; } = [];
+    public StoryCommandListTarget? Target { get; init; }
     public bool IsSelectable { get; init; }
 
     public string DisplayTitle => string.Concat(Enumerable.Repeat("   ", Depth)) + Title;
@@ -621,12 +654,14 @@ public sealed record StoryNavigationItem
         string title,
         int depth,
         string context,
-        IReadOnlyList<StoryBlock> blocks) => new()
+        IReadOnlyList<StoryBlock> blocks,
+        StoryCommandListTarget? target) => new()
     {
         Title = title,
         Depth = depth,
         Context = context,
         Blocks = blocks,
+        Target = target,
         IsSelectable = true,
     };
 }
