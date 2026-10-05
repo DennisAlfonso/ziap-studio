@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ZiapStudio.Core.Editing;
 using ZiapStudio.Services.Editing;
+using ZiapStudio.Services.ProjectSafety;
 
 namespace ZiapStudio.Services.Fusion.Bosses;
 
@@ -128,6 +129,18 @@ public sealed class FusionBossAuthoringService
             return new DocumentSaveResult
             {
                 Status = DocumentSaveStatus.ExternalModification,
+                Validation = validation,
+                Message = exception.Message,
+                Exception = exception,
+            };
+        }
+        catch (ProjectWriteException exception)
+        {
+            return new DocumentSaveResult
+            {
+                Status = exception.Failure == ProjectWriteFailure.ExternalModification
+                    ? DocumentSaveStatus.ExternalModification
+                    : DocumentSaveStatus.Failed,
                 Validation = validation,
                 Message = exception.Message,
                 Exception = exception,

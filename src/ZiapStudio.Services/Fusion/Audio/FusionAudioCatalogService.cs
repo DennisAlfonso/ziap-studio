@@ -280,7 +280,6 @@ public sealed class FusionAudioCatalogService
 
         var destinationPath = Path.Combine(project.Path, "data", "fusion", "audio.json");
         var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(catalog, JsonOptions) + Environment.NewLine);
-        _fileSystem.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
         if (expectedSnapshot is not null)
         {
             await _atomicWriter.WriteAsync(
@@ -291,7 +290,7 @@ public sealed class FusionAudioCatalogService
         }
         else
         {
-            await WriteNewAtomicallyAsync(destinationPath, bytes, cancellationToken);
+            await _atomicWriter.WriteNewAsync(destinationPath, bytes, cancellationToken);
         }
 
         var savedBytes = await _fileSystem.ReadAllBytesAsync(destinationPath, cancellationToken);
@@ -303,33 +302,6 @@ public sealed class FusionAudioCatalogService
             Length = savedBytes.LongLength,
             ContentHash = Convert.ToHexString(SHA256.HashData(savedBytes)),
         };
-    }
-
-    private async Task WriteNewAtomicallyAsync(
-        string destinationPath,
-        byte[] bytes,
-        CancellationToken cancellationToken)
-    {
-        var temporaryPath = $"{destinationPath}.ziap-tmp";
-        try
-        {
-            await _fileSystem.WriteAllBytesWithFlushAsync(temporaryPath, bytes, cancellationToken);
-            using var validation = JsonDocument.Parse(
-                await _fileSystem.ReadAllBytesAsync(temporaryPath, cancellationToken));
-            if (_fileSystem.FileExists(destinationPath))
-            {
-                throw new ExternalDocumentModificationException(
-                    $"{Path.GetFileName(destinationPath)} è stato creato esternamente.");
-            }
-            _fileSystem.MoveFile(temporaryPath, destinationPath, overwrite: false);
-        }
-        finally
-        {
-            if (_fileSystem.FileExists(temporaryPath))
-            {
-                _fileSystem.DeleteFile(temporaryPath);
-            }
-        }
     }
 
     private async Task<IReadOnlyDictionary<string, string>> LoadSystemSoundsAsync(

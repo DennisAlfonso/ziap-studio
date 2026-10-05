@@ -23,6 +23,7 @@ using ZiapStudio.Services.Fusion.Story;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
 using ZiapStudio.Services.Providers;
+using ZiapStudio.Services.ProjectSafety;
 
 namespace ZiapStudio.ViewModels;
 
@@ -52,6 +53,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private readonly FusionAudioCatalogService _fusionAudioCatalogService;
     private readonly FusionAudioPlaybackResolver _fusionAudioPlaybackResolver;
     private readonly AudioPreviewService _audioPreviewService;
+    private readonly ProjectWriteCoordinator? _projectWriteCoordinator;
+    private readonly ProjectChangeMonitor? _projectChangeMonitor;
     private readonly PreflightDocumentViewModel _preflightDocument = new();
     private ZiapProject? _currentProject;
     private string? _errorMessage;
@@ -65,6 +68,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private bool _isAuthenticationBusy;
     private bool _isPreflightScanning;
     private PreflightScanResult _preflightResult = PreflightScanResult.Empty;
+    private bool _externalProjectChangesDetected;
 
     public MainPageViewModel(
         ProjectService projectService,
@@ -89,7 +93,9 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         PreflightSuppressionStore preflightSuppressionStore,
         FusionAudioCatalogService fusionAudioCatalogService,
         FusionAudioPlaybackResolver fusionAudioPlaybackResolver,
-        AudioPreviewService audioPreviewService)
+        AudioPreviewService audioPreviewService,
+        ProjectWriteCoordinator? projectWriteCoordinator = null,
+        ProjectChangeMonitor? projectChangeMonitor = null)
     {
         _projectService = projectService;
         _projectInitializationService = projectInitializationService;
@@ -114,6 +120,16 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         _fusionAudioCatalogService = fusionAudioCatalogService;
         _fusionAudioPlaybackResolver = fusionAudioPlaybackResolver;
         _audioPreviewService = audioPreviewService;
+        _projectWriteCoordinator = projectWriteCoordinator;
+        _projectChangeMonitor = projectChangeMonitor;
+        if (_projectWriteCoordinator is not null)
+        {
+            _projectWriteCoordinator.SafetyStateChanged += (_, _) => NotifyProjectSafetyChanged();
+        }
+        if (_projectChangeMonitor is not null)
+        {
+            _projectChangeMonitor.Changed += ProjectChangeMonitor_Changed;
+        }
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -314,9 +330,34 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     public FusionStoryDocumentViewModel? ActiveFusionStoryDocument =>
         SelectedDocument?.FusionStory;
 
-    public bool CanSaveDocument => CanInteract && SelectedDocument?.IsDirty == true;
+    public bool CanSaveDocument => CanInteract && SelectedDocument?.IsDirty == true &&
+        !(SelectedDocument.EditSession is not null &&
+          _projectWriteCoordinator?.SafetyState is ProjectSafetyState.ProtectedCoexistence or ProjectSafetyState.RevalidationRequired);
 
-    public bool CanSaveAll => CanInteract && OpenDocuments.Any(document => document.IsDirty);
+    public bool CanSaveAll => CanInteract && OpenDocuments.Any(document => document.IsDirty) &&
+        !OpenDocuments.Any(document => document.EditSession?.IsDirty == true &&
+            _projectWriteCoordinator?.SafetyState is ProjectSafetyState.ProtectedCoexistence or ProjectSafetyState.RevalidationRequired);
+
+    public string ProjectSafetyLabel => _projectWriteCoordinator?.SafetyState switch
+    {
+        ProjectSafetyState.ProtectedCoexistence => "RPG Maker MZ detected · Protected coexistence mode",
+        ProjectSafetyState.RevalidationRequired => "External changes detected · Revalidation required",
+        _ when _externalProjectChangesDetected => "External changes detected · Reload or discard local changes before saving",
+        _ => "Project safe",
+    };
+
+    public string ProjectSafetyDescription => _projectWriteCoordinator?.SafetyState switch
+    {
+        ProjectSafetyState.ProtectedCoexistence =>
+            "Le sorgenti gestite da RPG Maker sono in sola lettura. Analisi e strumenti non distruttivi restano disponibili.",
+        ProjectSafetyState.RevalidationRequired =>
+            "RPG Maker è stato chiuso: Studio sta rivalidando le snapshot prima di consentire scritture RPG Maker.",
+        _ when _externalProjectChangesDetected =>
+            "Una sorgente del progetto è stata aggiornata esternamente. Studio non sovrascriverà le modifiche locali.",
+        _ => "Le mutazioni del progetto usano snapshot SHA-256 e commit atomici.",
+    };
+
+    public bool HasProjectSafetyStatus => CurrentProject is not null;
 
     public bool CanUndo => CanInteract && SelectedDocument?.CanUndo == true;
 
@@ -517,6 +558,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             await _projectInitializationService.InitializeAsync(projectPath, options);
             var initializedProject = await _projectService.LoadAsync(projectPath);
             CurrentProject = initializedProject;
+            RegisterProjectSafety(initializedProject);
             ResetDocumentWorkspace(initializedProject);
             await RefreshProjectExplorerAsync(initializedProject);
             StatusMessage = $"{initializedProject.ProjectTypeDisplayName} • {initializedProject.Path}";
@@ -1143,8 +1185,8 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                 var assetPreviews = await _assetPreviewService.CreatePreviewsAsync(
                     CurrentProject,
                     databaseDocument);
-                var editSession = _editSessionFactory.Create(databaseDocument, assetPreviews);
-                tab = DocumentTabViewModel.Create(databaseDocument, assetPreviews, editSession);
+                var databaseEditSession = _editSessionFactory.Create(databaseDocument, assetPreviews);
+                tab = DocumentTabViewModel.Create(databaseDocument, assetPreviews, databaseEditSession);
                 tab.Database?.ApplyPreflightIssues(_preflightResult.ActiveIssues);
             }
             else if (document is FusionAudioDocument fusionAudioDocument)
@@ -1157,14 +1199,14 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             }
             else if (document is FusionBossWorkspaceDocument fusionBossDocument)
             {
-                var editSession = fusionBossDocument is
+                var bossEditSession = fusionBossDocument is
                     { EncounterSourceRoot: not null, EncounterSourceSnapshot: not null }
                         ? new FusionBossEditSession(fusionBossDocument)
                         : null;
                 tab = DocumentTabViewModel.CreateFusionBoss(
                     fusionBossDocument,
-                    new FusionBossDocumentViewModel(fusionBossDocument, editSession),
-                    editSession);
+                    new FusionBossDocumentViewModel(fusionBossDocument, bossEditSession),
+                    bossEditSession);
             }
             else if (document is FusionPuzzleWorkspaceDocument fusionPuzzleDocument)
             {
@@ -1200,6 +1242,18 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
                     $"Il documento '{item.Document.DisplayName}' non ha una vista disponibile.");
             }
             tab.PropertyChanged += DocumentTab_PropertyChanged;
+            if (tab.EditSession is { } editSession)
+            {
+                _projectWriteCoordinator?.TrackSnapshot(editSession.SourceSnapshot);
+            }
+            if (tab.FusionBossEditSession is { } openedBossEditSession)
+            {
+                _projectWriteCoordinator?.TrackSnapshot(openedBossEditSession.SourceSnapshot);
+            }
+            if (document is FusionAudioDocument { SourceSnapshot: { } audioSnapshot })
+            {
+                _projectWriteCoordinator?.TrackSnapshot(audioSnapshot);
+            }
             OpenDocuments.Add(tab);
             SelectedDocument = tab;
         }
@@ -1515,6 +1569,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
             await ReleaseStoryAuthoringLocksAsync();
             var project = await _projectService.LoadAsync(path);
             CurrentProject = project;
+            RegisterProjectSafety(project);
             ResetDocumentWorkspace(project);
             await RefreshProjectExplorerAsync(project);
             StatusMessage = $"{project.ProjectTypeDisplayName} • {project.Path}";
@@ -1734,6 +1789,70 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(HasPreflightCard));
         OnPropertyChanged(nameof(CanRefreshRemoteLocalization));
         OnPropertyChanged(nameof(CanAnalyzePreflight));
+        NotifyProjectSafetyChanged();
+    }
+
+    public async Task PollProjectSafetyAsync(CancellationToken cancellationToken = default)
+    {
+        if (CurrentProject is not { } project || _projectWriteCoordinator is null)
+        {
+            return;
+        }
+
+        var state = _projectWriteCoordinator.SafetyState;
+        if (state == ProjectSafetyState.RevalidationRequired)
+        {
+            var snapshots = OpenDocuments
+                .Select(tab => tab.EditSession?.SourceSnapshot)
+                .Where(snapshot => snapshot is not null)
+                .Cast<DocumentSourceSnapshot>()
+                .ToArray();
+            try
+            {
+                await _projectWriteCoordinator.RevalidateAsync(project.Path, snapshots, cancellationToken);
+            }
+            catch (ProjectWriteException exception) when (
+                exception.Failure == ProjectWriteFailure.ExternalModification)
+            {
+                _externalProjectChangesDetected = true;
+                StatusMessage = "Sorgenti aggiornate esternamente: ricarica o scarta le modifiche locali prima di salvare.";
+            }
+        }
+
+        if (_projectChangeMonitor is not null)
+        {
+            await _projectChangeMonitor.FlushAsync(cancellationToken);
+        }
+        NotifyProjectSafetyChanged();
+    }
+
+    private void RegisterProjectSafety(ZiapProject project)
+    {
+        _externalProjectChangesDetected = false;
+        _projectWriteCoordinator?.OpenProject(project.Path);
+        _projectChangeMonitor?.OpenProject(project.Path);
+        NotifyProjectSafetyChanged();
+    }
+
+    private void ProjectChangeMonitor_Changed(object? sender, ProjectChangeNotification notification)
+    {
+        if (notification.Origin != ProjectChangeOrigin.ExternalWrite)
+        {
+            return;
+        }
+
+        _externalProjectChangesDetected = true;
+        StatusMessage = $"Modifica esterna rilevata: {Path.GetFileName(notification.Change.Path)}.";
+        NotifyProjectSafetyChanged();
+    }
+
+    private void NotifyProjectSafetyChanged()
+    {
+        OnPropertyChanged(nameof(ProjectSafetyLabel));
+        OnPropertyChanged(nameof(ProjectSafetyDescription));
+        OnPropertyChanged(nameof(HasProjectSafetyStatus));
+        OnPropertyChanged(nameof(CanSaveDocument));
+        OnPropertyChanged(nameof(CanSaveAll));
     }
 
     private void NotifyAuthenticationPropertiesChanged()

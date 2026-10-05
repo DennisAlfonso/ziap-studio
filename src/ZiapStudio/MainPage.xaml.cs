@@ -25,6 +25,10 @@ public sealed partial class MainPage : Page
     private double _splitterStartWidth;
     private double _splitterMinimumWidth;
     private double _splitterMaximumWidth;
+    private readonly DispatcherTimer _projectSafetyTimer = new()
+    {
+        Interval = TimeSpan.FromSeconds(1),
+    };
 
     public MainPageViewModel ViewModel { get; }
 
@@ -38,11 +42,18 @@ public sealed partial class MainPage : Page
         _databaseListWidth = layoutSettings.DatabaseListWidth;
         InitializeComponent();
         ViewModel.PropertyChanged += ViewModel_PropertyChanged;
+        _projectSafetyTimer.Tick += ProjectSafetyTimer_Tick;
         SetProjectsPaneExpanded(expanded: true);
     }
 
-    private async void Page_Loaded(object sender, RoutedEventArgs e) =>
+    private async void Page_Loaded(object sender, RoutedEventArgs e)
+    {
         await ViewModel.InitializeAsync();
+        _projectSafetyTimer.Start();
+    }
+
+    private async void ProjectSafetyTimer_Tick(object? sender, object e) =>
+        await ViewModel.PollProjectSafetyAsync();
 
     public StudioLayoutSettings CaptureLayoutSettings() =>
         _layoutSettings = _layoutSettings with

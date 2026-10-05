@@ -4,6 +4,7 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using ZiapStudio.Core.Fusion.Story;
 using ZiapStudio.Services.Editing;
+using ZiapStudio.Services.ProjectSafety;
 
 namespace ZiapStudio.Services.Fusion.Story;
 
@@ -16,11 +17,16 @@ public sealed class StoryCommandListWriter
 {
     private readonly FileSystemService _fileSystem;
     private readonly AtomicJsonFileWriter _atomicWriter;
+    private readonly ProjectWriteCoordinator? _writeCoordinator;
 
-    public StoryCommandListWriter(FileSystemService fileSystem, AtomicJsonFileWriter atomicWriter)
+    public StoryCommandListWriter(
+        FileSystemService fileSystem,
+        AtomicJsonFileWriter atomicWriter,
+        ProjectWriteCoordinator? writeCoordinator = null)
     {
         _fileSystem = fileSystem;
         _atomicWriter = atomicWriter;
+        _writeCoordinator = writeCoordinator;
     }
 
     public Task InsertAsync(
@@ -38,6 +44,7 @@ public sealed class StoryCommandListWriter
         StoryCompositionPlan plan,
         CancellationToken cancellationToken = default)
     {
+        _writeCoordinator?.TrackSnapshot(plan.ExpectedSourceSnapshot);
         var path = GetSafeSourcePath(projectPath, plan.Target.SourceFile);
         var bytes = await _fileSystem.ReadAllBytesAsync(path, cancellationToken);
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
@@ -113,6 +120,11 @@ public sealed class StoryCommandListWriter
         bool remove,
         CancellationToken cancellationToken)
     {
+        _writeCoordinator?.TrackSnapshot(new ZiapStudio.Core.Editing.DocumentSourceSnapshot
+        {
+            SourcePath = GetSafeSourcePath(projectPath, target.SourceFile),
+            ContentHash = expectedHash,
+        });
         var path = GetSafeSourcePath(projectPath, target.SourceFile);
         var bytes = await _fileSystem.ReadAllBytesAsync(path, cancellationToken);
         var hash = Convert.ToHexString(SHA256.HashData(bytes));
@@ -157,7 +169,14 @@ public sealed class StoryCommandListWriter
         }
         ValidateTerminal(list);
         var serialized = root.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) + Environment.NewLine;
-        await _atomicWriter.WriteAsync(path, Encoding.UTF8.GetBytes(serialized), expectedHash, cancellationToken);
+        try
+        {
+            await _atomicWriter.WriteAsync(path, Encoding.UTF8.GetBytes(serialized), expectedHash, cancellationToken);
+        }
+        catch (ProjectWriteException exception)
+        {
+            throw new StoryCommandListWriteException(exception.Message, exception);
+        }
         // The atomic writer validates JSON and the expected hash. Read back the targeted list too.
         var reread = JsonNode.Parse(await _fileSystem.ReadAllTextAsync(path, cancellationToken)) ?? throw new JsonException();
         ValidateTerminal(ResolveCommandList(reread, target));

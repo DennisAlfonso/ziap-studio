@@ -1,6 +1,7 @@
 using System.Text.Json;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Services.Metadata;
+using ZiapStudio.Services.ProjectSafety;
 
 namespace ZiapStudio.Services.Initialization;
 
@@ -13,13 +14,16 @@ public sealed class ProjectInitializationService
 
     private readonly FileSystemService _fileSystem;
     private readonly ProjectIdGenerator _projectIdGenerator;
+    private readonly ProjectWriteCoordinator? _writeCoordinator;
 
     public ProjectInitializationService(
         FileSystemService fileSystem,
-        ProjectIdGenerator projectIdGenerator)
+        ProjectIdGenerator projectIdGenerator,
+        ProjectWriteCoordinator? writeCoordinator = null)
     {
         _fileSystem = fileSystem;
         _projectIdGenerator = projectIdGenerator;
+        _writeCoordinator = writeCoordinator;
     }
 
     public async Task InitializeAsync(
@@ -59,6 +63,27 @@ public sealed class ProjectInitializationService
             Version = NullIfWhiteSpace(options.Version),
             Publisher = NullIfWhiteSpace(options.Publisher),
         };
+
+        if (_writeCoordinator is not null)
+        {
+            try
+            {
+                await _writeCoordinator.WriteAsync(new ProjectWriteRequest
+                {
+                    ProjectRoot = projectPath,
+                    TargetPath = metadataPath,
+                    Operation = ProjectWriteOperation.CreateNew,
+                    Contents = JsonSerializer.SerializeToUtf8Bytes(metadata, JsonOptions),
+                    ValidateJson = true,
+                }, cancellationToken);
+                return;
+            }
+            catch (ProjectWriteException exception)
+            {
+                throw new ProjectInitializationException(
+                    "Impossibile creare .ziap/project.json nella cartella del progetto.", exception);
+            }
+        }
 
         try
         {

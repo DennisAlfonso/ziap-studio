@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using System.Text.Json;
 using ZiapStudio.Services.Editing;
 
@@ -46,40 +45,7 @@ public sealed class PublishedLocalizationFileWriter
                 $"{Path.GetFileName(destinationPath)} è stato rimosso dopo il confronto.");
         }
 
-        var directory = Path.GetDirectoryName(destinationPath)
-            ?? throw new InvalidOperationException("Cartella di destinazione non valida.");
-        _fileSystem.CreateDirectory(directory);
-        var temporaryPath = $"{destinationPath}.ziap-tmp";
-        try
-        {
-            await _fileSystem.WriteAllBytesWithFlushAsync(
-                temporaryPath,
-                contents,
-                cancellationToken);
-            var temporaryBytes = await _fileSystem.ReadAllBytesAsync(
-                temporaryPath,
-                cancellationToken);
-            using var temporaryDocument = JsonDocument.Parse(temporaryBytes);
-            if (!CryptographicOperations.FixedTimeEquals(
-                    SHA256.HashData(contents.Span),
-                    SHA256.HashData(temporaryBytes)))
-            {
-                throw new IOException("La verifica del file temporaneo non è riuscita.");
-            }
-            if (_fileSystem.FileExists(destinationPath))
-            {
-                throw new ExternalDocumentModificationException(
-                    $"{Path.GetFileName(destinationPath)} è apparso durante il download.");
-            }
-            _fileSystem.MoveFile(temporaryPath, destinationPath, overwrite: false);
-            return true;
-        }
-        finally
-        {
-            if (_fileSystem.FileExists(temporaryPath))
-            {
-                _fileSystem.DeleteFile(temporaryPath);
-            }
-        }
+        await _atomicWriter.WriteNewAsync(destinationPath, contents, cancellationToken);
+        return true;
     }
 }

@@ -22,6 +22,7 @@ using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
 using ZiapStudio.Services.Providers;
 using ZiapStudio.Services.Integrations;
+using ZiapStudio.Services.ProjectSafety;
 
 namespace ZiapStudio;
 
@@ -47,7 +48,11 @@ public partial class App : Application
             Path.Combine(settingsDirectory, "layout.json"));
         var layoutSettings = await layoutSettingsService.LoadAsync();
         var projectIdGenerator = new ProjectIdGenerator();
-        var atomicJsonWriter = new AtomicJsonFileWriter(fileSystem);
+        var projectWriteCoordinator = new ProjectWriteCoordinator(fileSystem);
+        var projectChangeMonitor = new ProjectChangeMonitor(
+            fileSystem,
+            projectWriteCoordinator.SelfWrites);
+        var atomicJsonWriter = new AtomicJsonFileWriter(fileSystem, projectWriteCoordinator);
         var pluginRegistry = new RpgMakerPluginRegistryService(fileSystem);
         var fusionAudioIntegrationProvider = new FusionAudioIntegrationProvider(pluginRegistry);
         var fusionBossIntegrationProvider = new FusionBossIntegrationProvider(pluginRegistry);
@@ -142,7 +147,7 @@ public partial class App : Application
             remoteClient);
         var localizationMirrorWriter = new PublishedLocalizationFileWriter(
             fileSystem,
-            new AtomicJsonFileWriter(fileSystem));
+            atomicJsonWriter);
         var publishedLocalizationSyncService = new PublishedLocalizationSyncService(
             fileSystem,
             remoteClient,
@@ -169,7 +174,7 @@ public partial class App : Application
             localizationMirrorWriter,
             localizationService,
             new StoryCompositionPlanner(snapshotService),
-            new StoryCommandListWriter(fileSystem, atomicJsonWriter),
+            new StoryCommandListWriter(fileSystem, atomicJsonWriter, projectWriteCoordinator),
             new StoryCompositionRecoveryStore(
                 fileSystem,
                 Path.Combine(settingsDirectory, "story-composition-recovery.json")));
@@ -188,11 +193,11 @@ public partial class App : Application
         ]);
         var preflightSuppressionStore = new PreflightSuppressionStore(
             fileSystem,
-            new AtomicJsonFileWriter(fileSystem));
+            atomicJsonWriter);
 
         _window = new MainWindow(
             new ProjectService(fileSystem),
-            new ProjectInitializationService(fileSystem, projectIdGenerator),
+            new ProjectInitializationService(fileSystem, projectIdGenerator, projectWriteCoordinator),
             projectIdGenerator,
             new ProjectProviderService(fileSystem, projectIntegrationService),
             new DocumentService(documentResolver),
@@ -214,7 +219,9 @@ public partial class App : Application
             fusionAudioPlaybackResolver,
             new AudioPreviewService(),
             layoutSettingsService,
-            layoutSettings);
+            layoutSettings,
+            projectWriteCoordinator,
+            projectChangeMonitor);
         _window.Activate();
     }
 

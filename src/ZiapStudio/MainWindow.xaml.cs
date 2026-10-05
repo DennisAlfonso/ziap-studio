@@ -15,6 +15,7 @@ using ZiapStudio.Services.Initialization;
 using ZiapStudio.Services.Integration.Console;
 using ZiapStudio.Services.Integration.Remote;
 using ZiapStudio.Services.Providers;
+using ZiapStudio.Services.ProjectSafety;
 using ZiapStudio.ViewModels;
 
 namespace ZiapStudio;
@@ -25,6 +26,7 @@ public sealed partial class MainWindow : Window
     private const int MinimumWindowHeight = 700;
     private readonly MainPage _mainPage;
     private readonly StudioLayoutSettingsService _layoutSettingsService;
+    private readonly ProjectChangeMonitor _projectChangeMonitor;
     private RectInt32 _lastRestoredBounds;
     private bool _allowClose;
     private bool _closeConfirmationInProgress;
@@ -53,11 +55,14 @@ public sealed partial class MainWindow : Window
         FusionAudioPlaybackResolver fusionAudioPlaybackResolver,
         AudioPreviewService audioPreviewService,
         StudioLayoutSettingsService layoutSettingsService,
-        StudioLayoutSettings layoutSettings)
+        StudioLayoutSettings layoutSettings,
+        ProjectWriteCoordinator projectWriteCoordinator,
+        ProjectChangeMonitor projectChangeMonitor)
     {
         InitializeComponent();
 
         _layoutSettingsService = layoutSettingsService;
+        _projectChangeMonitor = projectChangeMonitor;
 
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(AppTitleBar);
@@ -87,7 +92,9 @@ public sealed partial class MainWindow : Window
             preflightSuppressionStore,
             fusionAudioCatalogService,
             fusionAudioPlaybackResolver,
-            audioPreviewService);
+            audioPreviewService,
+            projectWriteCoordinator,
+            projectChangeMonitor);
         _mainPage = new MainPage(viewModel, layoutSettings);
         RootFrame.Content = _mainPage;
         AppWindow.Changed += AppWindow_Changed;
@@ -185,6 +192,7 @@ public sealed partial class MainWindow : Window
 
             await SaveLayoutAsync();
             _mainPage.ViewModel.CloseExternalSurfaces();
+            _projectChangeMonitor.Dispose();
             _allowClose = true;
             Close();
         }
