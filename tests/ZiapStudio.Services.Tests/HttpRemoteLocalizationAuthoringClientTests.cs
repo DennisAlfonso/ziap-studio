@@ -48,15 +48,32 @@ public sealed class HttpRemoteLocalizationAuthoringClientTests
     }
 
     [Fact]
-    public async Task Claim_RequiresFirebaseIdentityAndReadsLockEnvelope()
+    public async Task Claim_PostsEmptyPayloadEnvelopeWithFirebaseIdentityAndReadsLock()
     {
+        HttpMethod? method = null;
+        Uri? requestUri = null;
+        string? authorization = null;
+        string? body = null;
         var client = CreateClient(
-            new StubHttpMessageHandler(_ => Task.FromResult(JsonResponse(
-                """{"lock":{"owner":"Polka","acquiredAt":"2026-10-04T00:00:00.000Z","expiresAt":"2026-10-04T00:02:00.000Z","isOwnedByCurrentUser":true}}"""))),
+            new StubHttpMessageHandler(async request =>
+            {
+                method = request.Method;
+                requestUri = request.RequestUri;
+                authorization = request.Headers.Authorization?.ToString();
+                body = await request.Content!.ReadAsStringAsync();
+                return JsonResponse(
+                    """{"lock":{"owner":"Polka","acquiredAt":"2026-10-04T00:00:00.000Z","expiresAt":"2026-10-04T00:02:00.000Z","isOwnedByCurrentUser":true}}""");
+            }),
             new StubIdTokenProvider("firebase-id-token"));
 
         var lockInfo = await client.ClaimLockAsync("fusion-hexella-dive", "it", "dialogue/mdv.json");
 
+        Assert.Equal(HttpMethod.Post, method);
+        Assert.Equal("https://api.example.test/claim", requestUri!.AbsoluteUri);
+        Assert.Equal("Bearer firebase-id-token", authorization);
+        Assert.Equal(
+            """{"projectId":"fusion-hexella-dive","locale":"it","file":"dialogue/mdv.json","payload":{}}""",
+            body);
         Assert.Equal("Polka", lockInfo.Owner);
         Assert.True(lockInfo.IsOwnedByCurrentUser);
 

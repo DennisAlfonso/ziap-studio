@@ -51,7 +51,7 @@ public sealed class HttpRemoteLocalizationAuthoringClient : IRemoteLocalizationA
         string projectId, string locale, string sourceFile, CancellationToken cancellationToken = default)
     {
         var response = await SendJsonAsync<LockEnvelope>(
-            _claimEndpoint, projectId, locale, sourceFile, null, cancellationToken);
+            _claimEndpoint, projectId, locale, sourceFile, new { }, cancellationToken);
         return ToLockInfo(response.Lock);
     }
 
