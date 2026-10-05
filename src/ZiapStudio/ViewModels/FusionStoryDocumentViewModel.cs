@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using ZiapStudio.Core.Documents;
@@ -20,6 +21,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
     private readonly Func<Task<FusionStoryWorkspaceDocument>> _reloadWorkspace;
     private StoryLocalizationAuthoringSession? _authoringSession;
     private CancellationTokenSource? _lockHeartbeatCancellation;
+    private readonly ObservableCollection<StoryLocalizationFieldViewModel> _localizationFields = [];
     private bool _isAuthoringBusy;
     private string _authoringMessage = "Seleziona una reference master per modificare soltanto il leaf localizzato.";
 
@@ -31,6 +33,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
         Func<Task<FusionStoryWorkspaceDocument>> reloadWorkspace)
     {
         Document = document;
+        LocalizationFields = new ReadOnlyObservableCollection<StoryLocalizationFieldViewModel>(_localizationFields);
         _project = project ?? throw new ArgumentNullException(nameof(project));
         _authoringService = authoringService ?? throw new ArgumentNullException(nameof(authoringService));
         _reloadWorkspace = reloadWorkspace ?? throw new ArgumentNullException(nameof(reloadWorkspace));
@@ -120,20 +123,11 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
 
     public string AuthoringMessage => _authoringMessage;
 
-    public IReadOnlyList<StoryLocalizationFieldViewModel> LocalizationFields =>
-        SelectedBlock is null || _authoringSession?.EditSession is null ? [] :
-        SelectedBlock.LocalizationOrigins
-            .Where(origin => IsSameFile(origin, _authoringSession.Origin) &&
-                _authoringSession.EditSession.CanEdit(origin))
-            .Select((origin, index) => new StoryLocalizationFieldViewModel(
-                GetFieldLabel(SelectedBlock, index, origin),
-                origin,
-                _authoringSession.EditSession.TryGetValue(origin, out var value) ? value : string.Empty,
-                SetLocalizationFieldValue,
-                _authoringSession.State is LocalizationAuthoringState.Conflict or
-                    LocalizationAuthoringState.LockedByOther or
-                    LocalizationAuthoringState.LocalOutOfSync))
-            .ToArray();
+    /// <summary>
+    /// Stable collection for the Inspector. Items are rebuilt only when the
+    /// authoring context changes, never for an individual text edit.
+    /// </summary>
+    public ReadOnlyObservableCollection<StoryLocalizationFieldViewModel> LocalizationFields { get; }
 
     public StoryBlock? SelectedBlock
     {
@@ -145,6 +139,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
                 return;
             }
             _selectedBlock = value;
+            RebuildLocalizationFields();
             OnPropertyChanged();
             OnPropertyChanged(nameof(SelectedBlockDetails));
             OnPropertyChanged(nameof(SelectedBlockRawCommands));
@@ -198,6 +193,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
             _authoringSession = await _authoringService.BeginAsync(_project, origin);
             if (_authoringSession.EditSession is null)
             {
+                RebuildLocalizationFields();
                 _authoringMessage = $"In modifica da {_authoringSession.Lock.Owner ?? "un altro utente"}.";
                 return;
             }
@@ -324,6 +320,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
             }
         }
         _authoringSession = null;
+        RebuildLocalizationFields();
         NotifyAuthoringPropertiesChanged();
     }
 
@@ -353,12 +350,23 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
         if (_authoringSession?.EditSession?.SetValue(origin, value) == true)
         {
             _authoringSession.State = LocalizationAuthoringState.LocalChanges;
-            RefreshStoryProjection();
+            // Keeping the field VM and block identity stable preserves the
+            // WinUI TextBox instance, focus and caret while the user types.
+            NotifyAuthoringEditStateChanged();
         }
     }
 
-    private void EditSession_PropertyChanged(object? sender, PropertyChangedEventArgs args) =>
-        NotifyAuthoringPropertiesChanged();
+    private void EditSession_PropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        // LocalizationEditSession emits IsDirty, CanUndo, CanRedo and ChangeSet
+        // together. IsDirty is the single authoritative notification needed by
+        // these command states; rebuilding fields here would replace a focused
+        // TextBox for every character.
+        if (args.PropertyName == nameof(LocalizationEditSession.IsDirty))
+        {
+            NotifyAuthoringEditStateChanged();
+        }
+    }
 
     private void StartLockHeartbeat()
     {
@@ -418,6 +426,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
                 block.CommandStartIndex == selectedLocation.Value.Start && block.CommandEndIndex == selectedLocation.Value.End) ??
                 _blocks.FirstOrDefault();
         }
+        RebuildLocalizationFields();
         OnPropertyChanged(nameof(Blocks));
         OnPropertyChanged(nameof(SelectedBlock));
         OnPropertyChanged(nameof(SelectedBlockDetails));
@@ -524,7 +533,38 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
         OnPropertyChanged(nameof(CanRetryMirror));
         OnPropertyChanged(nameof(AuthoringStateText));
         OnPropertyChanged(nameof(AuthoringMessage));
-        OnPropertyChanged(nameof(LocalizationFields));
+    }
+
+    private void NotifyAuthoringEditStateChanged()
+    {
+        OnPropertyChanged(nameof(CanSaveToStaging));
+        OnPropertyChanged(nameof(CanUndoLocalization));
+        OnPropertyChanged(nameof(CanRedoLocalization));
+        OnPropertyChanged(nameof(CanDiscardLocalization));
+        OnPropertyChanged(nameof(AuthoringStateText));
+    }
+
+    private void RebuildLocalizationFields()
+    {
+        _localizationFields.Clear();
+        if (SelectedBlock is null || _authoringSession?.EditSession is not { } editSession)
+        {
+            return;
+        }
+
+        foreach (var (origin, index) in SelectedBlock.LocalizationOrigins
+                     .Where(origin => IsSameFile(origin, _authoringSession.Origin) && editSession.CanEdit(origin))
+                     .Select((origin, index) => (origin, index)))
+        {
+            _localizationFields.Add(new StoryLocalizationFieldViewModel(
+                GetFieldLabel(SelectedBlock, index, origin),
+                origin,
+                editSession.TryGetValue(origin, out var value) ? value : string.Empty,
+                SetLocalizationFieldValue,
+                _authoringSession.State is LocalizationAuthoringState.Conflict or
+                    LocalizationAuthoringState.LockedByOther or
+                    LocalizationAuthoringState.LocalOutOfSync));
+        }
     }
 
     private static bool IsSameFile(LocalizationReferenceOrigin left, LocalizationReferenceOrigin right) =>

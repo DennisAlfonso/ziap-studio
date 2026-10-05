@@ -10,6 +10,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZiapStudio", "src\ZiapStudi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZiapStudio.Services.Tests", "tests\ZiapStudio.Services.Tests\ZiapStudio.Services.Tests.csproj", "{A0E4970A-5672-4C99-BB1B-793D5A43594F}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ZiapStudio.ViewModels.Tests", "tests\ZiapStudio.ViewModels.Tests\ZiapStudio.ViewModels.Tests.csproj", "{FCBE5192-4673-416B-AC0E-A42A3FDF1D9A}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -34,6 +36,10 @@ Global
 		{A0E4970A-5672-4C99-BB1B-793D5A43594F}.Debug|x64.Build.0 = Debug|Any CPU
 		{A0E4970A-5672-4C99-BB1B-793D5A43594F}.Release|x64.ActiveCfg = Release|Any CPU
 		{A0E4970A-5672-4C99-BB1B-793D5A43594F}.Release|x64.Build.0 = Release|Any CPU
+		{FCBE5192-4673-416B-AC0E-A42A3FDF1D9A}.Debug|x64.ActiveCfg = Debug|x64
+		{FCBE5192-4673-416B-AC0E-A42A3FDF1D9A}.Debug|x64.Build.0 = Debug|x64
+		{FCBE5192-4673-416B-AC0E-A42A3FDF1D9A}.Release|x64.ActiveCfg = Release|x64
+		{FCBE5192-4673-416B-AC0E-A42A3FDF1D9A}.Release|x64.Build.0 = Release|x64
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
