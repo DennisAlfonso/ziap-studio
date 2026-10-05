@@ -73,6 +73,11 @@ public enum StoryBlockKind
     MovementRoute,
     Animation,
     Audio,
+    Screen,
+    Picture,
+    System,
+    Actor,
+    Battle,
     Wait,
     SwitchVariable,
     Transfer,
@@ -94,6 +99,14 @@ public sealed record StoryBlock
     public IReadOnlyList<StoryRawCommand> SourceCommands { get; init; } = [];
     public IReadOnlyList<string> Details { get; init; } = [];
     public IReadOnlyList<LocalizationReferenceOrigin> LocalizationOrigins { get; init; } = [];
+    /// <summary>Read-only RPG Maker resource identity retained for future navigation/graph work.</summary>
+    public int? ResourceId { get; init; }
+    /// <summary>Read-only command target identity where the command schema has one.</summary>
+    public int? TargetId { get; init; }
+    public string? LabelName { get; init; }
+    public int? CommonEventId { get; init; }
+    /// <summary>Authoritative RPG Maker duration in frames, never the derived seconds display.</summary>
+    public int? FrameDuration { get; init; }
 
     public string KindText => Kind switch
     {
@@ -105,6 +118,11 @@ public sealed record StoryBlock
         StoryBlockKind.MovementRoute => "MOVIMENTO",
         StoryBlockKind.Animation => "ANIMAZIONE",
         StoryBlockKind.Audio => "AUDIO",
+        StoryBlockKind.Screen => "SCREEN",
+        StoryBlockKind.Picture => "PICTURE",
+        StoryBlockKind.System => "SYSTEM",
+        StoryBlockKind.Actor => "ACTOR",
+        StoryBlockKind.Battle => "BATTLE",
         StoryBlockKind.Wait => "WAIT",
         StoryBlockKind.SwitchVariable => "LOGICA",
         StoryBlockKind.Transfer => "TRASFERIMENTO",

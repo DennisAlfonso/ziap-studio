@@ -202,7 +202,9 @@ public sealed class StorySearchIndex
         StoryBlockKind.MovementRoute => StorySearchResultKind.Movement,
         StoryBlockKind.Animation => StorySearchResultKind.Animation,
         StoryBlockKind.Audio => StorySearchResultKind.Audio,
-        StoryBlockKind.Wait or StoryBlockKind.SwitchVariable or StoryBlockKind.ControlFlow => StorySearchResultKind.Logic,
+        StoryBlockKind.Wait or StoryBlockKind.SwitchVariable or StoryBlockKind.ControlFlow or
+        StoryBlockKind.Screen or StoryBlockKind.Picture or StoryBlockKind.System or
+        StoryBlockKind.Actor or StoryBlockKind.Battle => StorySearchResultKind.Logic,
         StoryBlockKind.Transfer => StorySearchResultKind.Transfer,
         StoryBlockKind.PluginCommand => StorySearchResultKind.Plugin,
         StoryBlockKind.Script => StorySearchResultKind.Script,

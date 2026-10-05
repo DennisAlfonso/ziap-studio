@@ -18,6 +18,13 @@ public sealed class RpgMakerStoryResourceResolver
     private readonly IReadOnlyDictionary<int, string> _weapons;
     private readonly IReadOnlyDictionary<int, string> _armors;
     private readonly IReadOnlyDictionary<int, string> _animations;
+    private readonly IReadOnlyDictionary<int, string> _commonEvents;
+    private readonly IReadOnlyDictionary<int, string> _states;
+    private readonly IReadOnlyDictionary<int, string> _skills;
+    private readonly IReadOnlySet<int> _commonEventIds;
+    private readonly IReadOnlySet<int> _actorIds;
+    private readonly IReadOnlySet<int> _stateIds;
+    private readonly IReadOnlySet<int> _skillIds;
 
     private RpgMakerStoryResourceResolver(
         IReadOnlyList<RpgMakerStoryMapInfo> mapInfos,
@@ -27,7 +34,14 @@ public sealed class RpgMakerStoryResourceResolver
         IReadOnlyDictionary<int, string> items,
         IReadOnlyDictionary<int, string> weapons,
         IReadOnlyDictionary<int, string> armors,
-        IReadOnlyDictionary<int, string> animations)
+        IReadOnlyDictionary<int, string> animations,
+        IReadOnlyDictionary<int, string> commonEvents,
+        IReadOnlyDictionary<int, string> states,
+        IReadOnlyDictionary<int, string> skills,
+        IReadOnlySet<int> commonEventIds,
+        IReadOnlySet<int> actorIds,
+        IReadOnlySet<int> stateIds,
+        IReadOnlySet<int> skillIds)
     {
         MapInfos = mapInfos;
         _maps = mapInfos.ToDictionary(map => map.Id, map => map.Name);
@@ -38,6 +52,13 @@ public sealed class RpgMakerStoryResourceResolver
         _weapons = weapons;
         _armors = armors;
         _animations = animations;
+        _commonEvents = commonEvents;
+        _states = states;
+        _skills = skills;
+        _commonEventIds = commonEventIds;
+        _actorIds = actorIds;
+        _stateIds = stateIds;
+        _skillIds = skillIds;
     }
 
     public IReadOnlyList<RpgMakerStoryMapInfo> MapInfos { get; }
@@ -57,16 +78,27 @@ public sealed class RpgMakerStoryResourceResolver
         var system = await ReadDocumentAsync(fileSystem, dataPath, "System.json", diagnostics, cancellationToken);
         var switches = ReadNamedArray(system, "switches");
         var variables = ReadNamedArray(system, "variables");
+        var actors = await ReadDatabaseEntriesAsync(fileSystem, dataPath, "Actors.json", diagnostics, cancellationToken);
+        var commonEvents = await ReadDatabaseEntriesAsync(fileSystem, dataPath, "CommonEvents.json", diagnostics, cancellationToken);
+        var states = await ReadDatabaseEntriesAsync(fileSystem, dataPath, "States.json", diagnostics, cancellationToken);
+        var skills = await ReadDatabaseEntriesAsync(fileSystem, dataPath, "Skills.json", diagnostics, cancellationToken);
 
         return new RpgMakerStoryResourceResolver(
             mapInfos,
             switches,
             variables,
-            await ReadDatabaseNamesAsync(fileSystem, dataPath, "Actors.json", diagnostics, cancellationToken),
+            actors.Names,
             await ReadDatabaseNamesAsync(fileSystem, dataPath, "Items.json", diagnostics, cancellationToken),
             await ReadDatabaseNamesAsync(fileSystem, dataPath, "Weapons.json", diagnostics, cancellationToken),
             await ReadDatabaseNamesAsync(fileSystem, dataPath, "Armors.json", diagnostics, cancellationToken),
-            await ReadDatabaseNamesAsync(fileSystem, dataPath, "Animations.json", diagnostics, cancellationToken));
+            await ReadDatabaseNamesAsync(fileSystem, dataPath, "Animations.json", diagnostics, cancellationToken),
+            commonEvents.Names,
+            states.Names,
+            skills.Names,
+            commonEvents.Ids,
+            actors.Ids,
+            states.Ids,
+            skills.Ids);
     }
 
     public string DescribeMap(int id) => _maps.TryGetValue(id, out var name)
@@ -86,6 +118,20 @@ public sealed class RpgMakerStoryResourceResolver
     public string DescribeArmor(int id) => Describe("Armor", id, _armors);
 
     public string DescribeAnimation(int id) => Describe("Animation", id, _animations);
+
+    public string DescribeCommonEvent(int id) => Describe("Common Event", id, _commonEvents);
+
+    public string DescribeState(int id) => Describe("State", id, _states);
+
+    public string DescribeSkill(int id) => Describe("Skill", id, _skills);
+
+    public bool HasCommonEvent(int id) => _commonEventIds.Contains(id);
+
+    public bool HasActor(int id) => _actorIds.Contains(id);
+
+    public bool HasState(int id) => _stateIds.Contains(id);
+
+    public bool HasSkill(int id) => _skillIds.Contains(id);
 
     private static string Describe(string category, int id, IReadOnlyDictionary<int, string> names) =>
         names.TryGetValue(id, out var name) && !string.IsNullOrWhiteSpace(name)
@@ -146,6 +192,32 @@ public sealed class RpgMakerStoryResourceResolver
             .Where(entry => entry.Id > 0 && !string.IsNullOrWhiteSpace(entry.Name))
             .GroupBy(entry => entry.Id)
             .ToDictionary(group => group.Key, group => group.Last().Name!);
+    }
+
+    private static async Task<RpgMakerStoryDatabaseEntries> ReadDatabaseEntriesAsync(
+        FileSystemService fileSystem,
+        string dataPath,
+        string fileName,
+        ICollection<StoryDiagnostic> diagnostics,
+        CancellationToken cancellationToken)
+    {
+        var document = await ReadDocumentAsync(fileSystem, dataPath, fileName, diagnostics, cancellationToken);
+        if (document is not { ValueKind: JsonValueKind.Array } array)
+        {
+            return RpgMakerStoryDatabaseEntries.Empty;
+        }
+
+        var entries = array.EnumerateArray()
+            .Select((entry, index) => entry.ValueKind == JsonValueKind.Object
+                ? (Id: ReadInt(entry, "id") ?? index, Name: ReadString(entry, "name"))
+                : (Id: 0, Name: (string?)null))
+            .Where(entry => entry.Id > 0)
+            .ToArray();
+        return new RpgMakerStoryDatabaseEntries(
+            entries.Select(entry => entry.Id).ToHashSet(),
+            entries.Where(entry => !string.IsNullOrWhiteSpace(entry.Name))
+                .GroupBy(entry => entry.Id)
+                .ToDictionary(group => group.Key, group => group.Last().Name!));
     }
 
     private static async Task<JsonElement?> ReadDocumentAsync(
@@ -222,6 +294,14 @@ public sealed class RpgMakerStoryResourceResolver
 }
 
 public sealed record RpgMakerStoryMapInfo(int Id, string Name, int Order, int ParentId, bool Expanded);
+
+internal sealed record RpgMakerStoryDatabaseEntries(
+    IReadOnlySet<int> Ids,
+    IReadOnlyDictionary<int, string> Names)
+{
+    public static RpgMakerStoryDatabaseEntries Empty { get; } = new(
+        new HashSet<int>(), new Dictionary<int, string>());
+}
 
 /// <summary>Map-local names that cannot be resolved from global RPG Maker databases.</summary>
 public sealed record RpgMakerStoryCommandContext

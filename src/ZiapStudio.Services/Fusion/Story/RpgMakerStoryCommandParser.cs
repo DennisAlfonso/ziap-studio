@@ -28,6 +28,12 @@ public sealed class RpgMakerStoryCommandParser
         CancellationToken cancellationToken = default)
     {
         var blocks = new List<StoryBlock>();
+        var labels = commands
+            .Where(command => command.Code == 118)
+            .Select(command => ReadString(command.Parameters, 0))
+            .Where(label => label is not null)
+            .Select(label => label!)
+            .ToHashSet(StringComparer.Ordinal);
         for (var index = 0; index < commands.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -35,8 +41,7 @@ public sealed class RpgMakerStoryCommandParser
             switch (command.Code)
             {
                 case 0:
-                    blocks.Add(CreateBlock(command, index, StoryBlockKind.ControlFlow,
-                        "End Event List", "RPG Maker terminal command."));
+                    // RPG Maker's list sentinel is structural, never a visible timeline card.
                     break;
                 case 101:
                 {
@@ -70,6 +75,18 @@ public sealed class RpgMakerStoryCommandParser
                     index = parsed.EndIndex;
                     break;
                 }
+                case 657:
+                    blocks.Add(ParseOrphanPluginContinuation(command, index, diagnostics, location));
+                    break;
+                case 117:
+                    blocks.Add(ParseCommonEvent(command, index, diagnostics, location, resources));
+                    break;
+                case 118:
+                    blocks.Add(ParseLabel(command, index, diagnostics, location));
+                    break;
+                case 119:
+                    blocks.Add(ParseJumpToLabel(command, index, labels, diagnostics, location));
+                    break;
                 case 205:
                     blocks.Add(ParseMovementRoute(commands, ref index, diagnostics, location, resources, context));
                     break;
@@ -105,6 +122,19 @@ public sealed class RpgMakerStoryCommandParser
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.SwitchVariable,
                         "Self Switch", DescribeSelfSwitch(command.Parameters)));
                     break;
+                case 125:
+                case 126:
+                case 127:
+                case 128:
+                case 129:
+                    blocks.Add(ParsePartyCommand(command, index, diagnostics, location, resources));
+                    break;
+                case 134:
+                case 135:
+                case 136:
+                case 137:
+                    blocks.Add(ParseSystemAccess(command, index, diagnostics, location));
+                    break;
                 case 201:
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.Transfer,
                         "Transfer player", DescribeTransfer(command.Parameters, resources)));
@@ -121,12 +151,59 @@ public sealed class RpgMakerStoryCommandParser
                     break;
                 case 241:
                 case 242:
+                case 243:
+                case 244:
                 case 245:
                 case 246:
                 case 249:
                 case 250:
+                case 251:
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.Audio,
                         GetAudioTitle(command.Code), DescribeAudio(command)));
+                    break;
+                case 211:
+                case 221:
+                case 222:
+                case 223:
+                case 224:
+                case 225:
+                    blocks.Add(ParseScreenCommand(command, index, diagnostics, location));
+                    break;
+                case 231:
+                case 232:
+                case 233:
+                case 234:
+                case 235:
+                    blocks.Add(ParsePictureCommand(command, index, diagnostics, location, resources));
+                    break;
+                case 214:
+                    blocks.Add(CreateBlock(command, index, StoryBlockKind.System,
+                        "Erase Event", "Erase this event from the current map."));
+                    break;
+                case 303:
+                case 311:
+                case 312:
+                case 313:
+                case 314:
+                case 315:
+                case 316:
+                case 318:
+                case 320:
+                case 322:
+                case 326:
+                    blocks.Add(ParseActorCommand(command, index, diagnostics, location, resources));
+                    break;
+                case 331:
+                    blocks.Add(ParseEnemyHp(command, index, diagnostics, location, resources));
+                    break;
+                case 352:
+                case 354:
+                    blocks.Add(CreateBlock(command, index, StoryBlockKind.System,
+                        command.Code == 352 ? "Open Save Screen" : "Return to Title Screen",
+                        command.Code == 352 ? "Open the Save screen." : "Return to the title screen."));
+                    break;
+                case 356:
+                    blocks.Add(ParseLegacyPluginCommand(command, index, diagnostics, location));
                     break;
                 case 212:
                     blocks.Add(ParseAnimation(command, index, diagnostics, location, resources, context));
@@ -255,6 +332,578 @@ public sealed class RpgMakerStoryCommandParser
             origins: values.SelectMany(value => value.Origins).ToArray()), index);
     }
 
+    private static StoryBlock ParseOrphanPluginContinuation(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location)
+    {
+        diagnostics.Add(location.CreateDiagnostic(
+            "story.plugin-continuation-orphan", StoryDiagnosticSeverity.Warning,
+            "Plugin Command Continuation (657) non segue un Plugin Command (357); il source raw è stato conservato."));
+        return CreateBlock(command, index, StoryBlockKind.Raw,
+            "Orphan Plugin Command Continuation",
+            "Continuation 657 senza un Plugin Command 357 precedente.");
+    }
+
+    private static StoryBlock ParseCommonEvent(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location,
+        RpgMakerStoryResourceResolver? resources)
+    {
+        var commonEventId = ReadInt(command.Parameters, 0);
+        if (commonEventId is not > 0)
+        {
+            return Malformed(command, index, "Common Event", diagnostics, location);
+        }
+
+        if (resources is not null && !resources.HasCommonEvent(commonEventId.Value))
+        {
+            diagnostics.Add(location.CreateDiagnostic(
+                "story.common-event-target-missing", StoryDiagnosticSeverity.Warning,
+                $"Common Event #{commonEventId.Value} non è risolvibile nel database; il riferimento è stato conservato."));
+        }
+
+        var target = resources?.DescribeCommonEvent(commonEventId.Value) ?? $"Common Event #{commonEventId.Value}";
+        return CreateBlock(command, index, StoryBlockKind.ControlFlow, "Common Event", target,
+            [$"CommonEventId: {commonEventId.Value}"],
+            commonEventId: commonEventId.Value,
+            targetId: commonEventId.Value);
+    }
+
+    private static StoryBlock ParseLabel(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location)
+    {
+        var label = ReadString(command.Parameters, 0);
+        return label is null
+            ? Malformed(command, index, "Label", diagnostics, location)
+            : CreateBlock(command, index, StoryBlockKind.ControlFlow, "Label", label,
+                [$"Label: {label}"], labelName: label);
+    }
+
+    private static StoryBlock ParseJumpToLabel(
+        RpgMakerEventCommand command,
+        int index,
+        IReadOnlySet<string> labels,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location)
+    {
+        var label = ReadString(command.Parameters, 0);
+        if (label is null)
+        {
+            return Malformed(command, index, "Jump to Label", diagnostics, location);
+        }
+        if (!labels.Contains(label))
+        {
+            diagnostics.Add(location.CreateDiagnostic(
+                "story.label-target-missing", StoryDiagnosticSeverity.Warning,
+                $"Jump to Label punta a \"{label}\", ma non esiste una Label corrispondente nella stessa command list."));
+        }
+        return CreateBlock(command, index, StoryBlockKind.ControlFlow, "Jump to Label", label,
+            [$"Target label: {label}", labels.Contains(label) ? "Target resolved in this command list." : "Target label missing."],
+            labelName: label);
+    }
+
+    private static StoryBlock ParsePartyCommand(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location,
+        RpgMakerStoryResourceResolver? resources)
+    {
+        if (command.Code == 125)
+        {
+            var value = DescribeSignedValue(command.Parameters, 0, 1, 2, resources);
+            return value is null
+                ? Malformed(command, index, "Change Gold", diagnostics, location)
+                : CreateBlock(command, index, StoryBlockKind.System, "Change Gold", $"Gold {value}");
+        }
+
+        if (command.Code == 129)
+        {
+            var actorId = ReadInt(command.Parameters, 0);
+            var operation = ReadInt(command.Parameters, 1);
+            if (actorId is not > 0 || operation is not (0 or 1) || !TryReadBoolean(command.Parameters, 2, out var initialize))
+            {
+                return Malformed(command, index, "Change Party Member", diagnostics, location);
+            }
+            ReportMissingResource(resources, resources?.HasActor(actorId.Value) ?? true, "actor", actorId.Value, diagnostics, location);
+            var actor = resources?.DescribeActor(actorId.Value) ?? $"Actor #{actorId.Value}";
+            return CreateBlock(command, index, StoryBlockKind.Actor, "Party Member",
+                $"{(operation == 0 ? "Add" : "Remove")} {actor}",
+                [$"Initialize: {initialize}"], resourceId: actorId.Value, targetId: actorId.Value);
+        }
+
+        var resourceId = ReadInt(command.Parameters, 0);
+        var valueText = DescribeSignedValue(command.Parameters, 1, 2, 3, resources);
+        var includeEquipment = false;
+        if (command.Code is 127 or 128 && HasElement(command.Parameters, 4) &&
+            !TryReadBoolean(command.Parameters, 4, out includeEquipment))
+        {
+            return Malformed(command, index, "Change inventory", diagnostics, location);
+        }
+        if (resourceId is not > 0 || valueText is null)
+        {
+            return Malformed(command, index, "Change inventory", diagnostics, location);
+        }
+
+        var (title, resource) = command.Code switch
+        {
+            126 => ("Change Items", resources?.DescribeItem(resourceId.Value) ?? $"Item #{resourceId.Value}"),
+            127 => ("Change Weapons", resources?.DescribeWeapon(resourceId.Value) ?? $"Weapon #{resourceId.Value}"),
+            _ => ("Change Armors", resources?.DescribeArmor(resourceId.Value) ?? $"Armor #{resourceId.Value}"),
+        };
+        var details = command.Code is 127 or 128 ? new[] { $"Include equipment: {includeEquipment}" } : [];
+        return CreateBlock(command, index, StoryBlockKind.System, title, $"{resource} {valueText}", details,
+            resourceId: resourceId.Value, targetId: resourceId.Value);
+    }
+
+    private static StoryBlock ParseSystemAccess(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location)
+    {
+        var enabled = ReadInt(command.Parameters, 0);
+        if (enabled is not (0 or 1))
+        {
+            return Malformed(command, index, "System access", diagnostics, location);
+        }
+        var title = command.Code switch
+        {
+            134 => "Save Access",
+            135 => "Menu Access",
+            136 => "Encounter Access",
+            _ => "Formation Access",
+        };
+        // rmmz_objects.js: 0 calls disable*, every non-zero editor value calls enable*.
+        return CreateBlock(command, index, StoryBlockKind.System, title,
+            enabled == 0 ? "Disabled" : "Enabled");
+    }
+
+    private static StoryBlock ParseScreenCommand(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location)
+    {
+        switch (command.Code)
+        {
+            case 211:
+            {
+                var transparent = ReadInt(command.Parameters, 0);
+                return transparent is not (0 or 1)
+                    ? Malformed(command, index, "Change Transparency", diagnostics, location)
+                    : CreateBlock(command, index, StoryBlockKind.Screen, "Player Transparency",
+                        transparent == 0 ? "Transparency → ON" : "Transparency → OFF");
+            }
+            case 221:
+            case 222:
+                return command.Parameters.ValueKind != JsonValueKind.Array || command.Parameters.GetArrayLength() != 0
+                    ? Malformed(command, index, command.Code == 221 ? "Fadeout Screen" : "Fadein Screen", diagnostics, location)
+                    : CreateBlock(command, index, StoryBlockKind.Screen,
+                        command.Code == 221 ? "Fadeout Screen" : "Fadein Screen",
+                        command.Code == 221 ? "Fade Out" : "Fade In");
+            case 223:
+            case 224:
+            {
+                if (!TryReadTone(command.Parameters, 0, out var tone) ||
+                    ReadInt(command.Parameters, 1) is not { } frames || frames < 0 ||
+                    !TryReadBoolean(command.Parameters, 2, out var wait))
+                {
+                    return Malformed(command, index, command.Code == 223 ? "Tint Screen" : "Flash Screen", diagnostics, location);
+                }
+                var action = command.Code == 223 ? "Tint" : "Flash";
+                return CreateBlock(command, index, StoryBlockKind.Screen, $"{action} Screen",
+                    $"{action} · {frames} frames · ~{FormatSeconds(frames)} s",
+                    [$"R {tone[0]} · G {tone[1]} · B {tone[2]} · Gray {tone[3]}", $"Wait: {wait}", $"Frames (authoritative): {frames}"],
+                    frameDuration: frames);
+            }
+            default:
+            {
+                var power = ReadInt(command.Parameters, 0);
+                var speed = ReadInt(command.Parameters, 1);
+                var frames = ReadInt(command.Parameters, 2);
+                if (power is null || speed is null || frames is null || frames < 0 || !TryReadBoolean(command.Parameters, 3, out var wait))
+                {
+                    return Malformed(command, index, "Shake Screen", diagnostics, location);
+                }
+                return CreateBlock(command, index, StoryBlockKind.Screen, "Shake Screen",
+                    $"Shake · Power {power} · Speed {speed} · {frames} frames · ~{FormatSeconds(frames.Value)} s",
+                    [$"Wait: {wait}", $"Frames (authoritative): {frames}"], frameDuration: frames);
+            }
+        }
+    }
+
+    private static StoryBlock ParsePictureCommand(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location,
+        RpgMakerStoryResourceResolver? resources)
+    {
+        var pictureId = ReadInt(command.Parameters, 0);
+        if (pictureId is not > 0)
+        {
+            return Malformed(command, index, "Picture", diagnostics, location);
+        }
+
+        switch (command.Code)
+        {
+            case 231:
+            {
+                var name = ReadString(command.Parameters, 1);
+                if (name is null || !TryDescribePicturePosition(command.Parameters, 3, 4, 5, resources, out var position) ||
+                    ReadInt(command.Parameters, 6) is not { } scaleX || ReadInt(command.Parameters, 7) is not { } scaleY ||
+                    ReadInt(command.Parameters, 8) is not { } opacity)
+                {
+                    return Malformed(command, index, "Show Picture", diagnostics, location);
+                }
+                return CreateBlock(command, index, StoryBlockKind.Picture, "Show Picture", $"Show #{pictureId} · {name}",
+                    [$"Position: {position}", $"Scale: {scaleX}% × {scaleY}%", $"Opacity: {opacity}"], targetId: pictureId);
+            }
+            case 232:
+            {
+                if (!TryDescribePicturePosition(command.Parameters, 3, 4, 5, resources, out var position) ||
+                    ReadInt(command.Parameters, 6) is not { } scaleX || ReadInt(command.Parameters, 7) is not { } scaleY ||
+                    ReadInt(command.Parameters, 8) is not { } opacity || ReadInt(command.Parameters, 10) is not { } frames || frames < 0 ||
+                    !TryReadBoolean(command.Parameters, 11, out var wait))
+                {
+                    return Malformed(command, index, "Move Picture", diagnostics, location);
+                }
+                return CreateBlock(command, index, StoryBlockKind.Picture, "Move Picture", $"Move #{pictureId} · {frames} frames · ~{FormatSeconds(frames)} s",
+                    [$"Position: {position}", $"Scale: {scaleX}% × {scaleY}%", $"Opacity: {opacity}", $"Wait: {wait}"],
+                    targetId: pictureId, frameDuration: frames);
+            }
+            case 233:
+            {
+                var speed = ReadInt(command.Parameters, 1);
+                return speed is null
+                    ? Malformed(command, index, "Rotate Picture", diagnostics, location)
+                    : CreateBlock(command, index, StoryBlockKind.Picture, "Rotate Picture", $"Rotate #{pictureId} · Speed {speed}", targetId: pictureId);
+            }
+            case 234:
+            {
+                if (!TryReadTone(command.Parameters, 1, out var tone) ||
+                    ReadInt(command.Parameters, 2) is not { } frames || frames < 0 ||
+                    !TryReadBoolean(command.Parameters, 3, out var wait))
+                {
+                    return Malformed(command, index, "Tint Picture", diagnostics, location);
+                }
+                return CreateBlock(command, index, StoryBlockKind.Picture, "Tint Picture", $"Tint #{pictureId} · {frames} frames · ~{FormatSeconds(frames)} s",
+                    [$"R {tone[0]} · G {tone[1]} · B {tone[2]} · Gray {tone[3]}", $"Wait: {wait}"],
+                    targetId: pictureId, frameDuration: frames);
+            }
+            default:
+                return CreateBlock(command, index, StoryBlockKind.Picture, "Erase Picture", $"Erase #{pictureId}", targetId: pictureId);
+        }
+    }
+
+    private static StoryBlock ParseActorCommand(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location,
+        RpgMakerStoryResourceResolver? resources)
+    {
+        if (command.Code == 303)
+        {
+            var directActorId = ReadInt(command.Parameters, 0);
+            var maximumLength = ReadInt(command.Parameters, 1);
+            if (directActorId is not > 0 || maximumLength is null || maximumLength < 0)
+            {
+                return Malformed(command, index, "Name Input", diagnostics, location);
+            }
+            ReportMissingResource(resources, resources?.HasActor(directActorId.Value) ?? true, "actor", directActorId.Value, diagnostics, location);
+            var actor = resources?.DescribeActor(directActorId.Value) ?? $"Actor #{directActorId.Value}";
+            return CreateBlock(command, index, StoryBlockKind.Actor, "Name Input", $"{actor} · {maximumLength} characters",
+                resourceId: directActorId.Value, targetId: directActorId.Value);
+        }
+
+        if (command.Code == 320)
+        {
+            var directActorId = ReadInt(command.Parameters, 0);
+            var name = ReadString(command.Parameters, 1);
+            if (directActorId is not > 0 || name is null)
+            {
+                return Malformed(command, index, "Change Name", diagnostics, location);
+            }
+            ReportMissingResource(resources, resources?.HasActor(directActorId.Value) ?? true, "actor", directActorId.Value, diagnostics, location);
+            return CreateBlock(command, index, StoryBlockKind.Actor, "Change Name",
+                $"{resources?.DescribeActor(directActorId.Value) ?? $"Actor #{directActorId.Value}"} → {name}",
+                resourceId: directActorId.Value, targetId: directActorId.Value);
+        }
+
+        if (command.Code == 322)
+        {
+            var directActorId = ReadInt(command.Parameters, 0);
+            var characterName = ReadString(command.Parameters, 1);
+            var characterIndex = ReadInt(command.Parameters, 2);
+            var faceName = ReadString(command.Parameters, 3);
+            var faceIndex = ReadInt(command.Parameters, 4);
+            var battlerName = ReadString(command.Parameters, 5);
+            if (directActorId is not > 0 || characterName is null || characterIndex is null || faceName is null || faceIndex is null || battlerName is null)
+            {
+                return Malformed(command, index, "Change Actor Images", diagnostics, location);
+            }
+            ReportMissingResource(resources, resources?.HasActor(directActorId.Value) ?? true, "actor", directActorId.Value, diagnostics, location);
+            var actor = resources?.DescribeActor(directActorId.Value) ?? $"Actor #{directActorId.Value}";
+            return CreateBlock(command, index, StoryBlockKind.Actor, "Change Actor Images", actor,
+                [$"Character: {characterName} · index {characterIndex}", $"Face: {faceName} · index {faceIndex}", $"Battler: {battlerName}"],
+                resourceId: directActorId.Value, targetId: directActorId.Value);
+        }
+
+        if (!TryDescribeActorTarget(command.Parameters, resources, out var target, out var actorId))
+        {
+            return Malformed(command, index, "Actor command", diagnostics, location);
+        }
+        if (actorId is > 0)
+        {
+            ReportMissingResource(resources, resources?.HasActor(actorId.Value) ?? true, "actor", actorId.Value, diagnostics, location);
+        }
+
+        switch (command.Code)
+        {
+            case 311:
+            case 312:
+            case 326:
+            {
+                var value = DescribeSignedValue(command.Parameters, 2, 3, 4, resources);
+                var allowDeath = false;
+                if (command.Code == 311 && !TryReadBoolean(command.Parameters, 5, out allowDeath) || value is null)
+                {
+                    return Malformed(command, index, "Change actor value", diagnostics, location);
+                }
+                var stat = command.Code switch { 311 => "HP", 312 => "MP", _ => "TP" };
+                var details = command.Code == 311 ? new[] { $"Allow knockout: {allowDeath}" } : [];
+                return CreateBlock(command, index, StoryBlockKind.Actor, $"Change {stat}", $"{target} · {stat} {value}", details,
+                    targetId: actorId);
+            }
+            case 313:
+            {
+                var operation = ReadInt(command.Parameters, 2);
+                var stateId = ReadInt(command.Parameters, 3);
+                if (operation is not (0 or 1) || stateId is not > 0)
+                {
+                    return Malformed(command, index, "Change State", diagnostics, location);
+                }
+                ReportMissingResource(resources, resources?.HasState(stateId.Value) ?? true, "state", stateId.Value, diagnostics, location);
+                var state = resources?.DescribeState(stateId.Value) ?? $"State #{stateId.Value}";
+                return CreateBlock(command, index, StoryBlockKind.Actor, "Change State",
+                    $"{target} · {(operation == 0 ? "Add" : "Remove")} {state}",
+                    resourceId: stateId.Value, targetId: actorId);
+            }
+            case 314:
+                return CreateBlock(command, index, StoryBlockKind.Actor, "Recover All", target, targetId: actorId);
+            case 315:
+            case 316:
+            {
+                var value = DescribeSignedValue(command.Parameters, 2, 3, 4, resources);
+                if (value is null || !TryReadBoolean(command.Parameters, 5, out var showLevelUp))
+                {
+                    return Malformed(command, index, command.Code == 315 ? "Change EXP" : "Change Level", diagnostics, location);
+                }
+                var stat = command.Code == 315 ? "EXP" : "Level";
+                return CreateBlock(command, index, StoryBlockKind.Actor, $"Change {stat}", $"{target} · {stat} {value}",
+                    [$"Show level up: {showLevelUp}"], targetId: actorId);
+            }
+            case 318:
+            {
+                var operation = ReadInt(command.Parameters, 2);
+                var skillId = ReadInt(command.Parameters, 3);
+                if (operation is not (0 or 1) || skillId is not > 0)
+                {
+                    return Malformed(command, index, "Change Skill", diagnostics, location);
+                }
+                ReportMissingResource(resources, resources?.HasSkill(skillId.Value) ?? true, "skill", skillId.Value, diagnostics, location);
+                var skill = resources?.DescribeSkill(skillId.Value) ?? $"Skill #{skillId.Value}";
+                return CreateBlock(command, index, StoryBlockKind.Actor, "Change Skill",
+                    $"{target} · {(operation == 0 ? "Learn" : "Forget")} {skill}",
+                    resourceId: skillId.Value, targetId: actorId);
+            }
+            default:
+                return Malformed(command, index, "Actor command", diagnostics, location);
+        }
+    }
+
+    private static StoryBlock ParseEnemyHp(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location,
+        RpgMakerStoryResourceResolver? resources)
+    {
+        var enemyIndex = ReadInt(command.Parameters, 0);
+        var value = DescribeSignedValue(command.Parameters, 1, 2, 3, resources);
+        if (enemyIndex is null || value is null || !TryReadBoolean(command.Parameters, 4, out var allowDeath))
+        {
+            return Malformed(command, index, "Change Enemy HP", diagnostics, location);
+        }
+        var target = enemyIndex.Value < 0 ? "Entire Troop" : $"Enemy #{enemyIndex.Value + 1}";
+        return CreateBlock(command, index, StoryBlockKind.Battle, "Change Enemy HP", $"{target} · HP {value}",
+            [$"Allow death: {allowDeath}", $"Troop index: {enemyIndex.Value}"], targetId: enemyIndex.Value);
+    }
+
+    private static StoryBlock ParseLegacyPluginCommand(
+        RpgMakerEventCommand command,
+        int index,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location)
+    {
+        var raw = ReadString(command.Parameters, 0);
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return Malformed(command, index, "Plugin Command MV", diagnostics, location);
+        }
+        var commandName = raw.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries)[0];
+        return CreateBlock(command, index, StoryBlockKind.PluginCommand, "Legacy Plugin Command", commandName,
+            [$"Command: {raw}"], rawText: raw);
+    }
+
+    private static StoryBlock Malformed(
+        RpgMakerEventCommand command,
+        int index,
+        string knownName,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location)
+    {
+        diagnostics.Add(location.CreateDiagnostic(
+            "story.semantic-command-malformed", StoryDiagnosticSeverity.Warning,
+            $"{knownName} ha una parameter shape non valida; il comando raw è stato conservato."));
+        return CreateMalformedKnownBlock([command], index, index, knownName, location);
+    }
+
+    private static string? DescribeSignedValue(
+        JsonElement parameters,
+        int operationIndex,
+        int operandTypeIndex,
+        int operandIndex,
+        RpgMakerStoryResourceResolver? resources)
+    {
+        var operation = ReadInt(parameters, operationIndex);
+        var operandType = ReadInt(parameters, operandTypeIndex);
+        var operand = ReadInt(parameters, operandIndex);
+        if (operation is not (0 or 1) || operandType is not (0 or 1) || operand is null)
+        {
+            return null;
+        }
+        if (operandType == 0)
+        {
+            var signed = operation == 0 ? operand.Value : -operand.Value;
+            return signed >= 0 ? $"+{signed}" : signed.ToString(CultureInfo.InvariantCulture);
+        }
+        var variable = DescribeVariableReference(operand.Value, resources);
+        return operation == 0 ? $"+{variable}" : $"-{variable}";
+    }
+
+    private static bool TryDescribeActorTarget(
+        JsonElement parameters,
+        RpgMakerStoryResourceResolver? resources,
+        out string target,
+        out int? actorId)
+    {
+        target = string.Empty;
+        actorId = null;
+        var designation = ReadInt(parameters, 0);
+        var value = ReadInt(parameters, 1);
+        if (designation is not (0 or 1) || value is null)
+        {
+            return false;
+        }
+        if (designation == 1)
+        {
+            target = $"Actor referenced by {DescribeVariableReference(value.Value, resources)}";
+            return true;
+        }
+        actorId = value.Value;
+        target = value.Value == 0
+            ? "Entire Party"
+            : DescribeActorReference(value.Value, resources);
+        return value.Value >= 0;
+    }
+
+    private static bool TryDescribePicturePosition(
+        JsonElement parameters,
+        int designationIndex,
+        int xIndex,
+        int yIndex,
+        RpgMakerStoryResourceResolver? resources,
+        out string position)
+    {
+        position = string.Empty;
+        var designation = ReadInt(parameters, designationIndex);
+        var x = ReadInt(parameters, xIndex);
+        var y = ReadInt(parameters, yIndex);
+        if (designation is not (0 or 1) || x is null || y is null)
+        {
+            return false;
+        }
+        position = designation == 0
+            ? $"X {x} · Y {y}"
+            : $"X {DescribeVariableReference(x.Value, resources)} · Y {DescribeVariableReference(y.Value, resources)}";
+        return true;
+    }
+
+    private static bool TryReadTone(JsonElement parameters, int index, out int[] tone)
+    {
+        tone = [];
+        var element = GetElement(parameters, index);
+        if (element is not { ValueKind: JsonValueKind.Array } values || values.GetArrayLength() != 4)
+        {
+            return false;
+        }
+        var components = new int[4];
+        for (var component = 0; component < components.Length; component++)
+        {
+            if (values[component].ValueKind != JsonValueKind.Number || !values[component].TryGetInt32(out components[component]))
+            {
+                return false;
+            }
+        }
+        tone = components;
+        return true;
+    }
+
+    private static string FormatSeconds(int frames) => (frames / 60d).ToString("0.0", CultureInfo.InvariantCulture);
+
+    private static void ReportMissingResource(
+        RpgMakerStoryResourceResolver? resources,
+        bool resourceExists,
+        string category,
+        int id,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location)
+    {
+        if (resources is not null && !resourceExists)
+        {
+            diagnostics.Add(location.CreateDiagnostic(
+                "story.resource-target-missing", StoryDiagnosticSeverity.Warning,
+                $"{category} #{id} non è risolvibile nel database; il riferimento è stato conservato."));
+        }
+    }
+
+    private static bool TryReadBoolean(JsonElement parameters, int index, out bool value)
+    {
+        var element = GetElement(parameters, index);
+        switch (element?.ValueKind)
+        {
+            case JsonValueKind.True:
+                value = true;
+                return true;
+            case JsonValueKind.False:
+                value = false;
+                return true;
+            default:
+                value = false;
+                return false;
+        }
+    }
+
     private static StoryBlock ParseMovementRoute(
         IReadOnlyList<RpgMakerEventCommand> commands,
         ref int index,
@@ -335,8 +984,16 @@ public sealed class RpgMakerStoryCommandParser
         StoryBlockKind kind,
         string title,
         string summary,
-        IReadOnlyList<string>? details = null) => CreateBlock(
-            [command], index, index, kind, title, summary, details: details);
+        IReadOnlyList<string>? details = null,
+        string? rawText = null,
+        int? resourceId = null,
+        int? targetId = null,
+        string? labelName = null,
+        int? commonEventId = null,
+        int? frameDuration = null) => CreateBlock(
+            [command], index, index, kind, title, summary, rawText: rawText, details: details,
+            resourceId: resourceId, targetId: targetId, labelName: labelName,
+            commonEventId: commonEventId, frameDuration: frameDuration);
 
     private static StoryBlock CreateBlock(
         IReadOnlyList<RpgMakerEventCommand> commands,
@@ -347,7 +1004,12 @@ public sealed class RpgMakerStoryCommandParser
         string summary,
         string? rawText = null,
         IReadOnlyList<string>? details = null,
-        IReadOnlyList<ZiapStudio.Core.Localization.LocalizationReferenceOrigin>? origins = null) => new()
+        IReadOnlyList<ZiapStudio.Core.Localization.LocalizationReferenceOrigin>? origins = null,
+        int? resourceId = null,
+        int? targetId = null,
+        string? labelName = null,
+        int? commonEventId = null,
+        int? frameDuration = null) => new()
     {
         Kind = kind,
         Title = title,
@@ -366,6 +1028,11 @@ public sealed class RpgMakerStoryCommandParser
         }).ToArray(),
         Details = details ?? [],
         LocalizationOrigins = origins ?? [],
+        ResourceId = resourceId,
+        TargetId = targetId,
+        LabelName = labelName,
+        CommonEventId = commonEventId,
+        FrameDuration = frameDuration,
     };
 
     private static StoryBlock ParseWait(
@@ -496,14 +1163,26 @@ public sealed class RpgMakerStoryCommandParser
     {
         241 => "Play BGM",
         242 => "Fadeout BGM",
+        243 => "Save BGM",
+        244 => "Resume BGM",
         245 => "Play BGS",
         246 => "Fadeout BGS",
         249 => "Play ME",
-        _ => "Play SE",
+        250 => "Play SE",
+        _ => "Stop SE",
     };
 
     private static string DescribeAudio(RpgMakerEventCommand command)
     {
+        if (command.Code is 243 or 244 or 251)
+        {
+            return command.Code switch
+            {
+                243 => "Save the current BGM for later replay.",
+                244 => "Replay the saved BGM.",
+                _ => "Stop all sound effects.",
+            };
+        }
         if (command.Code is 242 or 246)
         {
             return $"{ReadInt(command.Parameters, 0) ?? 0} s";
@@ -768,6 +1447,8 @@ public sealed class RpgMakerStoryCommandParser
         }
         return parameters[index];
     }
+
+    private static bool HasElement(JsonElement parameters, int index) => GetElement(parameters, index) is not null;
 
     private static string? ReadString(JsonElement parameters, int index) =>
         GetElement(parameters, index) is { ValueKind: JsonValueKind.String } value ? value.GetString() : null;
