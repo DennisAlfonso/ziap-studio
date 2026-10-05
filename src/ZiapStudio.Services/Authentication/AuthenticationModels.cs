@@ -55,8 +55,17 @@ internal sealed record FirebaseRefreshTokenResponse(
     [property: JsonPropertyName("user_id")] string? UserId);
 
 internal sealed record ZiapOAuthTokenResponse(
-    [property: JsonPropertyName("firebase_custom_token")] string? FirebaseCustomToken,
+    [property: JsonPropertyName("access_token")] string? AccessToken,
+    [property: JsonPropertyName("token_type")] string? TokenType,
+    [property: JsonPropertyName("expires_in")] int? ExpiresIn,
+    [property: JsonPropertyName("scope")] string? Scope,
+    [property: JsonPropertyName("issued_at")] string? IssuedAt,
     ZiapOAuthUser? User);
+
+internal sealed record ZiapFirebaseCustomTokenResponse(
+    bool? Ok,
+    string? Uid,
+    string? CustomToken);
 
 internal sealed record ZiapOAuthUser(
     string? Uid,
@@ -70,6 +79,7 @@ internal sealed record ZiapOAuthUser(
 [JsonSerializable(typeof(FirebaseCustomTokenResponse))]
 [JsonSerializable(typeof(FirebaseRefreshTokenResponse))]
 [JsonSerializable(typeof(ZiapOAuthTokenResponse))]
+[JsonSerializable(typeof(ZiapFirebaseCustomTokenResponse))]
 [JsonSerializable(typeof(StoredAuthenticationCredential))]
 internal sealed partial class AuthenticationJsonContext : JsonSerializerContext
 {

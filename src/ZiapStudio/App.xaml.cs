@@ -118,7 +118,8 @@ public partial class App : Application
                 new HttpClient { Timeout = TimeSpan.FromSeconds(30) },
                 shellService,
                 GetOAuthAuthorizeUri(),
-                GetOAuthTokenUri()),
+                GetOAuthTokenUri(),
+                GetOAuthFirebaseCustomTokenUri()),
             new FirebaseTokenService(
                 new HttpClient { Timeout = TimeSpan.FromSeconds(30) },
                 GetFirebaseWebApiKey()),
@@ -253,6 +254,10 @@ public partial class App : Application
     private static Uri GetOAuthTokenUri() => GetConfiguredUri(
         "ZIAP_OAUTH_TOKEN_URL",
         "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/oauthToken");
+
+    private static Uri GetOAuthFirebaseCustomTokenUri() => GetConfiguredUri(
+        "ZIAP_OAUTH_FIREBASE_CUSTOM_TOKEN_URL",
+        "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/oauthFirebaseCustomToken");
 
     private static string GetFirebaseWebApiKey()
     {

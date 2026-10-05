@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -14,18 +15,40 @@ public sealed class AuthenticationServiceTests
     {
         var callbackUri = CreateAvailableLoopbackUri();
         string? tokenRequestBody = null;
+        Uri? bridgeRequestUri = null;
+        AuthenticationHeaderValue? bridgeAuthorization = null;
+        string? bridgeRequestBody = null;
         var handler = new AsyncStubHttpMessageHandler(async request =>
         {
-            tokenRequestBody = await request.Content!.ReadAsStringAsync();
+            if (request.RequestUri?.AbsolutePath == "/oauth/token")
+            {
+                tokenRequestBody = await request.Content!.ReadAsStringAsync();
+                return JsonResponse(
+                    """
+                    {
+                      "access_token": "oauth-access-token",
+                      "token_type": "Bearer",
+                      "expires_in": 3600,
+                      "scope": "openid profile:read email:read",
+                      "issued_at": "2026-10-05T00:00:00Z",
+                      "user": {
+                        "uid": "uid-123",
+                        "nickname": "YuukiToyaro",
+                        "email": "yuuki@example.test"
+                      }
+                    }
+                    """);
+            }
+
+            bridgeRequestUri = request.RequestUri;
+            bridgeAuthorization = request.Headers.Authorization;
+            bridgeRequestBody = await request.Content!.ReadAsStringAsync();
             return JsonResponse(
                 """
                 {
-                  "firebase_custom_token": "firebase-custom-token",
-                  "user": {
-                    "uid": "uid-123",
-                    "nickname": "YuukiToyaro",
-                    "email": "yuuki@example.test"
-                  }
+                  "ok": true,
+                  "uid": "uid-123",
+                  "customToken": "firebase-custom-token"
                 }
                 """);
         });
@@ -35,6 +58,7 @@ public sealed class AuthenticationServiceTests
             launcher,
             new Uri("https://identity.example.test/oauth/authorize"),
             new Uri("https://identity.example.test/oauth/token"),
+            new Uri("https://identity.example.test/oauth/firebase/custom-token"),
             callbackUri,
             authorizationTimeout: TimeSpan.FromSeconds(5));
 
@@ -53,6 +77,80 @@ public sealed class AuthenticationServiceTests
         var expectedChallenge = Base64Url(
             SHA256.HashData(Encoding.ASCII.GetBytes(tokenForm["code_verifier"])));
         Assert.Equal(authorizationQuery["code_challenge"], expectedChallenge);
+        Assert.Equal("Bearer", bridgeAuthorization?.Scheme);
+        Assert.Equal("oauth-access-token", bridgeAuthorization?.Parameter);
+        Assert.DoesNotContain("oauth-access-token", launcher.CallbackRequestUri?.AbsoluteUri);
+        Assert.DoesNotContain("firebase-custom-token", launcher.CallbackRequestUri?.AbsoluteUri);
+        Assert.DoesNotContain("oauth-access-token", bridgeRequestUri?.AbsoluteUri);
+        Assert.DoesNotContain("firebase-custom-token", launcher.AuthorizationUri.AbsoluteUri);
+        Assert.DoesNotContain("firebase-custom-token", bridgeRequestUri?.AbsoluteUri);
+        Assert.DoesNotContain("oauth-access-token", bridgeRequestBody);
+        Assert.DoesNotContain("firebase-custom-token", tokenRequestBody);
+        Assert.Contains("Accesso completato", launcher.CallbackResponseBody);
+    }
+
+    [Fact]
+    public async Task BrowserAuthorization_RejectsOAuthErrorsWithoutLeakingTokens()
+    {
+        var rejected = await AuthorizeExpectingFailureAsync(
+            JsonResponse("{\"error_description\":\"oauth-access-token must not escape\"}", HttpStatusCode.BadRequest),
+            JsonResponse("{}"));
+        Assert.Contains("scambio del codice OAuth", rejected.Message);
+
+        var missingAccessToken = await AuthorizeExpectingFailureAsync(
+            JsonResponse("""{"user":{"uid":"uid-123"}}"""),
+            JsonResponse("{}"));
+        Assert.Contains("access token OAuth valido", missingAccessToken.Message);
+
+        var missingUid = await AuthorizeExpectingFailureAsync(
+            JsonResponse("""{"access_token":"oauth-access-token","user":{}}"""),
+            JsonResponse("{}"));
+        Assert.Contains("identificativo utente OAuth valido", missingUid.Message);
+
+        var malformed = await AuthorizeExpectingFailureAsync(
+            JsonResponse("{ invalid"),
+            JsonResponse("{}"));
+        Assert.Contains("risposta OAuth non valida", malformed.Message);
+
+        AssertNoSensitiveTokens(rejected, missingAccessToken, missingUid, malformed);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task BrowserAuthorization_RejectsFirebaseBridgeHttpErrors(HttpStatusCode status)
+    {
+        var failure = await AuthorizeExpectingFailureAsync(
+            ValidOAuthResponse,
+            JsonResponse("{\"error_description\":\"firebase-custom-token must not escape\"}", status));
+
+        Assert.Contains("bridge della sessione Firebase", failure.Message);
+        AssertNoSensitiveTokens(failure);
+    }
+
+    [Fact]
+    public async Task BrowserAuthorization_RejectsInvalidFirebaseBridgePayloadsAndUidMismatch()
+    {
+        var missingToken = await AuthorizeExpectingFailureAsync(
+            ValidOAuthResponse,
+            JsonResponse("""{"ok":true,"uid":"uid-123"}"""));
+        Assert.Contains("sessione Firebase valida", missingToken.Message);
+
+        var rejected = await AuthorizeExpectingFailureAsync(
+            ValidOAuthResponse,
+            JsonResponse("""{"ok":false,"uid":"uid-123","customToken":"firebase-custom-token"}"""));
+        Assert.Contains("sessione Firebase valida", rejected.Message);
+
+        var malformed = await AuthorizeExpectingFailureAsync(
+            ValidOAuthResponse,
+            JsonResponse("{ invalid"));
+        Assert.Contains("Firebase bridge non valida", malformed.Message);
+
+        var mismatch = await AuthorizeExpectingFailureAsync(
+            ValidOAuthResponse,
+            JsonResponse("""{"ok":true,"uid":"uid-other","customToken":"firebase-custom-token"}"""));
+        Assert.Contains("identita OAuth e Firebase", mismatch.Message);
+        AssertNoSensitiveTokens(missingToken, rejected, malformed, mismatch);
     }
 
     [Fact]
@@ -141,6 +239,8 @@ public sealed class AuthenticationServiceTests
         Assert.Equal("YuukiToyaro", firstSession.CurrentAccount?.DisplayName);
         Assert.NotNull(store.Value);
         Assert.Contains("first-refresh-token", store.Value);
+        Assert.DoesNotContain("firebase-custom-token", store.Value);
+        Assert.DoesNotContain("oauth-access-token", store.Value);
 
         var restartedFirebase = new FirebaseTokenService(
             new HttpClient(new AsyncStubHttpMessageHandler(_ => Task.FromResult(JsonResponse(
@@ -166,10 +266,85 @@ public sealed class AuthenticationServiceTests
         Assert.DoesNotContain("first-refresh-token", store.Value);
     }
 
-    private static HttpResponseMessage JsonResponse(string json) => new(HttpStatusCode.OK)
+    [Fact]
+    public async Task AuthenticationSession_CompletesOAuthBridgeThenPersistsOnlyFirebaseRefreshCredential()
+    {
+        var callbackUri = CreateAvailableLoopbackUri();
+        var authorizationService = new ZiapBrowserAuthorizationService(
+            new HttpClient(new AsyncStubHttpMessageHandler(request => Task.FromResult(
+                request.RequestUri?.AbsolutePath == "/oauth/token"
+                    ? ValidOAuthResponse
+                    : JsonResponse("""{"ok":true,"uid":"uid-123","customToken":"firebase-custom-token"}""")))),
+            new LoopbackCallbackLauncher(callbackUri),
+            new Uri("https://identity.example.test/oauth/authorize"),
+            new Uri("https://identity.example.test/oauth/token"),
+            new Uri("https://identity.example.test/oauth/firebase/custom-token"),
+            callbackUri,
+            authorizationTimeout: TimeSpan.FromSeconds(5));
+        var firebase = new FirebaseTokenService(
+            new HttpClient(new AsyncStubHttpMessageHandler(_ => Task.FromResult(JsonResponse(
+                """{"idToken":"firebase-id-token","refreshToken":"firebase-refresh-token","expiresIn":"3600"}""")))),
+            "public-api-key");
+        var store = new MemoryCredentialStore();
+        var session = new ZiapAuthenticationService(authorizationService, firebase, store);
+
+        await session.SignInAsync();
+
+        Assert.True(session.IsAuthenticated);
+        Assert.Equal("uid-123", session.CurrentAccount?.Uid);
+        Assert.Equal("firebase-id-token", await session.GetValidIdTokenAsync());
+        Assert.Contains("firebase-refresh-token", store.Value);
+        Assert.DoesNotContain("oauth-access-token", store.Value);
+        Assert.DoesNotContain("firebase-custom-token", store.Value);
+    }
+
+    private static HttpResponseMessage ValidOAuthResponse => JsonResponse(
+        """
+        {
+          "access_token": "oauth-access-token",
+          "token_type": "Bearer",
+          "expires_in": 3600,
+          "scope": "openid profile:read email:read",
+          "issued_at": "2026-10-05T00:00:00Z",
+          "user": {"uid":"uid-123","nickname":"YuukiToyaro","email":"yuuki@example.test"}
+        }
+        """);
+
+    private static HttpResponseMessage JsonResponse(string json, HttpStatusCode status = HttpStatusCode.OK) => new(status)
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json"),
     };
+
+    private static async Task<AuthenticationException> AuthorizeExpectingFailureAsync(
+        HttpResponseMessage oauthResponse,
+        HttpResponseMessage bridgeResponse)
+    {
+        var callbackUri = CreateAvailableLoopbackUri();
+        var launcher = new LoopbackCallbackLauncher(callbackUri);
+        var service = new ZiapBrowserAuthorizationService(
+            new HttpClient(new AsyncStubHttpMessageHandler(request => Task.FromResult(
+                request.RequestUri?.AbsolutePath == "/oauth/token" ? oauthResponse : bridgeResponse))),
+            launcher,
+            new Uri("https://identity.example.test/oauth/authorize"),
+            new Uri("https://identity.example.test/oauth/token"),
+            new Uri("https://identity.example.test/oauth/firebase/custom-token"),
+            callbackUri,
+            authorizationTimeout: TimeSpan.FromSeconds(5));
+
+        var exception = await Assert.ThrowsAsync<AuthenticationException>(() => service.AuthorizeAsync());
+        await launcher.CallbackCompleted!;
+        Assert.Contains("Accesso non completato", launcher.CallbackResponseBody);
+        return exception;
+    }
+
+    private static void AssertNoSensitiveTokens(params AuthenticationException[] exceptions)
+    {
+        foreach (var exception in exceptions)
+        {
+            Assert.DoesNotContain("oauth-access-token", exception.ToString());
+            Assert.DoesNotContain("firebase-custom-token", exception.ToString());
+        }
+    }
 
     private static Uri CreateAvailableLoopbackUri()
     {
@@ -228,6 +403,8 @@ public sealed class AuthenticationServiceTests
         public Uri? AuthorizationUri { get; private set; }
 
         public Task? CallbackCompleted { get; private set; }
+        public Uri? CallbackRequestUri { get; private set; }
+        public string? CallbackResponseBody { get; private set; }
 
         public void Open(Uri uri)
         {
@@ -237,11 +414,13 @@ public sealed class AuthenticationServiceTests
             {
                 Query = $"code=authorization-code&state={Uri.EscapeDataString(query["state"])}",
             }.Uri;
+            CallbackRequestUri = callback;
             CallbackCompleted = Task.Run(async () =>
             {
                 using var client = new HttpClient();
                 using var response = await client.GetAsync(callback);
                 response.EnsureSuccessStatusCode();
+                CallbackResponseBody = await response.Content.ReadAsStringAsync();
             });
         }
     }

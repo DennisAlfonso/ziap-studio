@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -17,6 +18,7 @@ public sealed class ZiapBrowserAuthorizationService : IZiapAuthorizationService
     private readonly IExternalUriLauncher _uriLauncher;
     private readonly Uri _authorizationEndpoint;
     private readonly Uri _tokenEndpoint;
+    private readonly Uri _firebaseCustomTokenEndpoint;
     private readonly Uri _callbackUri;
     private readonly string _clientId;
     private readonly TimeSpan _authorizationTimeout;
@@ -26,6 +28,7 @@ public sealed class ZiapBrowserAuthorizationService : IZiapAuthorizationService
         IExternalUriLauncher uriLauncher,
         Uri authorizationEndpoint,
         Uri tokenEndpoint,
+        Uri firebaseCustomTokenEndpoint,
         Uri? callbackUri = null,
         string clientId = DefaultClientId,
         TimeSpan? authorizationTimeout = null)
@@ -34,6 +37,7 @@ public sealed class ZiapBrowserAuthorizationService : IZiapAuthorizationService
         ArgumentNullException.ThrowIfNull(uriLauncher);
         ValidateHttpsEndpoint(authorizationEndpoint, nameof(authorizationEndpoint));
         ValidateHttpsEndpoint(tokenEndpoint, nameof(tokenEndpoint));
+        ValidateHttpsEndpoint(firebaseCustomTokenEndpoint, nameof(firebaseCustomTokenEndpoint));
 
         _callbackUri = callbackUri ?? DefaultCallbackUri;
         if (!_callbackUri.IsAbsoluteUri ||
@@ -55,6 +59,7 @@ public sealed class ZiapBrowserAuthorizationService : IZiapAuthorizationService
         _uriLauncher = uriLauncher;
         _authorizationEndpoint = authorizationEndpoint;
         _tokenEndpoint = tokenEndpoint;
+        _firebaseCustomTokenEndpoint = firebaseCustomTokenEndpoint;
         _clientId = clientId.Trim();
         _authorizationTimeout = authorizationTimeout ?? DefaultAuthorizationTimeout;
     }
@@ -89,14 +94,23 @@ public sealed class ZiapBrowserAuthorizationService : IZiapAuthorizationService
             var context = await listener.GetContextAsync()
                 .WaitAsync(_authorizationTimeout, cancellationToken);
             var callback = ParseCallback(context.Request.Url, state);
-            await WriteBrowserResponseAsync(context.Response, callback.Error is null);
-
             if (callback.Error is not null)
             {
+                await WriteBrowserResponseAsync(context.Response, success: false);
                 throw new AuthenticationException(callback.Error);
             }
 
-            return await ExchangeCodeAsync(callback.Code!, codeVerifier, cancellationToken);
+            try
+            {
+                var result = await ExchangeCodeAsync(callback.Code!, codeVerifier, cancellationToken);
+                await WriteBrowserResponseAsync(context.Response, success: true);
+                return result;
+            }
+            catch
+            {
+                await WriteBrowserResponseAsync(context.Response, success: false);
+                throw;
+            }
         }
         catch (TimeoutException exception)
         {
@@ -168,11 +182,8 @@ public sealed class ZiapBrowserAuthorizationService : IZiapAuthorizationService
             cancellationToken);
         if (!response.IsSuccessStatusCode)
         {
-            var detail = await ReadOAuthErrorAsync(response, cancellationToken);
             throw new AuthenticationException(
-                string.IsNullOrWhiteSpace(detail)
-                    ? "myZenkai ha rifiutato lo scambio del codice di accesso."
-                    : $"myZenkai ha rifiutato lo scambio del codice: {detail}");
+                "myZenkai ha rifiutato lo scambio del codice OAuth.");
         }
 
         ZiapOAuthTokenResponse? payload;
@@ -191,19 +202,75 @@ public sealed class ZiapBrowserAuthorizationService : IZiapAuthorizationService
                 exception);
         }
 
-        if (string.IsNullOrWhiteSpace(payload?.FirebaseCustomToken) ||
-            string.IsNullOrWhiteSpace(payload.User?.Uid))
+        if (string.IsNullOrWhiteSpace(payload?.AccessToken))
         {
             throw new AuthenticationException(
-                "Il backend myZenkai non ha restituito la sessione Firebase per ZIAP Studio.");
+                "myZenkai non ha restituito un access token OAuth valido.");
+        }
+        if (string.IsNullOrWhiteSpace(payload.User?.Uid))
+        {
+            throw new AuthenticationException(
+                "myZenkai non ha restituito un identificativo utente OAuth valido.");
+        }
+
+        var firebaseBridge = await ExchangeOAuthAccessTokenForFirebaseCustomTokenAsync(
+            payload.AccessToken,
+            cancellationToken);
+        if (firebaseBridge.Ok != true ||
+            string.IsNullOrWhiteSpace(firebaseBridge.CustomToken) ||
+            string.IsNullOrWhiteSpace(firebaseBridge.Uid))
+        {
+            throw new AuthenticationException(
+                "myZenkai non ha restituito una sessione Firebase valida per ZIAP Studio.");
+        }
+        if (!string.Equals(payload.User.Uid, firebaseBridge.Uid, StringComparison.Ordinal))
+        {
+            throw new AuthenticationException(
+                "myZenkai ha restituito identita OAuth e Firebase non corrispondenti.");
         }
 
         return new ZiapAuthorizationResult(
-            payload.FirebaseCustomToken,
+            firebaseBridge.CustomToken,
             new AuthenticationAccount(
                 payload.User.Uid,
                 payload.User.Nickname,
                 payload.User.Email));
+    }
+
+    private async Task<ZiapFirebaseCustomTokenResponse> ExchangeOAuthAccessTokenForFirebaseCustomTokenAsync(
+        string oauthAccessToken,
+        CancellationToken cancellationToken)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Post, _firebaseCustomTokenEndpoint)
+        {
+            Content = new ByteArrayContent([]),
+        };
+        request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", oauthAccessToken);
+
+        using var response = await _httpClient.SendAsync(
+            request,
+            HttpCompletionOption.ResponseHeadersRead,
+            cancellationToken);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new AuthenticationException(
+                "myZenkai ha rifiutato il bridge della sessione Firebase.");
+        }
+
+        try
+        {
+            await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
+            return await JsonSerializer.DeserializeAsync(
+                stream,
+                AuthenticationJsonContext.Default.ZiapFirebaseCustomTokenResponse,
+                cancellationToken) ?? throw new JsonException("Risposta vuota.");
+        }
+        catch (JsonException exception)
+        {
+            throw new AuthenticationException(
+                "myZenkai ha restituito una risposta Firebase bridge non valida.",
+                exception);
+        }
     }
 
     private static OAuthCallback ParseCallback(Uri? callbackUri, string expectedState)
@@ -275,28 +342,6 @@ public sealed class ZiapBrowserAuthorizationService : IZiapAuthorizationService
         }
 
         return "myZenkai ha rifiutato la richiesta di accesso.";
-    }
-
-    private static async Task<string?> ReadOAuthErrorAsync(
-        HttpResponseMessage response,
-        CancellationToken cancellationToken)
-    {
-        try
-        {
-            var body = await response.Content.ReadAsStringAsync(cancellationToken);
-            using var document = JsonDocument.Parse(body);
-            if (document.RootElement.TryGetProperty("error_description", out var detail) &&
-                detail.ValueKind == JsonValueKind.String)
-            {
-                var value = detail.GetString()?.Trim();
-                return value?.Length <= 240 ? value : value?[..240];
-            }
-        }
-        catch (Exception exception) when (exception is JsonException or IOException)
-        {
-        }
-
-        return null;
     }
 
     private static Dictionary<string, string> ParseQuery(string query)
