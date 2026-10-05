@@ -48,8 +48,7 @@ internal sealed record FirebaseCustomTokenRequest(
 internal sealed record FirebaseCustomTokenResponse(
     string? IdToken,
     string? RefreshToken,
-    string? ExpiresIn,
-    [property: JsonPropertyName("localId")] string? LocalId);
+    string? ExpiresIn);
 
 internal sealed record FirebaseRefreshTokenResponse(
     [property: JsonPropertyName("id_token")] string? IdToken,

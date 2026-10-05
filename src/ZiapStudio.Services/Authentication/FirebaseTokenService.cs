@@ -60,8 +60,9 @@ public sealed class FirebaseTokenService
 
         var response = await SendAsync(request, cancellationToken);
         var payload = await DeserializeCustomTokenAsync(response, cancellationToken);
-        if (string.IsNullOrWhiteSpace(payload.LocalId) ||
-            !string.Equals(payload.LocalId, authenticatedUid, StringComparison.Ordinal))
+        var expectedUid = authenticatedUid.Trim();
+        var tokenUid = ReadIdTokenSubject(payload.IdToken);
+        if (!string.Equals(tokenUid, expectedUid, StringComparison.Ordinal))
         {
             throw new FirebaseAuthenticationException(
                 "Firebase Authentication ha restituito un UID non coerente.");
@@ -69,7 +70,7 @@ public sealed class FirebaseTokenService
         return CreateResult(
             payload.IdToken,
             payload.RefreshToken,
-            payload.LocalId,
+            expectedUid,
             payload.ExpiresIn);
     }
 
@@ -209,6 +210,61 @@ public sealed class FirebaseTokenService
             refreshToken,
             uid,
             DateTimeOffset.UtcNow.AddSeconds(lifetimeSeconds));
+    }
+
+    /// <summary>
+    /// Reads the standard Firebase ID-token subject only to bind the REST
+    /// response to the UID already authenticated by OAuth. This intentionally
+    /// does not treat client-side parsing as token verification: Firebase
+    /// verifies the ID token again at the server-side authorization boundary.
+    /// </summary>
+    private static string ReadIdTokenSubject(string? idToken)
+    {
+        if (string.IsNullOrWhiteSpace(idToken))
+        {
+            throw new FirebaseAuthenticationException(
+                "Firebase Authentication ha restituito una sessione incompleta.");
+        }
+
+        var segments = idToken.Split('.');
+        if (segments.Length != 3 || segments.Any(string.IsNullOrEmpty))
+        {
+            throw new FirebaseAuthenticationException(
+                "Firebase Authentication ha restituito un ID token non valido.");
+        }
+
+        try
+        {
+            var payloadBytes = DecodeBase64Url(segments[1]);
+            using var payload = JsonDocument.Parse(payloadBytes);
+            if (!payload.RootElement.TryGetProperty("sub", out var subject) ||
+                subject.ValueKind != JsonValueKind.String ||
+                string.IsNullOrWhiteSpace(subject.GetString()))
+            {
+                throw new FirebaseAuthenticationException(
+                    "Firebase Authentication ha restituito un ID token senza UID.");
+            }
+
+            return subject.GetString()!.Trim();
+        }
+        catch (Exception exception) when (exception is FormatException or JsonException)
+        {
+            throw new FirebaseAuthenticationException(
+                "Firebase Authentication ha restituito un ID token non valido.",
+                innerException: exception);
+        }
+    }
+
+    private static byte[] DecodeBase64Url(string value)
+    {
+        var normalized = value.Replace('-', '+').Replace('_', '/');
+        var padding = normalized.Length % 4;
+        if (padding == 1)
+        {
+            throw new FormatException("Base64URL non valido.");
+        }
+
+        return Convert.FromBase64String(normalized.PadRight(normalized.Length + (4 - padding) % 4, '='));
     }
 
     private Uri AddApiKey(Uri endpoint)

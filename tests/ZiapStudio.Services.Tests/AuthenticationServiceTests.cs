@@ -164,19 +164,12 @@ public sealed class AuthenticationServiceTests
     {
         HttpRequestMessage? capturedRequest = null;
         string? capturedBody = null;
+        var firebaseIdToken = CreateFirebaseIdToken("uid-123");
         var handler = new AsyncStubHttpMessageHandler(async request =>
         {
             capturedRequest = request;
             capturedBody = await request.Content!.ReadAsStringAsync();
-            return JsonResponse(
-                """
-                {
-                  "idToken": "firebase-id-token",
-                  "refreshToken": "firebase-refresh-token",
-                  "expiresIn": "3600",
-                  "localId": "uid-123"
-                }
-                """);
+            return FirebaseCustomTokenResponse(firebaseIdToken, "firebase-refresh-token");
         });
         var service = new FirebaseTokenService(new HttpClient(handler), "public-api-key");
 
@@ -189,9 +182,42 @@ public sealed class AuthenticationServiceTests
             capturedRequest?.RequestUri?.AbsoluteUri);
         Assert.DoesNotContain("one-time-custom-token", capturedRequest?.RequestUri?.AbsoluteUri);
         Assert.Contains("one-time-custom-token", capturedBody);
-        Assert.Equal("firebase-id-token", result.IdToken);
+        Assert.Equal(firebaseIdToken, result.IdToken);
         Assert.Equal("firebase-refresh-token", result.RefreshToken);
         Assert.Equal("uid-123", result.Uid);
+    }
+
+    [Fact]
+    public async Task FirebaseTokenService_RejectsCustomTokenResponseWithDifferentJwtSubject()
+    {
+        var service = CreateFirebaseTokenService(CreateFirebaseIdToken("uid-other"));
+
+        var exception = await Assert.ThrowsAsync<FirebaseAuthenticationException>(() =>
+            service.SignInWithCustomTokenAsync("one-time-custom-token", "uid-123"));
+
+        Assert.Contains("UID non coerente", exception.Message);
+    }
+
+    [Fact]
+    public async Task FirebaseTokenService_RejectsCustomTokenResponseWithoutJwtSubject()
+    {
+        var service = CreateFirebaseTokenService(CreateFirebaseIdToken(null));
+
+        var exception = await Assert.ThrowsAsync<FirebaseAuthenticationException>(() =>
+            service.SignInWithCustomTokenAsync("one-time-custom-token", "uid-123"));
+
+        Assert.Contains("senza UID", exception.Message);
+    }
+
+    [Fact]
+    public async Task FirebaseTokenService_RejectsMalformedCustomTokenResponseJwt()
+    {
+        var service = CreateFirebaseTokenService("not-a-jwt");
+
+        var exception = await Assert.ThrowsAsync<FirebaseAuthenticationException>(() =>
+            service.SignInWithCustomTokenAsync("one-time-custom-token", "uid-123"));
+
+        Assert.Contains("ID token non valido", exception.Message);
     }
 
     [Fact]
@@ -225,16 +251,10 @@ public sealed class AuthenticationServiceTests
     public async Task AuthenticationSession_PersistsRefreshCredentialAndRestoresOnRestart()
     {
         var store = new MemoryCredentialStore();
+        var firstIdToken = CreateFirebaseIdToken("uid-123");
         var firstFirebase = new FirebaseTokenService(
-            new HttpClient(new AsyncStubHttpMessageHandler(_ => Task.FromResult(JsonResponse(
-                """
-                {
-                  "idToken": "first-id-token",
-                  "refreshToken": "first-refresh-token",
-                  "expiresIn": "3600",
-                  "localId": "uid-123"
-                }
-                """)))),
+            new HttpClient(new AsyncStubHttpMessageHandler(_ => Task.FromResult(
+                FirebaseCustomTokenResponse(firstIdToken, "first-refresh-token")))),
             "public-api-key");
         var firstSession = new ZiapAuthenticationService(
             new StubAuthorizationService(),
@@ -292,6 +312,8 @@ public sealed class AuthenticationServiceTests
             callbackUri,
             authorizationTimeout: TimeSpan.FromSeconds(5));
         var firebaseCustomTokens = new List<string>();
+        var temporaryFirebaseIdToken = CreateFirebaseIdToken("uid-123");
+        var finalFirebaseIdToken = CreateFirebaseIdToken("uid-123");
         var firebase = new FirebaseTokenService(
             new HttpClient(new AsyncStubHttpMessageHandler(async request =>
             {
@@ -301,10 +323,10 @@ public sealed class AuthenticationServiceTests
                 firebaseCustomTokens.Add(customToken!);
                 return customToken switch
                 {
-                    "firebase-custom-token" => JsonResponse(
-                        """{"idToken":"temporary-id-token","refreshToken":"temporary-refresh-token","expiresIn":"3600","localId":"uid-123"}"""),
-                    "app-session-token" => JsonResponse(
-                        """{"idToken":"final-id-token","refreshToken":"final-refresh-token","expiresIn":"3600","localId":"uid-123"}"""),
+                    "firebase-custom-token" => FirebaseCustomTokenResponse(
+                        temporaryFirebaseIdToken, "temporary-refresh-token"),
+                    "app-session-token" => FirebaseCustomTokenResponse(
+                        finalFirebaseIdToken, "final-refresh-token"),
                     _ => throw new InvalidOperationException("Custom token inatteso."),
                 };
             })),
@@ -315,10 +337,10 @@ public sealed class AuthenticationServiceTests
             {
                 callableRequests.Add(request);
                 Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
-                Assert.Equal("temporary-id-token", request.Headers.Authorization?.Parameter);
-                Assert.DoesNotContain("temporary-id-token", request.RequestUri?.AbsoluteUri);
+                Assert.Equal(temporaryFirebaseIdToken, request.Headers.Authorization?.Parameter);
+                Assert.DoesNotContain(temporaryFirebaseIdToken, request.RequestUri?.AbsoluteUri);
                 var body = await request.Content!.ReadAsStringAsync();
-                Assert.DoesNotContain("temporary-id-token", body);
+                Assert.DoesNotContain(temporaryFirebaseIdToken, body);
                 using var document = JsonDocument.Parse(body);
                 Assert.Equal(JsonValueKind.Object, document.RootElement.GetProperty("data").ValueKind);
                 return request.RequestUri?.AbsolutePath switch
@@ -346,7 +368,7 @@ public sealed class AuthenticationServiceTests
 
         Assert.True(session.IsAuthenticated);
         Assert.Equal("uid-123", session.CurrentAccount?.Uid);
-        Assert.Equal("final-id-token", await session.GetValidIdTokenAsync());
+        Assert.Equal(finalFirebaseIdToken, await session.GetValidIdTokenAsync());
         Assert.Equal(["firebase-custom-token", "app-session-token"], firebaseCustomTokens);
         Assert.Equal(3, callableRequests.Count);
         Assert.Contains("final-refresh-token", store.Value);
@@ -390,6 +412,30 @@ public sealed class AuthenticationServiceTests
         var mismatch = await Assert.ThrowsAsync<AuthenticationException>(() =>
             uidMismatch.CompleteAsync("temporary-id-token", "uid-123"));
         Assert.Contains("UID non coerente", mismatch.Message);
+    }
+
+    private static FirebaseTokenService CreateFirebaseTokenService(string idToken) => new(
+        new HttpClient(new AsyncStubHttpMessageHandler(_ => Task.FromResult(
+            FirebaseCustomTokenResponse(idToken, "firebase-refresh-token")))),
+        "public-api-key");
+
+    private static HttpResponseMessage FirebaseCustomTokenResponse(
+        string idToken,
+        string refreshToken) => JsonResponse(
+        JsonSerializer.Serialize(new
+        {
+            idToken,
+            refreshToken,
+            expiresIn = "3600",
+        }));
+
+    private static string CreateFirebaseIdToken(string? subject)
+    {
+        var header = Base64Url(Encoding.UTF8.GetBytes("{\"alg\":\"RS256\",\"typ\":\"JWT\"}"));
+        var payload = subject is null
+            ? "{}"
+            : JsonSerializer.Serialize(new { sub = subject });
+        return $"{header}.{Base64Url(Encoding.UTF8.GetBytes(payload))}.signature";
     }
 
     private static HttpResponseMessage ValidOAuthResponse => JsonResponse(
