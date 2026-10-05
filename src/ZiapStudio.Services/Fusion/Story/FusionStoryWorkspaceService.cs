@@ -86,11 +86,16 @@ public sealed class FusionStoryWorkspaceService
             }
 
             var mapInfos = mapInfosDocument.RootElement.EnumerateArray()
-                .Where(entry => entry.ValueKind == JsonValueKind.Object)
-                .Select((entry, index) => new MapInfo(
-                    ReadInt(entry, "id") ?? index,
-                    ReadString(entry, "name") ?? string.Empty,
-                    ReadInt(entry, "order") ?? int.MaxValue))
+                .Select((entry, index) => entry.ValueKind == JsonValueKind.Object
+                    ? new MapInfo(
+                        ReadInt(entry, "id") ?? index,
+                        ReadString(entry, "name") ?? string.Empty,
+                        ReadInt(entry, "order") ?? int.MaxValue,
+                        ReadInt(entry, "parentId") ?? 0,
+                        ReadBoolean(entry, "expanded"))
+                    : null)
+                .Where(info => info is not null)
+                .Select(info => info!)
                 .Where(info => info.Id > 0)
                 .OrderBy(info => info.Order)
                 .ThenBy(info => info.Id)
@@ -134,6 +139,15 @@ public sealed class FusionStoryWorkspaceService
                         "story.map-unreadable", StoryDiagnosticSeverity.Error,
                         $"{relativePath} non è leggibile.", relativePath, info.Id));
                 }
+            }
+            var hierarchy = StoryMapHierarchy.Build(maps);
+            foreach (var mapId in hierarchy.FallbackRootMapIds.Order())
+            {
+                var map = maps.First(candidate => candidate.Id == mapId);
+                diagnostics.Add(FileDiagnostic(
+                    "story.map-parent-invalid", StoryDiagnosticSeverity.Warning,
+                    $"Map {map.Id:000} ha un parentId non valido o ciclico; è mostrata alla radice del navigator.",
+                    map.SourcePath, map.Id));
             }
             return maps;
         }
@@ -190,6 +204,9 @@ public sealed class FusionStoryWorkspaceService
         {
             Id = info.Id,
             Name = string.IsNullOrWhiteSpace(info.Name) ? $"Map {info.Id:000}" : info.Name,
+            Order = info.Order,
+            ParentId = info.ParentId,
+            RpgMakerExpanded = info.Expanded,
             SourcePath = relativePath,
             Events = events.OrderBy(@event => @event.Id).ToArray(),
         };
@@ -427,5 +444,5 @@ public sealed class FusionStoryWorkspaceService
     private static bool ReadBoolean(JsonElement source, string propertyName) =>
         source.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.True;
 
-    private sealed record MapInfo(int Id, string Name, int Order);
+    private sealed record MapInfo(int Id, string Name, int Order, int ParentId, bool Expanded);
 }

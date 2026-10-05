@@ -6,6 +6,11 @@
     xmlns:story="using:ZiapStudio.Core.Fusion.Story"
     xmlns:viewModels="using:ZiapStudio.ViewModels">
 
+    <UserControl.KeyboardAccelerators>
+        <KeyboardAccelerator Key="F" Modifiers="Control" Invoked="FocusSearch_Invoked" />
+        <KeyboardAccelerator Key="Escape" Invoked="ClearSearch_Invoked" />
+    </UserControl.KeyboardAccelerators>
+
     <Grid Padding="32,26" RowSpacing="18">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -27,30 +32,86 @@
         </Grid>
 
         <Grid Grid.Row="1" ColumnSpacing="16">
-            <Grid.ColumnDefinitions><ColumnDefinition Width="310" /><ColumnDefinition Width="*" /><ColumnDefinition Width="285" /></Grid.ColumnDefinitions>
+            <Grid.ColumnDefinitions><ColumnDefinition Width="330" MinWidth="280" MaxWidth="440" /><ColumnDefinition Width="*" /><ColumnDefinition Width="285" /></Grid.ColumnDefinitions>
             <Border Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="10">
-                <Grid RowSpacing="10"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                <Grid RowSpacing="10"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
                     <TextBlock FontSize="17" FontWeight="SemiBold" Text="Sorgenti narrative" />
-                    <TextBox Grid.Row="1" PlaceholderText="Cerca storia…" Text="{Binding SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
-                    <Grid Grid.Row="2"><Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
-                        <ListView HorizontalContentAlignment="Stretch" ItemsSource="{Binding NavigationItems}" SelectedItem="{Binding SelectedSource, Mode=TwoWay}" SelectionMode="Single">
-                            <ListView.ItemTemplate>
-                                <DataTemplate x:DataType="viewModels:StoryNavigationItem">
-                                    <Grid Padding="3,5" ColumnSpacing="6"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
-                                        <StackPanel Spacing="1"><TextBlock FontWeight="SemiBold" Text="{x:Bind DisplayTitle}" TextTrimming="CharacterEllipsis" /><TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Context}" TextTrimming="CharacterEllipsis" /></StackPanel>
-                                        <TextBlock Grid.Column="1" VerticalAlignment="Center" FontSize="10" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{x:Bind KindText}" />
-                                    </Grid>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
-                        <TextBlock Grid.Row="1" Margin="0,8,0,0" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SearchStatusText}" TextWrapping="Wrap" />
+                    <Grid Grid.Row="1" ColumnSpacing="6">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                        <TextBox x:Name="StorySearchBox" PlaceholderText="Cerca storia…" Text="{Binding Navigator.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <Button Grid.Column="1" Content="{Binding Navigator.FilterLabel}">
+                            <Button.Flyout>
+                                <Flyout Placement="Bottom">
+                                    <ScrollViewer MaxHeight="460" MinWidth="220"><StackPanel Spacing="8">
+                                        <TextBlock FontWeight="SemiBold" Text="Source" />
+                                        <StackPanel Orientation="Horizontal" Spacing="5"><Button Click="FilterSourceAll_Click" Content="All" /><Button Click="FilterSourceMaps_Click" Content="Maps" /><Button Click="FilterSourceCommon_Click" Content="Common Events" /></StackPanel>
+                                        <TextBlock FontWeight="SemiBold" Text="Content type" />
+                                        <CheckBox Content="Dialogue" IsChecked="{Binding Navigator.Filters.Dialogue, Mode=TwoWay}" /><CheckBox Content="Choices" IsChecked="{Binding Navigator.Filters.Choices, Mode=TwoWay}" />
+                                        <CheckBox Content="Movement" IsChecked="{Binding Navigator.Filters.Movement, Mode=TwoWay}" /><CheckBox Content="Audio" IsChecked="{Binding Navigator.Filters.Audio, Mode=TwoWay}" />
+                                        <CheckBox Content="Logic" IsChecked="{Binding Navigator.Filters.Logic, Mode=TwoWay}" /><CheckBox Content="Transfer" IsChecked="{Binding Navigator.Filters.Transfer, Mode=TwoWay}" />
+                                        <CheckBox Content="Plugin" IsChecked="{Binding Navigator.Filters.Plugin, Mode=TwoWay}" /><CheckBox Content="Script" IsChecked="{Binding Navigator.Filters.Script, Mode=TwoWay}" />
+                                        <CheckBox Content="Comment" IsChecked="{Binding Navigator.Filters.Comment, Mode=TwoWay}" /><CheckBox Content="Raw" IsChecked="{Binding Navigator.Filters.Raw, Mode=TwoWay}" />
+                                        <TextBlock FontWeight="SemiBold" Text="Localization" />
+                                        <CheckBox Content="Localized" IsChecked="{Binding Navigator.Filters.Localized, Mode=TwoWay}" /><CheckBox Content="Raw / literal" IsChecked="{Binding Navigator.Filters.Literal, Mode=TwoWay}" />
+                                        <CheckBox Content="Editable master" IsChecked="{Binding Navigator.Filters.EditableMaster, Mode=TwoWay}" />
+                                        <TextBlock FontWeight="SemiBold" Text="Page" />
+                                        <CheckBox Content="With conditions" IsChecked="{Binding Navigator.Filters.WithConditions, Mode=TwoWay}" /><CheckBox Content="Without conditions" IsChecked="{Binding Navigator.Filters.WithoutConditions, Mode=TwoWay}" />
+                                        <TextBlock FontWeight="SemiBold" Text="Advanced" /><CheckBox Content="Search technical/raw data" IsChecked="{Binding Navigator.Filters.Technical, Mode=TwoWay}" />
+                                        <Button Click="ClearFilters_Click" Content="Clear filters" />
+                                    </StackPanel></ScrollViewer>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                     </Grid>
+                    <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6">
+                        <Button Click="ShowMaps_Click" Content="MAPS" /><Button Click="ShowCommonEvents_Click" Content="COMMON EVENTS" />
+                    </StackPanel>
+                    <Grid Grid.Row="3">
+                        <Grid Visibility="{Binding Navigator.IsMapsMode, Converter={StaticResource BooleanToVisibilityConverter}}" RowSpacing="8">
+                            <Grid.RowDefinitions><RowDefinition Height="*" /><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+                            <TreeView ItemInvoked="MapTree_ItemInvoked" ItemsSource="{Binding Navigator.MapRoots}" SelectionMode="None">
+                                <TreeView.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:StoryMapTreeItemViewModel">
+                                        <TreeViewItem AutomationProperties.Name="{x:Bind DisplayName}" IsExpanded="{x:Bind IsExpanded, Mode=TwoWay}" ItemsSource="{x:Bind Children}">
+                                            <TreeViewItem.Content>
+                                                <Grid ColumnSpacing="7"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                                                    <TextBlock FontFamily="Consolas" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind IdText}" />
+                                                    <TextBlock Grid.Column="1" Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Grid.Column="2" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind CountText}" />
+                                                </Grid>
+                                            </TreeViewItem.Content>
+                                        </TreeViewItem>
+                                    </DataTemplate>
+                                </TreeView.ItemTemplate>
+                            </TreeView>
+                            <StackPanel Grid.Row="1" Spacing="2"><TextBlock FontSize="13" FontWeight="SemiBold" Text="{Binding Navigator.SelectedMap.DisplayName}" /><TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="EVENTS" /></StackPanel>
+                            <ListView Grid.Row="2" HorizontalContentAlignment="Stretch" ItemsSource="{Binding Navigator.Events}" SelectionMode="None">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="viewModels:StoryEventNavigatorItemViewModel">
+                                            <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}">
+                                            <Expander.Header><Button AutomationProperties.Name="{x:Bind Name}" Click="Event_Click" Tag="{Binding}" Padding="2"><StackPanel Spacing="1"><StackPanel Orientation="Horizontal" Spacing="7"><TextBlock FontFamily="Consolas" FontSize="10" Text="{x:Bind IdText}" /><TextBlock FontWeight="SemiBold" Text="{x:Bind Name}" TextTrimming="CharacterEllipsis" /></StackPanel><TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind CoordinatesAndPages}" /></StackPanel></Button></Expander.Header>
+                                            <ListView HorizontalContentAlignment="Stretch" ItemsSource="{x:Bind Pages}" SelectionMode="None">
+                                                <ListView.ItemTemplate><DataTemplate x:DataType="viewModels:StoryPageNavigatorItemViewModel"><Button AutomationProperties.Name="{x:Bind Title}" Click="Page_Click" Tag="{Binding}" HorizontalContentAlignment="Stretch" Padding="5,4"><StackPanel Spacing="1"><TextBlock FontWeight="SemiBold" Text="{x:Bind Title}" /><TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Detail}" TextWrapping="Wrap" /></StackPanel></Button></DataTemplate></ListView.ItemTemplate>
+                                            </ListView>
+                                        </Expander>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                        <ListView HorizontalContentAlignment="Stretch" IsItemClickEnabled="True" ItemClick="CommonEvent_ItemClick" ItemsSource="{Binding Navigator.CommonEvents}" SelectionMode="None" Visibility="{Binding Navigator.IsCommonEventsMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ListView.ItemTemplate><DataTemplate x:DataType="viewModels:StoryCommonEventNavigatorItemViewModel"><Grid Padding="4"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions><TextBlock FontFamily="Consolas" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind IdText}" /><StackPanel Grid.Column="1" Margin="8,0,0,0" Spacing="2"><TextBlock FontWeight="SemiBold" Text="{x:Bind Title}" /><TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Detail}" TextWrapping="Wrap" /></StackPanel></Grid></DataTemplate></ListView.ItemTemplate>
+                        </ListView>
+                        <ListView HorizontalContentAlignment="Stretch" IsItemClickEnabled="True" ItemClick="SearchResult_ItemClick" ItemsSource="{Binding Navigator.SearchResults}" SelectionMode="None" Visibility="{Binding Navigator.IsSearchMode, Converter={StaticResource BooleanToVisibilityConverter}}">
+                            <ListView.ItemTemplate><DataTemplate x:DataType="story:StorySearchResult"><StackPanel Padding="4" Spacing="2"><TextBlock FontSize="10" FontWeight="SemiBold" Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="{x:Bind Kind}" /><TextBlock FontWeight="SemiBold" Text="{x:Bind Title}" TextTrimming="CharacterEllipsis" /><TextBlock FontSize="11" Text="{x:Bind Snippet}" TextTrimming="CharacterEllipsis" /><TextBlock FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Breadcrumb}" TextTrimming="CharacterEllipsis" /></StackPanel></DataTemplate></ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                    <TextBlock Grid.Row="4" Margin="0,4,0,0" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding Navigator.SearchStatusText}" TextWrapping="Wrap" />
                 </Grid>
             </Border>
 
             <Grid Grid.Column="1" RowSpacing="10"><Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
                 <StackPanel Spacing="2"><TextBlock FontSize="22" FontWeight="SemiBold" Text="{Binding SelectedSourceTitle}" /><TextBlock FontSize="11" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding SelectedSourceDetail}" TextWrapping="Wrap" /></StackPanel>
-                <ListView Grid.Row="1" HorizontalContentAlignment="Stretch" ItemsSource="{Binding Blocks}" SelectedItem="{Binding SelectedBlock, Mode=TwoWay}" SelectionMode="Single">
+                <ListView x:Name="TimelineList" Grid.Row="1" HorizontalContentAlignment="Stretch" ItemsSource="{Binding Blocks}" SelectedItem="{Binding SelectedBlock, Mode=TwoWay}" SelectionMode="Single">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="story:StoryBlock">
                             <Border Margin="0,0,0,8" Padding="12" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="8">

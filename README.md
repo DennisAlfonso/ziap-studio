@@ -4,7 +4,8 @@ ZIAP Studio è un editor desktop Windows per i progetti Zenkaiverse. La tranche
 `0.3A — Story Reader` ha aggiunto `Story & Events`; `0.3B — Story Authoring`
 ha aggiunto l'editing controllato dei soli leaf string già esistenti nel locale
 master. `0.3C — Story Composer` aggiunge soltanto Dialogue/Narration append-only,
-con una patch mirata e verificata dei command RPG Maker.
+con una patch mirata e verificata dei command RPG Maker. `0.3C.1 — Story
+Navigator UX` rende navigabili le sorgenti Story senza introdurre nuove mutazioni.
 
 ## Funzionalità attuali
 
@@ -23,6 +24,11 @@ con una patch mirata e verificata dei command RPG Maker.
 - capability `Fusion Boss Battle` rilevata dai plugin Combat, Encounter e Arena attivi;
 - integrazione read-only `World & Navigation` per dipendenze tra `Tilesets.json`, `MapInfos.json`, `MapXXX.json` e `img/tilesets`;
 - `Story & Events` sotto `World`, con navigazione Map → Event → Page e Common Events;
+- Story Navigator 0.3C.1: tree reale di `MapInfos.json` (parentId/order/expanded),
+  navigator Event/Page separato dalla mappa, modalità Common Events, ricerca globale
+  in-memory con filtri e jump esatto al command range del blocco;
+- stato di selezione Story semantico e ripristinabile dopo reload (mappa, evento,
+  page, block, map/event expansion), senza scrivere metadata UI in `MapInfos.json`;
 - timeline semantica read-only per dialoghi, scelte, commenti, script, plugin command, movement route, audio, wait, logica, transfer e control-flow;
 - Story Authoring 0.3B per le reference Fusion già risolte nel master `it`: working
   snapshot locale, ChangeSet, dirty state, undo/redo, discard e save esplicito verso
@@ -299,6 +305,32 @@ Se una risposta va persa, il retry ripete l'append con lo stesso `operationId`; 
 Map cambia, l'utente seleziona un nuovo anchor e riusa la stessa entry remota. **Dismiss
 recovery** lascia l'entry come orphan recuperabile in futuro. **Remove from event**
 rimuove solo `101/401`: non esiste alcuna azione di delete/compact/reorder MDV in 0.3C.
+
+### Story Navigator UX — 0.3C.1
+
+Il pannello `Sorgenti narrative` non appiattisce più Map, Event e Page in una sola
+lista. Lo Studio conserva `parentId`, `order` e `expanded` di `MapInfos.json`, crea
+un albero mappe sicuro (parent mancanti, self-parent e cicli diventano root con una
+diagnostica non bloccante) e mostra gli eventi soltanto dopo la selezione della
+mappa. Le Page restano figlie dell'evento e aprono la timeline senza una label
+`Timeline` ripetuta.
+
+`Maps` e `Common Events` sono modalità distinte. I Common Events espongono ID,
+nome, trigger, switch e blocchi; gli eventi mappa mostrano ID, coordinate e page
+count; le page mostrano condizioni e blocchi. L'espansione iniziale rispetta il
+metadata RPG Maker, poi resta solo stato della sessione Studio.
+
+La ricerca usa un indice in-memory creato al caricamento del workspace, con debounce
+e massimo 200 risultati visualizzati. Cerca mappe/eventi/page, speaker, testo
+risolto, chiavi Localization, plugin e script; i parametri raw tecnici sono opt-in.
+I filtri supportano source, tipo contenuto, stato Localization e condizioni pagina,
+anche senza testo. Un risultato contiene una `StoryLocation` semantica: selezionarlo
+riapre esattamente mappa, evento, page e command range corrispondente, con fallback
+al blocco più vicino se quel block è stato rimosso al reload.
+
+0.3C.1 non aggiunge API, staging, writer o capacità di authoring: authoring 0.3B,
+composer/unlink/recovery 0.3C continuano a usare la stessa selection e gli stessi
+guard per sessioni Localization dirty.
 Choices, editor del control flow, drag & drop, stable ID e reference graph restano
 fuori scope rispettivamente per 0.3D/0.3E.
 

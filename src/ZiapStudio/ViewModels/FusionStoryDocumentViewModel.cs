@@ -12,9 +12,9 @@ namespace ZiapStudio.ViewModels;
 
 public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisposable
 {
-    private string _searchText = string.Empty;
     private StoryNavigationItem? _selectedSource;
     private StoryBlock? _selectedBlock;
+    private IReadOnlyList<StoryBlock> _blocks = [];
     private readonly ZiapProject _project;
     private readonly StoryLocalizationAuthoringService _authoringService;
     private readonly Func<Task<FusionStoryWorkspaceDocument>> _reloadWorkspace;
@@ -39,8 +39,12 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
             compositionService,
             ReloadWorkspaceAsync,
             () => _authoringSession?.Lock.AcquiredAt);
-        RebuildNavigation();
-        SelectedSource = NavigationItems.FirstOrDefault(item => item.IsSelectable);
+        Navigator = new StoryNavigatorViewModel(Document.Workspace);
+        Navigator.LocationSelected += Navigator_LocationSelected;
+        if (Navigator.SelectedPage is { } initialPage)
+        {
+            NavigateToLocation(initialPage.Location);
+        }
         _ = Composer.LoadRecoveriesAsync();
     }
 
@@ -50,19 +54,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
 
     public StoryComposerViewModel Composer { get; }
 
-    public IReadOnlyList<StoryNavigationItem> NavigationItems { get; private set; } = [];
-
-    public string SearchText
-    {
-        get => _searchText;
-        set
-        {
-            if (SetProperty(ref _searchText, value ?? string.Empty))
-            {
-                RebuildNavigation();
-            }
-        }
-    }
+    public StoryNavigatorViewModel Navigator { get; }
 
     public StoryNavigationItem? SelectedSource
     {
@@ -74,7 +66,8 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
                 return;
             }
             _selectedSource = value;
-            SelectedBlock = value.Blocks.FirstOrDefault();
+            _blocks = value.Blocks.Select(ProjectBlockForAuthoring).ToArray();
+            SelectedBlock = _blocks.FirstOrDefault();
             OnPropertyChanged();
             OnPropertyChanged(nameof(Blocks));
             OnPropertyChanged(nameof(SelectedSourceTitle));
@@ -83,9 +76,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
         }
     }
 
-    public IReadOnlyList<StoryBlock> Blocks => SelectedSource?.Blocks
-        .Select(ProjectBlockForAuthoring)
-        .ToArray() ?? [];
+    public IReadOnlyList<StoryBlock> Blocks => _blocks;
 
     public bool IsAuthoringBusy
     {
@@ -173,76 +164,6 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
         ? $"{Document.ErrorCount} errori · {Document.WarningCount} avvisi"
         : $"{Document.PageCount} page · {Document.BlockCount} blocchi · authoring localizzazione";
 
-    public string SearchStatusText => string.IsNullOrWhiteSpace(SearchText)
-        ? "Cerca mappe, eventi, speaker, testo risolto o chiavi raw."
-        : $"{NavigationItems.Count(item => item.IsSelectable)} risultati navigabili";
-
-    private void RebuildNavigation()
-    {
-        var filter = SearchText.Trim();
-        var items = new List<StoryNavigationItem>();
-        if (Document.Workspace.Maps.Count > 0)
-        {
-            items.Add(StoryNavigationItem.Group("Maps", 0));
-        }
-        foreach (var map in Document.Workspace.Maps)
-        {
-            var matchingEvents = map.Events
-                .Select(@event => new { Event = @event, Pages = @event.Pages.Where(page =>
-                    string.IsNullOrWhiteSpace(filter) || Matches(map, @event, page, filter)).ToArray() })
-                .Where(item => item.Pages.Length > 0 ||
-                    (!string.IsNullOrWhiteSpace(filter) && Contains(map.DisplayName, filter) || Contains(item.Event.DisplayName, filter)))
-                .ToArray();
-            if (!string.IsNullOrWhiteSpace(filter) && matchingEvents.Length == 0 && !Contains(map.DisplayName, filter))
-            {
-                continue;
-            }
-            items.Add(StoryNavigationItem.Group(map.DisplayName, 1, map.SourcePath));
-            foreach (var match in matchingEvents)
-            {
-                items.Add(StoryNavigationItem.Group(match.Event.DisplayName, 2,
-                    $"x {match.Event.X} · y {match.Event.Y}"));
-                var pages = string.IsNullOrWhiteSpace(filter) || Contains(map.DisplayName, filter) || Contains(match.Event.DisplayName, filter)
-                    ? match.Event.Pages
-                    : match.Pages;
-                foreach (var page in pages)
-                {
-                    items.Add(StoryNavigationItem.Source(
-                        page.DisplayName,
-                        3,
-                        $"{map.DisplayName} · {match.Event.DisplayName} · {page.ConditionsSummary}",
-                        page.Blocks,
-                        page.CommandListTarget));
-                }
-            }
-        }
-
-        var commonEvents = Document.Workspace.CommonEvents
-            .Where(@event => string.IsNullOrWhiteSpace(filter) || Matches(@event, filter))
-            .ToArray();
-        if (commonEvents.Length > 0 || string.IsNullOrWhiteSpace(filter) && Document.Workspace.CommonEvents.Count > 0)
-        {
-            items.Add(StoryNavigationItem.Group("Common Events", 0));
-            foreach (var commonEvent in commonEvents)
-            {
-                items.Add(StoryNavigationItem.Source(
-                    commonEvent.DisplayName,
-                    1,
-                    $"Trigger {commonEvent.Trigger} · Switch {commonEvent.SwitchId}",
-                    commonEvent.Blocks,
-                    commonEvent.CommandListTarget));
-            }
-        }
-
-        NavigationItems = items;
-        OnPropertyChanged(nameof(NavigationItems));
-        OnPropertyChanged(nameof(SearchStatusText));
-        if (_selectedSource is not null && !NavigationItems.Contains(_selectedSource))
-        {
-            _selectedSource = null;
-            SelectedSource = NavigationItems.FirstOrDefault(item => item.IsSelectable);
-        }
-    }
 
     public async Task BeginEditingAsync()
     {
@@ -408,6 +329,8 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
     public void Dispose()
     {
         StopLockHeartbeat();
+        Navigator.LocationSelected -= Navigator_LocationSelected;
+        Navigator.Dispose();
         if (_authoringSession?.EditSession is { } editSession)
         {
             editSession.PropertyChanged -= EditSession_PropertyChanged;
@@ -484,26 +407,109 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
 
     private void RefreshStoryProjection()
     {
+        (int Start, int End)? selectedLocation = _selectedBlock is null
+            ? null
+            : (Start: _selectedBlock.CommandStartIndex, End: _selectedBlock.CommandEndIndex);
+        _blocks = SelectedSource?.Blocks.Select(ProjectBlockForAuthoring).ToArray() ?? [];
+        if (selectedLocation is not null)
+        {
+            _selectedBlock = _blocks.FirstOrDefault(block =>
+                block.CommandStartIndex == selectedLocation.Value.Start && block.CommandEndIndex == selectedLocation.Value.End) ??
+                _blocks.FirstOrDefault();
+        }
         OnPropertyChanged(nameof(Blocks));
         OnPropertyChanged(nameof(SelectedBlock));
         OnPropertyChanged(nameof(SelectedBlockDetails));
         OnPropertyChanged(nameof(SelectedBlockRawCommands));
         NotifyAuthoringPropertiesChanged();
+        // The index follows the same working localization overlay used by the
+        // timeline. Rebuilding is debounced by the navigator.
+        Navigator.RefreshSearchIndex(ProjectBlockForAuthoring);
     }
 
     private async Task ReloadWorkspaceAsync()
     {
-        var previousTarget = SelectedSource?.Target;
+        var previousLocation = GetCurrentLocation();
         Document = await _reloadWorkspace();
-        RebuildNavigation();
-        if (previousTarget is not null)
-        {
-            SelectedSource = NavigationItems.FirstOrDefault(item => item.Target == previousTarget && item.IsSelectable) ??
-                NavigationItems.FirstOrDefault(item => item.IsSelectable);
-        }
+        Navigator.Reload(Document.Workspace, previousLocation);
         OnPropertyChanged(nameof(Document));
         OnPropertyChanged(nameof(WorkspaceStatusText));
         RefreshStoryProjection();
+    }
+
+    private void Navigator_LocationSelected(object? sender, StoryLocation location) => NavigateToLocation(location);
+
+    private void NavigateToLocation(StoryLocation location)
+    {
+        if (location.SourceKind == StoryLocationSourceKind.CommonEvent)
+        {
+            var commonEvent = Document.Workspace.CommonEvents.FirstOrDefault(@event => @event.Id == location.EventId);
+            if (commonEvent is null)
+            {
+                return;
+            }
+            SelectedSource = StoryNavigationItem.Source(
+                commonEvent.DisplayName,
+                0,
+                $"Common Event · Trigger {commonEvent.Trigger} · Switch {commonEvent.SwitchId}",
+                commonEvent.Blocks,
+                commonEvent.CommandListTarget);
+            SelectBlockAt(location, commonEvent.Blocks);
+            return;
+        }
+
+        var map = Document.Workspace.Maps.FirstOrDefault(candidate => candidate.Id == location.MapId);
+        var @event = map?.Events.FirstOrDefault(candidate => candidate.Id == location.EventId);
+        var page = @event?.Pages.FirstOrDefault(candidate => candidate.Number == location.PageNumber);
+        if (map is null || @event is null || page is null)
+        {
+            return;
+        }
+        SelectedSource = StoryNavigationItem.Source(
+            page.DisplayName,
+            0,
+            $"{map.DisplayName} › Event {@event.Id} {@event.Name} › {page.ConditionsSummary}",
+            page.Blocks,
+            page.CommandListTarget);
+        SelectBlockAt(location, page.Blocks);
+    }
+
+    private void SelectBlockAt(StoryLocation location, IReadOnlyList<StoryBlock> blocks)
+    {
+        if (blocks.Count == 0 || location.CommandStartIndex is null)
+        {
+            return;
+        }
+        var block = blocks.FirstOrDefault(candidate =>
+                        candidate.CommandStartIndex == location.CommandStartIndex &&
+                        candidate.CommandEndIndex == location.CommandEndIndex) ??
+                    blocks.OrderBy(candidate => Math.Abs(candidate.CommandStartIndex - location.CommandStartIndex.Value))
+                        .ThenBy(candidate => candidate.CommandStartIndex)
+                        .First();
+        SelectedBlock = Blocks.FirstOrDefault(candidate =>
+                            candidate.CommandStartIndex == block.CommandStartIndex &&
+                            candidate.CommandEndIndex == block.CommandEndIndex) ??
+                        ProjectBlockForAuthoring(block);
+    }
+
+    private StoryLocation? GetCurrentLocation()
+    {
+        var target = SelectedSource?.Target;
+        if (target is null)
+        {
+            return null;
+        }
+        if (target.Kind == StoryCommandListKind.CommonEvent)
+        {
+            return StoryLocation.ForCommonEvent(target.EventId, SelectedBlock);
+        }
+        if (target.MapId is not { } mapId || target.PageNumber is not { } pageNumber)
+        {
+            return null;
+        }
+        return SelectedBlock is null
+            ? StoryLocation.ForPage(mapId, target.EventId, pageNumber)
+            : StoryLocation.ForBlock(mapId, target.EventId, pageNumber, SelectedBlock);
     }
 
     private void NotifyAuthoringPropertiesChanged()
@@ -556,22 +562,6 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
         block.Kind == StoryBlockKind.Dialogue && index == 0 ? "Speaker" :
         block.Kind == StoryBlockKind.Dialogue && index == 1 ? "Text" :
         $"Localized value · {origin.Path}";
-
-    private static bool Matches(StoryMap map, StoryEvent @event, StoryPage page, string filter) =>
-        Contains(map.DisplayName, filter) || Contains(@event.DisplayName, filter) ||
-        page.Blocks.Any(block => Matches(block, filter));
-
-    private static bool Matches(StoryCommonEvent @event, string filter) =>
-        Contains(@event.DisplayName, filter) || @event.Blocks.Any(block => Matches(block, filter));
-
-    private static bool Matches(StoryBlock block, string filter) =>
-        Contains(block.Title, filter) || Contains(block.Summary, filter) ||
-        Contains(block.DisplayText, filter) || Contains(block.RawText, filter) ||
-        Contains(block.RawParameters, filter) || block.LocalizationOrigins.Any(origin =>
-            Contains(origin.Path, filter) || Contains(origin.SourceFile, filter));
-
-    private static bool Contains(string value, string filter) =>
-        value.Contains(filter, StringComparison.OrdinalIgnoreCase);
 
     private bool SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {

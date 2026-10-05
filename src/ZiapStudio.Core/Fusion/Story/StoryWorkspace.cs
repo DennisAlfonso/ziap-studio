@@ -17,6 +17,12 @@ public sealed record StoryMap
 {
     public required int Id { get; init; }
     public required string Name { get; init; }
+    /// <summary>RPG Maker's stable ordering metadata from MapInfos.json.</summary>
+    public int Order { get; init; }
+    /// <summary>RPG Maker parent map identifier, retained without mutating MapInfos.json.</summary>
+    public int ParentId { get; init; }
+    /// <summary>Initial navigator expansion hint supplied by RPG Maker.</summary>
+    public bool RpgMakerExpanded { get; init; }
     public required string SourcePath { get; init; }
     public IReadOnlyList<StoryEvent> Events { get; init; } = [];
 
