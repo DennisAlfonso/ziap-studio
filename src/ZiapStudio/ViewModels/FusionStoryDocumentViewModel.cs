@@ -86,9 +86,10 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
 
     public bool HasAuthoringSession => _authoringSession?.EditSession is not null;
 
-    public bool CanBeginEditing => !IsAuthoringBusy && SelectedBlock?.LocalizationOrigins.Any(IsMasterEditable) == true &&
-        (_authoringSession is null || !_authoringSession.EditSession!.IsDirty ||
-         SelectedBlock.LocalizationOrigins.Any(origin => IsSameFile(origin, _authoringSession.Origin)));
+    public bool CanBeginEditing => StoryLocalizationAuthoringAvailability.CanBeginEditing(
+        IsAuthoringBusy,
+        SelectedBlock,
+        _authoringSession);
 
     public bool CanSaveToStaging => !IsAuthoringBusy && _authoringSession?.EditSession?.IsDirty == true &&
         _authoringSession.State is not LocalizationAuthoringState.Conflict and
@@ -107,7 +108,7 @@ public sealed class FusionStoryDocumentViewModel : INotifyPropertyChanged, IDisp
         ? "IT MASTER · READ ONLY"
         : _authoringSession.State switch
         {
-            LocalizationAuthoringState.Clean => _authoringSession.EditSession!.Snapshot.HasStaging
+            LocalizationAuthoringState.Clean => _authoringSession.EditSession?.Snapshot.HasStaging == true
                 ? "IT MASTER · STAGING" : "IT MASTER · PUBLISHED",
             LocalizationAuthoringState.LocalChanges => "IT MASTER · LOCAL CHANGES",
             LocalizationAuthoringState.Staging => "IT MASTER · STAGING",

@@ -1,4 +1,5 @@
 using ZiapStudio.Core.Editing;
+using ZiapStudio.Core.Fusion.Story;
 using ZiapStudio.Core.Localization;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Services;
@@ -10,6 +11,81 @@ namespace ZiapStudio.Services.Tests;
 
 public sealed class LocalizationAuthoringTests
 {
+    [Fact]
+    public void BeginEditingAvailability_LockedSessionDoesNotThrowAndReturnsFalse()
+    {
+        var origin = CreateOrigin();
+        var locked = StoryLocalizationAuthoringSession.Locked(origin, new LocalizationLockInfo
+        {
+            Owner = "another-author",
+            IsOwnedByCurrentUser = false,
+        });
+
+        var exception = Record.Exception(() => StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: false,
+            selectedBlock: CreateStoryBlock(origin),
+            authoringSession: locked));
+
+        Assert.Null(exception);
+        Assert.False(StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: false,
+            selectedBlock: CreateStoryBlock(origin),
+            authoringSession: locked));
+    }
+
+    [Fact]
+    public void BeginEditingAvailability_NoSessionAllowsEditableMasterOrigin()
+    {
+        Assert.True(StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: false,
+            selectedBlock: CreateStoryBlock(CreateOrigin()),
+            authoringSession: null));
+    }
+
+    [Fact]
+    public void BeginEditingAvailability_BusyReturnsFalse()
+    {
+        Assert.False(StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: true,
+            selectedBlock: CreateStoryBlock(CreateOrigin()),
+            authoringSession: null));
+    }
+
+    [Fact]
+    public void BeginEditingAvailability_NonMasterOriginReturnsFalse()
+    {
+        var nonMasterOrigin = CreateOrigin() with { Locale = "en" };
+
+        Assert.False(StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: false,
+            selectedBlock: CreateStoryBlock(nonMasterOrigin),
+            authoringSession: null));
+    }
+
+    [Fact]
+    public void BeginEditingAvailability_DirtySessionAllowsSameFile()
+    {
+        var origin = CreateOrigin();
+        var session = CreateDirtyAuthoringSession(origin);
+
+        Assert.True(StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: false,
+            selectedBlock: CreateStoryBlock(origin),
+            authoringSession: session));
+    }
+
+    [Fact]
+    public void BeginEditingAvailability_DirtySessionBlocksDifferentFile()
+    {
+        var session = CreateDirtyAuthoringSession(CreateOrigin());
+        var otherFileOrigin = CreateOrigin() with { SourceFile = "dialogue/other.json" };
+
+        Assert.False(StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: false,
+            selectedBlock: CreateStoryBlock(otherFileOrigin),
+            authoringSession: session));
+    }
+
     [Fact]
     public void EditSession_TracksScalarChangesUndoRedoDiscardAndSharedOrigins()
     {
@@ -185,6 +261,26 @@ public sealed class LocalizationAuthoringTests
         Source = LocalizationAuthoringSource.Published,
         Lock = new LocalizationLockInfo { IsOwnedByCurrentUser = true, AcquiredAt = "2026-10-04T00:00:00.000Z" },
     };
+
+    private static StoryBlock CreateStoryBlock(LocalizationReferenceOrigin origin) => new()
+    {
+        Kind = StoryBlockKind.Dialogue,
+        Title = "Polka",
+        LocalizationOrigins = [origin],
+    };
+
+    private static StoryLocalizationAuthoringSession CreateDirtyAuthoringSession(
+        LocalizationReferenceOrigin origin)
+    {
+        var editSession = new LocalizationEditSession(
+            CreateSnapshot("""[{"dialogue":[{"text":"A"}]}]"""),
+            new DocumentSourceSnapshot { SourcePath = "fixture.json", ContentHash = "fixture" });
+        editSession.SetValue(origin, "B");
+        return new StoryLocalizationAuthoringSession(
+            origin,
+            editSession,
+            new LocalizationLockInfo { IsOwnedByCurrentUser = true });
+    }
 
     private static ZiapProject CreateProject(string path) => new()
     {
