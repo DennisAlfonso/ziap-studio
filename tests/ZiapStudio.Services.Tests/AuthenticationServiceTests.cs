@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using ZiapStudio.Services.Authentication;
 using ZiapStudio.Services.Integration.Console;
 
@@ -172,7 +173,8 @@ public sealed class AuthenticationServiceTests
                 {
                   "idToken": "firebase-id-token",
                   "refreshToken": "firebase-refresh-token",
-                  "expiresIn": "3600"
+                  "expiresIn": "3600",
+                  "localId": "uid-123"
                 }
                 """);
         });
@@ -229,13 +231,15 @@ public sealed class AuthenticationServiceTests
                 {
                   "idToken": "first-id-token",
                   "refreshToken": "first-refresh-token",
-                  "expiresIn": "3600"
+                  "expiresIn": "3600",
+                  "localId": "uid-123"
                 }
                 """)))),
             "public-api-key");
         var firstSession = new ZiapAuthenticationService(
             new StubAuthorizationService(),
             firstFirebase,
+            new StubZiapAppSessionService(),
             store);
 
         await firstSession.SignInAsync();
@@ -261,6 +265,7 @@ public sealed class AuthenticationServiceTests
         var restartedSession = new ZiapAuthenticationService(
             new StubAuthorizationService(),
             restartedFirebase,
+            new StubZiapAppSessionService(),
             store);
 
         await restartedSession.InitializeAsync();
@@ -272,7 +277,7 @@ public sealed class AuthenticationServiceTests
     }
 
     [Fact]
-    public async Task AuthenticationSession_CompletesOAuthBridgeThenPersistsOnlyFirebaseRefreshCredential()
+    public async Task AuthenticationSession_CompletesOAuthBridgeAndServerBackedZiapSession()
     {
         var callbackUri = CreateAvailableLoopbackUri();
         var authorizationService = new ZiapBrowserAuthorizationService(
@@ -286,21 +291,105 @@ public sealed class AuthenticationServiceTests
             new Uri("https://identity.example.test/oauth/firebase/custom-token"),
             callbackUri,
             authorizationTimeout: TimeSpan.FromSeconds(5));
+        var firebaseCustomTokens = new List<string>();
         var firebase = new FirebaseTokenService(
-            new HttpClient(new AsyncStubHttpMessageHandler(_ => Task.FromResult(JsonResponse(
-                """{"idToken":"firebase-id-token","refreshToken":"firebase-refresh-token","expiresIn":"3600"}""")))),
+            new HttpClient(new AsyncStubHttpMessageHandler(async request =>
+            {
+                var body = await request.Content!.ReadAsStringAsync();
+                using var document = JsonDocument.Parse(body);
+                var customToken = document.RootElement.GetProperty("token").GetString();
+                firebaseCustomTokens.Add(customToken!);
+                return customToken switch
+                {
+                    "firebase-custom-token" => JsonResponse(
+                        """{"idToken":"temporary-id-token","refreshToken":"temporary-refresh-token","expiresIn":"3600","localId":"uid-123"}"""),
+                    "app-session-token" => JsonResponse(
+                        """{"idToken":"final-id-token","refreshToken":"final-refresh-token","expiresIn":"3600","localId":"uid-123"}"""),
+                    _ => throw new InvalidOperationException("Custom token inatteso."),
+                };
+            })),
             "public-api-key");
+        var callableRequests = new List<HttpRequestMessage>();
+        var appSessionService = new ZiapAppSessionService(
+            new HttpClient(new AsyncStubHttpMessageHandler(async request =>
+            {
+                callableRequests.Add(request);
+                Assert.Equal("Bearer", request.Headers.Authorization?.Scheme);
+                Assert.Equal("temporary-id-token", request.Headers.Authorization?.Parameter);
+                Assert.DoesNotContain("temporary-id-token", request.RequestUri?.AbsoluteUri);
+                var body = await request.Content!.ReadAsStringAsync();
+                Assert.DoesNotContain("temporary-id-token", body);
+                using var document = JsonDocument.Parse(body);
+                Assert.Equal(JsonValueKind.Object, document.RootElement.GetProperty("data").ValueKind);
+                return request.RequestUri?.AbsolutePath switch
+                {
+                    "/resolve" => JsonResponse(
+                        """{"result":{"ok":true,"nextStep":"AUTHENTICATED","loginAttemptId":"attempt-123","user":{"uid":"uid-123"}}}"""),
+                    "/legal" when body.Contains("attempt-123", StringComparison.Ordinal) =>
+                        JsonResponse("""{"result":{"success":true}}"""),
+                    "/finalize" when body.Contains("attempt-123", StringComparison.Ordinal) =>
+                        JsonResponse("""{"result":{"ok":true,"appSessionToken":"app-session-token"}}"""),
+                    _ => throw new InvalidOperationException("Callable inattesa."),
+                };
+            })),
+            new Uri("https://identity.example.test/resolve"),
+            new Uri("https://identity.example.test/legal"),
+            new Uri("https://identity.example.test/finalize"));
         var store = new MemoryCredentialStore();
-        var session = new ZiapAuthenticationService(authorizationService, firebase, store);
+        var session = new ZiapAuthenticationService(
+            authorizationService,
+            firebase,
+            appSessionService,
+            store);
 
         await session.SignInAsync();
 
         Assert.True(session.IsAuthenticated);
         Assert.Equal("uid-123", session.CurrentAccount?.Uid);
-        Assert.Equal("firebase-id-token", await session.GetValidIdTokenAsync());
-        Assert.Contains("firebase-refresh-token", store.Value);
+        Assert.Equal("final-id-token", await session.GetValidIdTokenAsync());
+        Assert.Equal(["firebase-custom-token", "app-session-token"], firebaseCustomTokens);
+        Assert.Equal(3, callableRequests.Count);
+        Assert.Contains("final-refresh-token", store.Value);
+        Assert.DoesNotContain("temporary-refresh-token", store.Value);
         Assert.DoesNotContain("oauth-access-token", store.Value);
         Assert.DoesNotContain("firebase-custom-token", store.Value);
+        Assert.DoesNotContain("app-session-token", store.Value);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized, "UNAUTHENTICATED", "sessione Firebase temporanea")]
+    [InlineData(HttpStatusCode.Forbidden, "PERMISSION_DENIED", "rifiutato il completamento")]
+    [InlineData(HttpStatusCode.BadRequest, "FAILED_PRECONDITION", "richiede un prerequisito")]
+    public async Task ZiapAppSession_SanitizesCallableFailures(
+        HttpStatusCode status,
+        string callableStatus,
+        string expectedMessage)
+    {
+        var service = CreateAppSessionService(_ => JsonResponse(
+            $"{{\"error\":{{\"status\":\"{callableStatus}\",\"message\":\"temporary-id-token must not escape\"}}}}",
+            status));
+
+        var exception = await Assert.ThrowsAsync<AuthenticationException>(() =>
+            service.CompleteAsync("temporary-id-token", "uid-123"));
+
+        Assert.Contains(expectedMessage, exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("temporary-id-token", exception.ToString());
+    }
+
+    [Fact]
+    public async Task ZiapAppSession_RejectsRequiredSecondFactorAndUidMismatch()
+    {
+        var requireSecondFactor = CreateAppSessionService(_ => JsonResponse(
+            """{"result":{"ok":true,"nextStep":"REQUIRE_2FA","loginAttemptId":"attempt-123"}}"""));
+        var secondFactor = await Assert.ThrowsAsync<AuthenticationException>(() =>
+            requireSecondFactor.CompleteAsync("temporary-id-token", "uid-123"));
+        Assert.Contains("prova OAuth", secondFactor.Message);
+
+        var uidMismatch = CreateAppSessionService(_ => JsonResponse(
+            """{"result":{"ok":true,"nextStep":"AUTHENTICATED","loginAttemptId":"attempt-123","user":{"uid":"uid-other"}}}"""));
+        var mismatch = await Assert.ThrowsAsync<AuthenticationException>(() =>
+            uidMismatch.CompleteAsync("temporary-id-token", "uid-123"));
+        Assert.Contains("UID non coerente", mismatch.Message);
     }
 
     private static HttpResponseMessage ValidOAuthResponse => JsonResponse(
@@ -319,6 +408,15 @@ public sealed class AuthenticationServiceTests
     {
         Content = new StringContent(json, Encoding.UTF8, "application/json"),
     };
+
+    private static ZiapAppSessionService CreateAppSessionService(
+        Func<HttpRequestMessage, HttpResponseMessage> responseFactory) =>
+        new(
+            new HttpClient(new AsyncStubHttpMessageHandler(request =>
+                Task.FromResult(responseFactory(request)))),
+            new Uri("https://identity.example.test/resolve"),
+            new Uri("https://identity.example.test/legal"),
+            new Uri("https://identity.example.test/finalize"));
 
     private static async Task<AuthenticationException> AuthorizeExpectingFailureAsync(
         HttpResponseMessage oauthResponse,
@@ -381,6 +479,15 @@ public sealed class AuthenticationServiceTests
                     "uid-123",
                     "YuukiToyaro",
                     "yuuki@example.test")));
+    }
+
+    private sealed class StubZiapAppSessionService : IZiapAppSessionService
+    {
+        public Task<ZiapApplicationSessionResult> CompleteAsync(
+            string temporaryFirebaseIdToken,
+            string expectedUid,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult(new ZiapApplicationSessionResult("app-session-token"));
     }
 
     private sealed class MemoryCredentialStore : ISecureCredentialStore

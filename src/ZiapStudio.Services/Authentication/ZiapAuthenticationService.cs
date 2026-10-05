@@ -7,6 +7,7 @@ public sealed class ZiapAuthenticationService : IIdTokenProvider
     private static readonly TimeSpan TokenRefreshMargin = TimeSpan.FromMinutes(2);
     private readonly IZiapAuthorizationService _browserAuthorizationService;
     private readonly FirebaseTokenService _firebaseTokenService;
+    private readonly IZiapAppSessionService _ziapAppSessionService;
     private readonly ISecureCredentialStore _credentialStore;
     private readonly SemaphoreSlim _gate = new(1, 1);
     private AuthenticationSession? _session;
@@ -15,11 +16,17 @@ public sealed class ZiapAuthenticationService : IIdTokenProvider
     public ZiapAuthenticationService(
         IZiapAuthorizationService browserAuthorizationService,
         FirebaseTokenService firebaseTokenService,
+        IZiapAppSessionService ziapAppSessionService,
         ISecureCredentialStore credentialStore)
     {
-        _browserAuthorizationService = browserAuthorizationService;
-        _firebaseTokenService = firebaseTokenService;
-        _credentialStore = credentialStore;
+        _browserAuthorizationService = browserAuthorizationService ??
+            throw new ArgumentNullException(nameof(browserAuthorizationService));
+        _firebaseTokenService = firebaseTokenService ??
+            throw new ArgumentNullException(nameof(firebaseTokenService));
+        _ziapAppSessionService = ziapAppSessionService ??
+            throw new ArgumentNullException(nameof(ziapAppSessionService));
+        _credentialStore = credentialStore ??
+            throw new ArgumentNullException(nameof(credentialStore));
     }
 
     public bool IsAuthenticated => _session is not null;
@@ -55,10 +62,26 @@ public sealed class ZiapAuthenticationService : IIdTokenProvider
         try
         {
             var authorization = await _browserAuthorizationService.AuthorizeAsync(cancellationToken);
-            var firebase = await _firebaseTokenService.SignInWithCustomTokenAsync(
+            var temporaryFirebase = await _firebaseTokenService.SignInWithCustomTokenAsync(
                 authorization.FirebaseCustomToken,
                 authorization.Account.Uid,
                 cancellationToken);
+            if (!string.Equals(temporaryFirebase.Uid, authorization.Account.Uid, StringComparison.Ordinal))
+            {
+                throw new AuthenticationException("Firebase ha restituito un UID non coerente con OAuth.");
+            }
+            var appSession = await _ziapAppSessionService.CompleteAsync(
+                temporaryFirebase.IdToken,
+                authorization.Account.Uid,
+                cancellationToken);
+            var firebase = await _firebaseTokenService.SignInWithCustomTokenAsync(
+                appSession.AppSessionToken,
+                authorization.Account.Uid,
+                cancellationToken);
+            if (!string.Equals(firebase.Uid, authorization.Account.Uid, StringComparison.Ordinal))
+            {
+                throw new AuthenticationException("La sessione ZIAP finale ha restituito un UID non coerente con OAuth.");
+            }
             var account = authorization.Account with
             {
                 Uid = firebase.Uid,

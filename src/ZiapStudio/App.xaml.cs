@@ -113,6 +113,9 @@ public partial class App : Application
         var consoleIntegrationService = new ConsoleIntegrationService(
             new ConsoleDeepLinkBuilder(GetConsoleBaseUri()),
             shellService);
+        var firebaseTokenService = new FirebaseTokenService(
+            new HttpClient { Timeout = TimeSpan.FromSeconds(30) },
+            GetFirebaseWebApiKey());
         var authenticationService = new ZiapAuthenticationService(
             new ZiapBrowserAuthorizationService(
                 new HttpClient { Timeout = TimeSpan.FromSeconds(30) },
@@ -120,9 +123,12 @@ public partial class App : Application
                 GetOAuthAuthorizeUri(),
                 GetOAuthTokenUri(),
                 GetOAuthFirebaseCustomTokenUri()),
-            new FirebaseTokenService(
+            firebaseTokenService,
+            new ZiapAppSessionService(
                 new HttpClient { Timeout = TimeSpan.FromSeconds(30) },
-                GetFirebaseWebApiKey()),
+                GetResolveLoginFlowStateUri(),
+                GetConfirmLoginLegalStateUri(),
+                GetFinalizeLoginSessionUri()),
             new WindowsCredentialStore(
                 "Zenkaiverse.ZiapStudio.FirebaseAuthentication.v1"));
         var remoteClient = new HttpRemoteLocalizationClient(
@@ -258,6 +264,18 @@ public partial class App : Application
     private static Uri GetOAuthFirebaseCustomTokenUri() => GetConfiguredUri(
         "ZIAP_OAUTH_FIREBASE_CUSTOM_TOKEN_URL",
         "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/oauthFirebaseCustomToken");
+
+    private static Uri GetResolveLoginFlowStateUri() => GetConfiguredUri(
+        "ZIAP_LOGIN_FLOW_RESOLVE_URL",
+        "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/resolveLoginFlowState");
+
+    private static Uri GetConfirmLoginLegalStateUri() => GetConfiguredUri(
+        "ZIAP_LOGIN_FLOW_CONFIRM_LEGAL_URL",
+        "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/confirmLoginLegalState");
+
+    private static Uri GetFinalizeLoginSessionUri() => GetConfiguredUri(
+        "ZIAP_LOGIN_FLOW_FINALIZE_URL",
+        "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/finalizeLoginSession");
 
     private static string GetFirebaseWebApiKey()
     {

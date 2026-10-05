@@ -35,6 +35,8 @@ public sealed record FirebaseTokenResult(
     string Uid,
     DateTimeOffset ExpiresAt);
 
+public sealed record ZiapApplicationSessionResult(string AppSessionToken);
+
 public sealed record ZiapAuthorizationResult(
     string FirebaseCustomToken,
     AuthenticationAccount Account);
@@ -46,7 +48,8 @@ internal sealed record FirebaseCustomTokenRequest(
 internal sealed record FirebaseCustomTokenResponse(
     string? IdToken,
     string? RefreshToken,
-    string? ExpiresIn);
+    string? ExpiresIn,
+    [property: JsonPropertyName("localId")] string? LocalId);
 
 internal sealed record FirebaseRefreshTokenResponse(
     [property: JsonPropertyName("id_token")] string? IdToken,
@@ -72,6 +75,59 @@ internal sealed record ZiapOAuthUser(
     string? Nickname,
     string? Email);
 
+internal sealed record ZiapDesktopDeviceInfo(
+    string Platform,
+    string Model,
+    string OperatingSystem,
+    string OsVersion,
+    string Language,
+    string Timezone);
+
+internal sealed record ZiapResolveLoginFlowRequest(
+    string Application,
+    string LoginMethod,
+    string Platform,
+    ZiapDesktopDeviceInfo DeviceInfo);
+
+internal sealed record ZiapResolveLoginFlowCallableRequest(ZiapResolveLoginFlowRequest Data);
+
+internal sealed record ZiapResolvedLoginUser(string? Uid);
+
+internal sealed record ZiapLoginFlowStateResult(
+    bool? Ok,
+    string? NextStep,
+    string? LoginAttemptId,
+    ZiapResolvedLoginUser? User);
+
+internal sealed record ZiapResolveLoginFlowCallableResponse(ZiapLoginFlowStateResult? Result);
+
+internal sealed record ZiapConfirmLoginLegalStateRequest(string LoginAttemptId);
+
+internal sealed record ZiapConfirmLoginLegalStateCallableRequest(ZiapConfirmLoginLegalStateRequest Data);
+
+internal sealed record ZiapConfirmLoginLegalStateResult(bool? Success);
+
+internal sealed record ZiapConfirmLoginLegalStateCallableResponse(
+    ZiapConfirmLoginLegalStateResult? Result);
+
+internal sealed record ZiapFinalizeLoginSessionRequest(
+    string LoginAttemptId,
+    string Application,
+    string LoginMethod,
+    string? AppVersion,
+    ZiapDesktopDeviceInfo DeviceInfo);
+
+internal sealed record ZiapFinalizeLoginSessionCallableRequest(ZiapFinalizeLoginSessionRequest Data);
+
+internal sealed record ZiapFinalizeLoginSessionResult(bool? Ok, string? AppSessionToken);
+
+internal sealed record ZiapFinalizeLoginSessionCallableResponse(
+    ZiapFinalizeLoginSessionResult? Result);
+
+internal sealed record FirebaseCallableError(string? Status);
+
+internal sealed record FirebaseCallableErrorEnvelope(FirebaseCallableError? Error);
+
 [JsonSourceGenerationOptions(
     PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
     PropertyNameCaseInsensitive = true)]
@@ -80,6 +136,13 @@ internal sealed record ZiapOAuthUser(
 [JsonSerializable(typeof(FirebaseRefreshTokenResponse))]
 [JsonSerializable(typeof(ZiapOAuthTokenResponse))]
 [JsonSerializable(typeof(ZiapFirebaseCustomTokenResponse))]
+[JsonSerializable(typeof(ZiapResolveLoginFlowCallableRequest))]
+[JsonSerializable(typeof(ZiapResolveLoginFlowCallableResponse))]
+[JsonSerializable(typeof(ZiapConfirmLoginLegalStateCallableRequest))]
+[JsonSerializable(typeof(ZiapConfirmLoginLegalStateCallableResponse))]
+[JsonSerializable(typeof(ZiapFinalizeLoginSessionCallableRequest))]
+[JsonSerializable(typeof(ZiapFinalizeLoginSessionCallableResponse))]
+[JsonSerializable(typeof(FirebaseCallableErrorEnvelope))]
 [JsonSerializable(typeof(StoredAuthenticationCredential))]
 internal sealed partial class AuthenticationJsonContext : JsonSerializerContext
 {

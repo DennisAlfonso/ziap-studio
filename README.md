@@ -130,7 +130,8 @@ Navigator UX` rende navigabili le sorgenti Story senza introdurre nuove mutazion
 - login myZenkai nel browser con OAuth Authorization Code, PKCE, MFA e consenso;
 - callback loopback contenente soltanto un authorization code monouso;
 - scambio del codice in un access token OAuth, poi bridge Firebase Bearer per un custom token monouso;
-- scambio del custom token tramite Firebase Authentication REST in ID token e refresh token;
+- primo scambio Firebase soltanto in memoria, per completare `resolveLoginFlowState`, legal state e sessione ZIAP server-side;
+- secondo scambio del token della sessione ZIAP tramite Firebase Authentication REST in ID token e refresh token finali;
 - refresh automatico degli ID token e refresh token protetto da Credential Manager;
 - Account panel con stato connesso, nickname e disconnessione locale;
 - Bearer Firebase prioritario per le ZIAP API, senza sessioni anonime;
@@ -427,28 +428,34 @@ $env:ZIAP_LOCALIZATION_AUTHORING_RELEASE_URL = "http://127.0.0.1:5001/myzenkai-c
 $env:ZIAP_LOCALIZATION_AUTHORING_PATCH_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/patchLocalizationStaging"
 $env:ZIAP_LOCALIZATION_AUTHORING_APPEND_URL = "http://127.0.0.1:5001/myzenkai-c58ee/europe-west1/appendLocalizationStagingEntry"
 $env:ZIAP_OAUTH_FIREBASE_CUSTOM_TOKEN_URL = "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/oauthFirebaseCustomToken"
+$env:ZIAP_LOGIN_FLOW_RESOLVE_URL = "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/resolveLoginFlowState"
+$env:ZIAP_LOGIN_FLOW_CONFIRM_LEGAL_URL = "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/confirmLoginLegalState"
+$env:ZIAP_LOGIN_FLOW_FINALIZE_URL = "https://europe-west1-myzenkai-c58ee.cloudfunctions.net/finalizeLoginSession"
 ```
 
 Il bridge OAuth/Firebase usa sempre HTTPS: per un ambiente locale usare un endpoint
 HTTPS di test o un proxy TLS verso l'emulatore. La sequenza e `authorization code`
-→ `access token` OAuth → bridge Firebase Bearer → custom token Firebase → sessione
-Firebase. L'access token OAuth e il custom token restano temporanei e non vengono
-salvati nel Credential Manager.
+→ `access token` OAuth → bridge Firebase Bearer → custom token Firebase temporaneo
+→ sessione ZIAP server-side → custom token della sessione applicativa → sessione
+Firebase finale. L'access token OAuth, entrambi i custom token e il refresh token
+temporaneo non vengono salvati nel Credential Manager.
 
 Configurazione e deploy del backend da `D:\Zenkaiverse\Firebase`:
 
 ```powershell
 firebase functions:secrets:set ZIAP_STUDIO_READ_TOKEN
-firebase deploy --only functions:oauthAuthorize,functions:oauthToken,functions:oauthFirebaseCustomToken,functions:resolveExternalAuthRequest,functions:getExternalConsentRequest,functions:approveExternalAuthRequest,functions:getLocalizationPublishedManifest,functions:getLocalizationPublishedFile,functions:getLocalizationAuthoringFile,functions:claimLocalizationLock,functions:renewLocalizationLock,functions:releaseLocalizationLock,functions:patchLocalizationStaging,functions:appendLocalizationStagingEntry
+firebase deploy --only functions:oauthAuthorize,functions:oauthToken,functions:oauthFirebaseCustomToken,functions:resolveExternalAuthRequest,functions:getExternalConsentRequest,functions:approveExternalAuthRequest,functions:resolveLoginFlowState,functions:confirmLoginLegalState,functions:finalizeLoginSession,functions:getLocalizationPublishedManifest,functions:getLocalizationPublishedFile,functions:getLocalizationAuthoringFile,functions:claimLocalizationLock,functions:renewLocalizationLock,functions:releaseLocalizationLock,functions:patchLocalizationStaging,functions:appendLocalizationStagingEntry
 ```
 
 Il backend registra `ziap_studio_desktop_v1` come client first-party con callback
 loopback e PKCE obbligatorio. Nell'URL torna soltanto il codice monouso; l'access
-token OAuth resta nel body della prima risposta e nel solo header Bearer del bridge,
-mentre custom token, ID token e refresh token viaggiano su HTTPS. OAuth access token,
-custom token e ID token non vengono persistiti: il Credential Manager conserva solo
-il refresh token e i metadata dell'account. Non vengono create sessioni anonime e non
-è incorporato alcun service account in Studio.
+token OAuth resta nel body della prima risposta e nel solo header Bearer del bridge.
+Studio completa quindi la sessione reale `users/{uid}/sessions/{sessionId}` con le
+callable del login flow e scambia il relativo `appSessionToken` per il token Firebase
+finale. OAuth access token, custom token temporaneo, appSessionToken e ID token non
+vengono persistiti: il Credential Manager conserva solo il refresh token finale e i
+metadata dell'account. Non vengono create sessioni anonime e non è incorporato alcun
+service account in Studio.
 
 ## Metadata ZIAP
 

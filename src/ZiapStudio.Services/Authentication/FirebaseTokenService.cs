@@ -60,10 +60,16 @@ public sealed class FirebaseTokenService
 
         var response = await SendAsync(request, cancellationToken);
         var payload = await DeserializeCustomTokenAsync(response, cancellationToken);
+        if (string.IsNullOrWhiteSpace(payload.LocalId) ||
+            !string.Equals(payload.LocalId, authenticatedUid, StringComparison.Ordinal))
+        {
+            throw new FirebaseAuthenticationException(
+                "Firebase Authentication ha restituito un UID non coerente.");
+        }
         return CreateResult(
             payload.IdToken,
             payload.RefreshToken,
-            authenticatedUid.Trim(),
+            payload.LocalId,
             payload.ExpiresIn);
     }
 
