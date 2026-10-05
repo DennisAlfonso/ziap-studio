@@ -1,4 +1,4 @@
-using System.Text.Json;
+using System.Diagnostics;
 using ZiapStudio.Core.Documents;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Services.Fusion.Story;
@@ -28,8 +28,17 @@ public sealed class FusionStoryDocumentProvider : IDocumentProvider
         {
             return await _workspaceService.LoadAsync(project, descriptor, cancellationToken);
         }
-        catch (Exception exception) when (exception is JsonException or IOException or UnauthorizedAccessException)
+        catch (OperationCanceledException)
         {
+            throw;
+        }
+        catch (DocumentLoadException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            Debug.WriteLine($"Story & Events loader failed:{Environment.NewLine}{exception}");
             throw new DocumentLoadException("Impossibile leggere Story & Events.", exception);
         }
     }

@@ -212,7 +212,8 @@ public sealed class RpgMakerStoryResourceResolver
             : null;
 
     private static int? ReadInt(JsonElement source, string propertyName) =>
-        source.TryGetProperty(propertyName, out var property) && property.TryGetInt32(out var value)
+        source.TryGetProperty(propertyName, out var property) && property.ValueKind == JsonValueKind.Number &&
+        property.TryGetInt32(out var value)
             ? value
             : null;
 

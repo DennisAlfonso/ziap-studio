@@ -2,6 +2,7 @@ using ZiapStudio.Core.Documents;
 using ZiapStudio.Core.Fusion.Story;
 using ZiapStudio.Core.Models;
 using ZiapStudio.Services;
+using ZiapStudio.Services.Documents;
 using ZiapStudio.Services.Fusion.Story;
 using ZiapStudio.Services.Integrations;
 using ZiapStudio.Services.Localization;
@@ -86,6 +87,29 @@ public sealed class FusionStoryWorkspaceTests
         Assert.Equal("dialogue/mdv.json", dialogue.LocalizationOrigins[0].SourceFile);
         Assert.DoesNotContain(document.Workspace.Diagnostics, diagnostic =>
             diagnostic.Severity == StoryDiagnosticSeverity.Error);
+    }
+
+    [Fact]
+    public async Task Provider_WrapsUnexpectedStoryLoaderFailuresAndPreservesTheCause()
+    {
+        using var workspace = new TestWorkspace();
+        workspace.WriteFile("data/MapInfos.json", "[null,{\"id\":1,\"name\":\"Intro\"}]");
+        workspace.WriteFile("data/Map001.json", """
+            {"events":[null,{"id":1,"name":"Event","pages":[{"list":[
+              {"code":101,"indent":0,"parameters":["",0,0,2,""]},
+              {"code":401,"indent":0,"parameters":["Text"]}
+            ]}]}]}
+            """);
+        var fileSystem = new FileSystemService();
+        var provider = new FusionStoryDocumentProvider(new FusionStoryWorkspaceService(
+            fileSystem,
+            new RpgMakerStoryCommandParser(null!)));
+
+        var exception = await Assert.ThrowsAsync<DocumentLoadException>(() =>
+            provider.OpenAsync(CreateProject(workspace.RootPath), CreateDescriptor()));
+
+        Assert.Equal("Impossibile leggere Story & Events.", exception.Message);
+        Assert.IsType<NullReferenceException>(exception.InnerException);
     }
 
     [Fact]

@@ -49,6 +49,7 @@ public sealed class SemanticEventReaderTests
         Assert.Contains(route.Details, detail => detail.Contains("Move Forward"));
         Assert.Contains(route.Details, detail => detail.Contains("Wait 20 frames"));
         Assert.Contains(route.Details, detail => detail.Contains("Switch ON Switch #18 \"Prologo completato\""));
+        Assert.Contains(route.Details, detail => detail.Contains("Script: Jump to: 58, 8"));
         Assert.Contains(blocks, block => block.Kind == StoryBlockKind.ControlFlow &&
             block.DisplayText.Contains("Switch #18 \"Prologo completato\" is ON") && block.Indent == 0);
         Assert.Contains(blocks, block => block.Kind == StoryBlockKind.Raw && block.SourceCommands.Single().Code == 999);
@@ -75,6 +76,40 @@ public sealed class SemanticEventReaderTests
         var result = StorySearchIndex.Build(document.Workspace).Search(new StorySearchQuery { Text = query });
 
         Assert.Contains(result.Results, entry => entry.Kind == expectedKind);
+    }
+
+    [Fact]
+    public async Task Workspace_OpensConfiguredExternalProjectWithoutMutatingInputs()
+    {
+        var projectPath = Environment.GetEnvironmentVariable("ZIAP_STORY_REAL_PROJECT");
+        if (string.IsNullOrWhiteSpace(projectPath))
+        {
+            return;
+        }
+
+        var dataPath = Path.Combine(projectPath, "data");
+        var sourceFiles = Directory.EnumerateFiles(dataPath, "Map*.json")
+            .Append(Path.Combine(dataPath, "CommonEvents.json"))
+            .Append(Path.Combine(dataPath, "System.json"))
+            .Append(Path.Combine(dataPath, "MapInfos.json"))
+            .Append(Path.Combine(dataPath, "Actors.json"))
+            .Append(Path.Combine(dataPath, "Items.json"))
+            .Append(Path.Combine(dataPath, "Weapons.json"))
+            .Append(Path.Combine(dataPath, "Armors.json"))
+            .Append(Path.Combine(dataPath, "Animations.json"))
+            .Where(File.Exists)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var before = sourceFiles.ToDictionary(path => path, File.ReadAllBytes);
+
+        var document = await CreateService().LoadAsync(Project(projectPath), Descriptor());
+
+        Assert.NotEmpty(document.Workspace.Maps);
+        Assert.NotEmpty(document.Workspace.CommonEvents);
+        foreach (var (path, bytes) in before)
+        {
+            Assert.Equal(bytes, File.ReadAllBytes(path));
+        }
     }
 
     private static FusionStoryWorkspaceService CreateService()
@@ -117,7 +152,7 @@ public sealed class SemanticEventReaderTests
                 {"code":241,"indent":1,"parameters":[{"name":"DestinyOfBirth","volume":80,"pitch":100,"pan":0}]},
                 {"code":212,"indent":1,"parameters":[-1,3,true]},
                 {"code":213,"indent":1,"parameters":[2,1,false]},
-                {"code":205,"indent":1,"parameters":[0,{"repeat":false,"skippable":true,"wait":true,"list":[{"code":17,"parameters":[]},{"code":12,"parameters":[]},{"code":15,"parameters":[20]},{"code":26,"parameters":[18]},{"code":0,"parameters":[]}]}]},
+                {"code":205,"indent":1,"parameters":[0,{"repeat":false,"skippable":true,"wait":true,"list":[{"code":17,"parameters":[]},{"code":12,"parameters":[]},{"code":15,"parameters":[20]},{"code":26,"parameters":[18]},{"code":45,"parameters":["Jump to: 58, 8"]},{"code":0,"parameters":[]}]}]},
                 {"code":505,"indent":1,"parameters":[{"code":17,"parameters":[]}]},
                 {"code":230,"indent":1,"parameters":[]},
                 {"code":999,"indent":1,"parameters":["keep",42]},

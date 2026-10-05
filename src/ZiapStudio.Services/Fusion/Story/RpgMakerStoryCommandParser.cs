@@ -777,11 +777,12 @@ public sealed class RpgMakerStoryCommandParser
         value.ValueKind == JsonValueKind.String ? value.GetString() : null;
 
     private static int? ReadInt(JsonElement parameters, int index) =>
-        GetElement(parameters, index) is { } value && value.TryGetInt32(out var result) ? result : null;
+        GetElement(parameters, index) is { ValueKind: JsonValueKind.Number } value &&
+        value.TryGetInt32(out var result) ? result : null;
 
     private static int? ReadInt(JsonElement source, string name) =>
         source.ValueKind == JsonValueKind.Object && source.TryGetProperty(name, out var value) &&
-        value.TryGetInt32(out var result) ? result : null;
+        value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var result) ? result : null;
 
     private static bool ReadBoolean(JsonElement parameters, int index) =>
         GetElement(parameters, index) is { ValueKind: JsonValueKind.True };
