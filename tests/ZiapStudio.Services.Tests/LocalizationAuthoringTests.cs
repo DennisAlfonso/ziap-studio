@@ -88,6 +88,23 @@ public sealed class LocalizationAuthoringTests
     }
 
     [Fact]
+    public void BeginEditingAvailability_LocalizedChoiceBranchRemainsReadOnly()
+    {
+        Assert.False(StoryLocalizationAuthoringAvailability.CanBeginEditing(
+            isAuthoringBusy: false,
+            selectedBlock: new StoryBlock
+            {
+                Kind = StoryBlockKind.ControlFlow,
+                Title = "Branch scelta",
+                LocalizationOrigins = [CreateOrigin()],
+                ChoiceIndex = 2,
+                ChoiceSourceCommandIndex = 17,
+                IsDerivedStructuralUsage = true,
+            },
+            authoringSession: null));
+    }
+
+    [Fact]
     public void BeginEditingAvailability_DirtySessionAllowsSameFile()
     {
         var origin = CreateOrigin();

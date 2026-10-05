@@ -34,6 +34,7 @@ public sealed class RpgMakerStoryCommandParser
             .Where(label => label is not null)
             .Select(label => label!)
             .ToHashSet(StringComparer.Ordinal);
+        var choiceBranches = BuildChoiceBranchAssociations(commands);
         for (var index = 0; index < commands.Count; index++)
         {
             cancellationToken.ThrowIfCancellationRequested();
@@ -94,10 +95,14 @@ public sealed class RpgMakerStoryCommandParser
                     blocks.Add(await ParseChoicesAsync(projectPath, command, index, cancellationToken));
                     break;
                 case 402:
-                    blocks.Add(CreateBlock(command, index, StoryBlockKind.ControlFlow,
-                        "Branch scelta", ReadString(command.Parameters, 1) ?? "Opzione", [
-                            $"Indice scelta: {ReadInt(command.Parameters, 0)?.ToString() ?? "?"}",
-                        ]));
+                    blocks.Add(await ParseChoiceBranchAsync(
+                        projectPath,
+                        command,
+                        index,
+                        choiceBranches.TryGetValue(index, out var association) ? association : null,
+                        diagnostics,
+                        location,
+                        cancellationToken));
                     break;
                 case 403:
                     blocks.Add(CreateBlock(command, index, StoryBlockKind.ControlFlow,
@@ -952,16 +957,119 @@ public sealed class RpgMakerStoryCommandParser
             ]);
     }
 
+    private static IReadOnlyDictionary<int, ChoiceBranchAssociation> BuildChoiceBranchAssociations(
+        IReadOnlyList<RpgMakerEventCommand> commands)
+    {
+        var activeGroups = new List<ChoiceBranchAssociation>();
+        var associations = new Dictionary<int, ChoiceBranchAssociation>();
+        for (var index = 0; index < commands.Count; index++)
+        {
+            var command = commands[index];
+            switch (command.Code)
+            {
+                case 102:
+                    activeGroups.Add(new ChoiceBranchAssociation(index, command.Indent, command));
+                    break;
+                case 402:
+                {
+                    var group = activeGroups.LastOrDefault(candidate => candidate.Indent == command.Indent);
+                    if (group is not null)
+                    {
+                        associations[index] = group;
+                    }
+                    break;
+                }
+                case 404:
+                {
+                    var closingIndex = activeGroups.FindLastIndex(candidate => candidate.Indent == command.Indent);
+                    if (closingIndex >= 0)
+                    {
+                        // A malformed unclosed nested group must not leak into the next sibling branch.
+                        activeGroups.RemoveRange(closingIndex, activeGroups.Count - closingIndex);
+                    }
+                    break;
+                }
+            }
+        }
+        return associations;
+    }
+
+    private async Task<StoryBlock> ParseChoiceBranchAsync(
+        string projectPath,
+        RpgMakerEventCommand command,
+        int index,
+        ChoiceBranchAssociation? association,
+        ICollection<StoryDiagnostic> diagnostics,
+        StoryCommandLocation location,
+        CancellationToken cancellationToken)
+    {
+        var choiceIndex = ReadInt(command.Parameters, 0);
+        var rawBranchLabel = ReadString(command.Parameters, 1);
+        string? canonicalChoice = null;
+        int? sourceCommandIndex = null;
+
+        if (association is not null && choiceIndex is >= 0)
+        {
+            sourceCommandIndex = association.SourceCommandIndex;
+            var choices = ReadChoiceValues(association.Command.Parameters);
+            if (choices is null)
+            {
+                diagnostics.Add(location.CreateDiagnostic(
+                    "story.choice-branch-source-malformed", StoryDiagnosticSeverity.Warning,
+                    $"Show Choices al command {association.SourceCommandIndex} non contiene una lista di choice leggibile; è stato usato il label del branch."));
+            }
+            else if (choiceIndex.Value >= choices.Count)
+            {
+                diagnostics.Add(location.CreateDiagnostic(
+                    "story.choice-branch-index-out-of-range", StoryDiagnosticSeverity.Warning,
+                    $"Choice branch index {choiceIndex.Value} non esiste nel Show Choices al command {association.SourceCommandIndex}; è stato usato il label del branch."));
+            }
+            else
+            {
+                canonicalChoice = choices[choiceIndex.Value];
+                if (rawBranchLabel is not null && LabelsDiffer(rawBranchLabel, canonicalChoice))
+                {
+                    diagnostics.Add(location.CreateDiagnostic(
+                        "story.choice-branch-label-mismatch", StoryDiagnosticSeverity.Warning,
+                        $"Il label duplicato del choice branch non corrisponde alla choice {choiceIndex.Value} del command {association.SourceCommandIndex}; è stata usata la choice canonica."));
+                }
+            }
+        }
+
+        var rawForDisplay = canonicalChoice ?? rawBranchLabel;
+        CompositeLocalizationText? resolved = rawForDisplay is null
+            ? null
+            : await _textResolver.ResolveAsync(projectPath, rawForDisplay, cancellationToken: cancellationToken);
+        var fallback = choiceIndex is null ? "Choice #?" : $"Choice #{choiceIndex.Value}";
+        var display = resolved?.DisplayText ?? rawForDisplay ?? fallback;
+        return CreateBlock(
+            [command],
+            index,
+            index,
+            StoryBlockKind.ControlFlow,
+            "Branch scelta",
+            display,
+            rawText: rawBranchLabel ?? string.Empty,
+            details:
+            [
+                $"Indice scelta: {choiceIndex?.ToString() ?? "?"}",
+                sourceCommandIndex is null
+                    ? "Origine choice: non associata; è stato usato il label del branch."
+                    : $"Origine choice: command {sourceCommandIndex} · uso strutturale derivato.",
+            ],
+            origins: resolved?.Origins ?? [],
+            choiceIndex: choiceIndex,
+            choiceSourceCommandIndex: sourceCommandIndex,
+            isDerivedStructuralUsage: true);
+    }
+
     private async Task<StoryBlock> ParseChoicesAsync(
         string projectPath,
         RpgMakerEventCommand command,
         int index,
         CancellationToken cancellationToken)
     {
-        var choices = GetElement(command.Parameters, 0) is { ValueKind: JsonValueKind.Array } values
-            ? values.EnumerateArray().Where(value => value.ValueKind == JsonValueKind.String)
-                .Select(value => value.GetString() ?? string.Empty).ToArray()
-            : [];
+        var choices = ReadChoiceValues(command.Parameters) ?? [];
         var resolved = new List<CompositeLocalizationText>();
         foreach (var choice in choices)
         {
@@ -978,6 +1086,29 @@ public sealed class RpgMakerStoryCommandParser
             origins: resolved.SelectMany(value => value.Origins).ToArray());
     }
 
+    private static IReadOnlyList<string>? ReadChoiceValues(JsonElement parameters)
+    {
+        if (GetElement(parameters, 0) is not { ValueKind: JsonValueKind.Array } values)
+        {
+            return null;
+        }
+        var result = new List<string>();
+        foreach (var value in values.EnumerateArray())
+        {
+            if (value.ValueKind != JsonValueKind.String)
+            {
+                return null;
+            }
+            result.Add(value.GetString() ?? string.Empty);
+        }
+        return result;
+    }
+
+    private static bool LabelsDiffer(string left, string right) =>
+        !string.Equals(NormalizeLabel(left), NormalizeLabel(right), StringComparison.Ordinal);
+
+    private static string NormalizeLabel(string value) => value.Replace("\r\n", "\n", StringComparison.Ordinal).Trim();
+
     private static StoryBlock CreateBlock(
         RpgMakerEventCommand command,
         int index,
@@ -990,10 +1121,14 @@ public sealed class RpgMakerStoryCommandParser
         int? targetId = null,
         string? labelName = null,
         int? commonEventId = null,
-        int? frameDuration = null) => CreateBlock(
+        int? frameDuration = null,
+        int? choiceIndex = null,
+        int? choiceSourceCommandIndex = null,
+        bool isDerivedStructuralUsage = false) => CreateBlock(
             [command], index, index, kind, title, summary, rawText: rawText, details: details,
             resourceId: resourceId, targetId: targetId, labelName: labelName,
-            commonEventId: commonEventId, frameDuration: frameDuration);
+            commonEventId: commonEventId, frameDuration: frameDuration, choiceIndex: choiceIndex,
+            choiceSourceCommandIndex: choiceSourceCommandIndex, isDerivedStructuralUsage: isDerivedStructuralUsage);
 
     private static StoryBlock CreateBlock(
         IReadOnlyList<RpgMakerEventCommand> commands,
@@ -1009,7 +1144,10 @@ public sealed class RpgMakerStoryCommandParser
         int? targetId = null,
         string? labelName = null,
         int? commonEventId = null,
-        int? frameDuration = null) => new()
+        int? frameDuration = null,
+        int? choiceIndex = null,
+        int? choiceSourceCommandIndex = null,
+        bool isDerivedStructuralUsage = false) => new()
     {
         Kind = kind,
         Title = title,
@@ -1033,6 +1171,9 @@ public sealed class RpgMakerStoryCommandParser
         LabelName = labelName,
         CommonEventId = commonEventId,
         FrameDuration = frameDuration,
+        ChoiceIndex = choiceIndex,
+        ChoiceSourceCommandIndex = choiceSourceCommandIndex,
+        IsDerivedStructuralUsage = isDerivedStructuralUsage,
     };
 
     private static StoryBlock ParseWait(
@@ -1471,6 +1612,11 @@ public sealed class RpgMakerStoryCommandParser
     private static bool ReadBoolean(JsonElement source, string name) =>
         source.ValueKind == JsonValueKind.Object && source.TryGetProperty(name, out var value) &&
         value.ValueKind == JsonValueKind.True;
+
+    private sealed record ChoiceBranchAssociation(
+        int SourceCommandIndex,
+        int Indent,
+        RpgMakerEventCommand Command);
 }
 
 public sealed record RpgMakerEventCommand(int Code, int Indent, JsonElement Parameters);

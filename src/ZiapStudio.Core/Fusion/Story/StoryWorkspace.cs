@@ -107,6 +107,12 @@ public sealed record StoryBlock
     public int? CommonEventId { get; init; }
     /// <summary>Authoritative RPG Maker duration in frames, never the derived seconds display.</summary>
     public int? FrameDuration { get; init; }
+    /// <summary>Zero-based option identity from a Show Choices command when this is a choice branch.</summary>
+    public int? ChoiceIndex { get; init; }
+    /// <summary>Command index of the structurally associated Show Choices command, when known.</summary>
+    public int? ChoiceSourceCommandIndex { get; init; }
+    /// <summary>Marks a structural use of another narrative value, not an independent authored string.</summary>
+    public bool IsDerivedStructuralUsage { get; init; }
 
     public string KindText => Kind switch
     {

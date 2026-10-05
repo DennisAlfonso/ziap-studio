@@ -100,6 +100,7 @@ public sealed class SemanticEventReaderTests
             .Append(Path.Combine(dataPath, "Animations.json"))
             .Append(Path.Combine(dataPath, "States.json"))
             .Append(Path.Combine(dataPath, "Skills.json"))
+            .Append(Path.Combine(projectPath, "locales", "it", "dialogue", "mdv.json"))
             .Where(File.Exists)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
