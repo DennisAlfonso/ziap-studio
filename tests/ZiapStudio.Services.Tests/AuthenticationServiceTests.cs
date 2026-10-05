@@ -29,7 +29,7 @@ public sealed class AuthenticationServiceTests
                       "access_token": "oauth-access-token",
                       "token_type": "Bearer",
                       "expires_in": 3600,
-                      "scope": "openid profile:read email:read",
+                      "scope": "openid profile:read email:read firebase_session:create",
                       "issued_at": "2026-10-05T00:00:00Z",
                       "user": {
                         "uid": "uid-123",
@@ -71,6 +71,11 @@ public sealed class AuthenticationServiceTests
         var authorizationQuery = ParseForm(launcher.AuthorizationUri.Query.TrimStart('?'));
         Assert.Equal("S256", authorizationQuery["code_challenge_method"]);
         Assert.Equal(callbackUri.AbsoluteUri, authorizationQuery["redirect_uri"]);
+        var requestedScopes = authorizationQuery["scope"].Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        Assert.Contains("openid", requestedScopes);
+        Assert.Contains("profile:read", requestedScopes);
+        Assert.Contains("email:read", requestedScopes);
+        Assert.Contains("firebase_session:create", requestedScopes);
         var tokenForm = ParseForm(tokenRequestBody!);
         Assert.Equal("authorization-code", tokenForm["code"]);
         Assert.Equal(callbackUri.AbsoluteUri, tokenForm["redirect_uri"]);
@@ -304,7 +309,7 @@ public sealed class AuthenticationServiceTests
           "access_token": "oauth-access-token",
           "token_type": "Bearer",
           "expires_in": 3600,
-          "scope": "openid profile:read email:read",
+          "scope": "openid profile:read email:read firebase_session:create",
           "issued_at": "2026-10-05T00:00:00Z",
           "user": {"uid":"uid-123","nickname":"YuukiToyaro","email":"yuuki@example.test"}
         }

@@ -147,7 +147,7 @@ public sealed class ZiapBrowserAuthorizationService : IZiapAuthorizationService
             ["response_type"] = "code",
             ["client_id"] = _clientId,
             ["redirect_uri"] = _callbackUri.AbsoluteUri,
-            ["scope"] = "openid profile:read email:read",
+            ["scope"] = "openid profile:read email:read firebase_session:create",
             ["state"] = state,
             ["code_challenge"] = codeChallenge,
             ["code_challenge_method"] = "S256",
