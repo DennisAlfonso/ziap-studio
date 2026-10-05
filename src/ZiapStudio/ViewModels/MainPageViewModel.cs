@@ -69,6 +69,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private bool _isPreflightScanning;
     private PreflightScanResult _preflightResult = PreflightScanResult.Empty;
     private bool _externalProjectChangesDetected;
+    private string? _dismissedProjectSafetyNotice;
 
     public MainPageViewModel(
         ProjectService projectService,
@@ -357,7 +358,27 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
         _ => "Le mutazioni del progetto usano snapshot SHA-256 e commit atomici.",
     };
 
-    public bool HasProjectSafetyStatus => CurrentProject is not null;
+    /// <summary>
+    /// A healthy project does not need a permanent banner. Attention states are
+    /// dismissible without weakening the coordinator's service-layer guard.
+    /// </summary>
+    public bool HasProjectSafetyNotification
+    {
+        get
+        {
+            var notice = GetProjectSafetyNoticeKey();
+            return notice is not null && !string.Equals(
+                notice,
+                _dismissedProjectSafetyNotice,
+                StringComparison.Ordinal);
+        }
+    }
+
+    public void DismissProjectSafetyNotification()
+    {
+        _dismissedProjectSafetyNotice = GetProjectSafetyNoticeKey();
+        OnPropertyChanged(nameof(HasProjectSafetyNotification));
+    }
 
     public bool CanUndo => CanInteract && SelectedDocument?.CanUndo == true;
 
@@ -1829,6 +1850,7 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
     private void RegisterProjectSafety(ZiapProject project)
     {
         _externalProjectChangesDetected = false;
+        _dismissedProjectSafetyNotice = null;
         _projectWriteCoordinator?.OpenProject(project.Path);
         _projectChangeMonitor?.OpenProject(project.Path);
         NotifyProjectSafetyChanged();
@@ -1848,12 +1870,28 @@ public sealed class MainPageViewModel : INotifyPropertyChanged
 
     private void NotifyProjectSafetyChanged()
     {
+        var notice = GetProjectSafetyNoticeKey();
+        if (_dismissedProjectSafetyNotice is not null && !string.Equals(
+                _dismissedProjectSafetyNotice,
+                notice,
+                StringComparison.Ordinal))
+        {
+            _dismissedProjectSafetyNotice = null;
+        }
         OnPropertyChanged(nameof(ProjectSafetyLabel));
         OnPropertyChanged(nameof(ProjectSafetyDescription));
-        OnPropertyChanged(nameof(HasProjectSafetyStatus));
+        OnPropertyChanged(nameof(HasProjectSafetyNotification));
         OnPropertyChanged(nameof(CanSaveDocument));
         OnPropertyChanged(nameof(CanSaveAll));
     }
+
+    private string? GetProjectSafetyNoticeKey() => _projectWriteCoordinator?.SafetyState switch
+    {
+        ProjectSafetyState.ProtectedCoexistence => "rpg-maker-active",
+        ProjectSafetyState.RevalidationRequired => "revalidation-required",
+        _ when _externalProjectChangesDetected => "external-change",
+        _ => null,
+    };
 
     private void NotifyAuthenticationPropertiesChanged()
     {

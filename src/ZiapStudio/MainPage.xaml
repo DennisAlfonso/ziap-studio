@@ -2553,12 +2553,15 @@
             </Grid>
 
             <InfoBar
-                Margin="24,24,24,0"
+                Margin="0,16,24,0"
+                MaxWidth="520"
+                HorizontalAlignment="Right"
                 VerticalAlignment="Top"
-                IsClosable="False"
-                IsOpen="{x:Bind ViewModel.HasProjectSafetyStatus, Mode=OneWay}"
+                Closed="ProjectSafetyInfoBar_Closed"
+                IsClosable="True"
+                IsOpen="{x:Bind ViewModel.HasProjectSafetyNotification, Mode=OneWay}"
                 Message="{x:Bind ViewModel.ProjectSafetyDescription, Mode=OneWay}"
-                Severity="Informational"
+                Severity="Warning"
                 Title="{x:Bind ViewModel.ProjectSafetyLabel, Mode=OneWay}" />
 
             <InfoBar

@@ -877,4 +877,7 @@ public sealed partial class MainPage : Page
 
     private void ErrorInfoBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) =>
         ViewModel.ClearError();
+
+    private void ProjectSafetyInfoBar_Closed(InfoBar sender, InfoBarClosedEventArgs args) =>
+        ViewModel.DismissProjectSafetyNotification();
 }
